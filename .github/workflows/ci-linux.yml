@@ -38,7 +38,9 @@ jobs:
         sudo apt-get install -y cmake ninja-build
 
     - name: Configure CMake
-      run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+      run: |
+        PYBIND11_DIR=$(python -c "import pybind11; print(pybind11.get_cmake_dir())")
+        cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="$PYBIND11_DIR"
 
     - name: Build C++ components
       run: cmake --build build

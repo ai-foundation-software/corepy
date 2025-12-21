@@ -33,7 +33,9 @@ jobs:
         brew install cmake
 
     - name: Configure CMake
-      run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+      run: |
+        PYBIND11_DIR=$(python -c "import pybind11; print(pybind11.get_cmake_dir())")
+        cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="$PYBIND11_DIR"
 
     - name: Build C++ components
       run: cmake --build build

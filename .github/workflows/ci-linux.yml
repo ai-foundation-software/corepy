@@ -1,0 +1,60 @@
+name: CI Linux
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12"]
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    # --- Python Steps ---
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ matrix.python-version }}
+        cache: 'pip'
+
+    - name: Install Python dependencies
+      run: |
+        python -m pip install --upgrade pip
+        # Install the package in editable mode with dev dependencies (includes pybind11)
+        pip install -e ".[dev]"
+
+    # --- C++ Steps ---
+    - name: Install C++ dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y cmake ninja-build
+
+    - name: Configure CMake
+      run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+
+    - name: Build C++ components
+      run: cmake --build build
+
+    # --- Rust Steps ---
+    - name: Set up Rust
+      uses: dtolnay/rust-toolchain@stable
+      with:
+        toolchain: stable
+
+    - name: Build Rust components
+      working-directory: ./rust
+      run: cargo build --verbose
+
+    - name: Test Rust components
+      working-directory: ./rust
+      run: cargo test --verbose
+
+    # --- C++ Steps ---

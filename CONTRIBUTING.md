@@ -1,52 +1,67 @@
-# Contributing to Corepy
+# 👋 Contributing to Corepy
 
-Thank you for your interest in contributing to **corepy**! We welcome contributions from everyone.
+First off, thank you for considering contributing to Corepy! Open source lives because of people like you.
 
-## Getting Started
+Whether you are fixing a typo, adding an example, or writing complex C++ kernels, we welcome your help.
 
-1.  **Fork the repository** on GitHub.
-2.  **Clone your fork** locally:
+---
+
+## 🌟 Our Philosophy
+
+1.  **Be Kind**: We are a friendly community. Questions are encouraged.
+2.  **Correctness First**: It is better to be slow and right than fast and wrong.
+3.  **Test Everything**: If it's not tested, it's broken.
+
+---
+
+## 🛠️ Setting Up Your Development Environment
+
+To contribute code, you'll need to build Corepy from source.
+
+1.  **Follow the [Installation Guide](docs/install.md)** to set up your environment (Python, C++, Rust).
+2.  **Install Development Dependencies**:
     ```bash
-    git clone https://github.com/ai-foundation-software/corepy.git
-    cd corepy
+    pip install pytest pytest-cov ruff maturin
     ```
-3.  **Set up your environment using `uv`**:
+3.  **Run the Tests**:
+    Make sure everything is working before you start.
     ```bash
-    # Create a virtual environment and install dependencies
-    uv venv
-    source .venv/bin/activate
-    uv pip install -e ".[dev,docs]"
+    pytest tests/
     ```
 
-## Development Workflow
+---
 
-1.  Create a new branch for your feature or fix:
-    ```bash
-    git checkout -b feature/my-new-feature
-    ```
-2.  Make your changes.
-3.  Run tests to ensure everything is working:
-    ```bash
-    pytest
-    ```
-4.  Run the linter:
-    ```bash
-    uv run ruff check .
-    ```
-5.  Commit your changes using meaningful commit messages.
+## 📝 How to Submit a Change (Pull Request)
 
-## Pull Requests
+1.  **Find an Issue**: Look for issues labeled `good first issue` on GitHub.
+2.  **Create a Branch**: `git checkout -b my-new-feature`
+3.  **Make your Changes**:
+    - If you change Python code, run `ruff check .` to format it.
+    - If you change Rust code, run `cargo fmt`.
+4.  **Add Tests**:
+    - We use a "Sandwich" testing strategy: Python calls Rust, which calls C++.
+    - Add a test case in `tests/` that proves your feature works (or that the bug is fixed).
+5.  **Submit a PR**: Push your branch and open a Pull Request.
 
-1.  Push your branch to GitHub.
-2.  Open a Pull Request against the `main` branch.
-3.  Describe your changes and link to any relevant issues.
+### ✅ PR Checklist
+Before you submit, ask yourself:
+- [ ] Did I add a test?
+- [ ] Did I run the existing tests to make sure I didn't break anything?
+- [ ] Is my code clean and readable?
+- [ ] Did I update the documentation if needed?
 
-## Code Style
+---
 
-- We use **Ruff** for linting and formatting.
-- Type hints are **mandatory** for all public APIs.
-- Docstrings should follow the **Google style**.
+## 📂 Project Structure (Where things live)
 
-## License
+- `corepy/`: The Python code. This is what users see.
+- `rust/`: The Rust runtime. Handles safety and scheduling.
+- `csrc/`: The C++ kernels. Handles raw math speed.
+- `tests/`: Where we verify correct behavior.
+- `docs/`: The documentation you are reading right now.
 
-By contributing, you agree that your contributions will be licensed under the MIT License.
+---
+
+## 🆘 Getting Help
+
+If you get stuck, please open an issue or ask in our discussions. We are happy to mentor new contributors!

@@ -5,7 +5,7 @@ sys.path.insert(0, os.path.abspath('../'))
 project = 'corepy'
 copyright = '2024, Corepy Contributors'
 author = 'Corepy Contributos'
-release = '0.1.0'
+release = '0.2.0'
 
 extensions = [
     'sphinx.ext.autodoc',

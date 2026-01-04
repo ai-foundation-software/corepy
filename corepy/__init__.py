@@ -13,6 +13,6 @@ except ImportError:
     def add_one(x: int) -> int:
         raise ImportError("C++ extension not loaded. Did you install with -v?")
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 
 __all__ = ["data", "schema", "runtime", "add_one", "Tensor", "backend"]

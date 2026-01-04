@@ -4,10 +4,10 @@ build-backend = "scikit_build_core.build"
 
 [project]
 name = "corepy"
-version = "0.1.0"
+version = "0.2.0"
 description = "A unified, high-performance core runtime for data, computation, and AI workflows."
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.9"
 license = { file = "LICENSE" }
 authors = [
   { name = "Corepy Team", email = "maintainers@corepy.dev" },
@@ -18,9 +18,11 @@ classifiers = [
     "Intended Audience :: Science/Research",
     "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
     "Topic :: Scientific/Engineering",
     "Topic :: Software Development :: Libraries :: Python Modules",
 ]
@@ -65,12 +67,12 @@ python_functions = "test_*"
 
 [tool.ruff]
 line-length = 88
-target-version = "py310"
+target-version = "py39"
 select = ["E", "F", "I", "B", "UP"]
 ignore = []
 
 [tool.mypy]
-python_version = "3.10"
+python_version = "3.9"
 strict = true
 warn_return_any = true
 warn_unused_configs = true

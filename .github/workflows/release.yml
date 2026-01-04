@@ -3,6 +3,9 @@ name: Release
 on:
   release:
     types: [published]
+  push:
+    tags:
+      - 'v*'
   workflow_dispatch:
 
 permissions:
@@ -37,6 +40,7 @@ jobs:
         uses: pypa/cibuildwheel@v2.16.5
         env:
           CIBW_BUILD_VERBOSITY: 1
+          CIBW_SKIP: "pp* *-win32"
 
       - uses: actions/upload-artifact@v4
         with:
@@ -48,7 +52,7 @@ jobs:
     needs: [build_wheels, build_sdist]
     runs-on: ubuntu-latest
     environment:
-      name: release
+      name: pypi
       url: https://pypi.org/p/corepy
     permissions:
       id-token: write 

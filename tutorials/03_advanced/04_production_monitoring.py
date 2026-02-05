@@ -44,6 +44,7 @@ print("=" * 70)
 
 SAMPLE_RATE = 0.01  # Profile 1% of requests
 
+
 @profile_operation
 def handle_api_request(request_id):
     """Simulated API request handler"""
@@ -60,21 +61,21 @@ total_requests = 100
 for i in range(total_requests):
     # Randomly sample 1% of requests
     should_profile = random.random() < SAMPLE_RATE
-    
+
     if should_profile:
         cp.enable_profiling()
         profiled_requests += 1
-    
+
     # Handle request (profiled or not)
     result = handle_api_request(f"request_{i}")
-    
+
     if should_profile:
         cp.disable_profiling()
 
 print("\n📊 SAMPLING RESULTS:")
 print(f"   Total requests: {total_requests}")
 print(f"   Profiled requests: {profiled_requests}")
-print(f"   Sampling rate: {(profiled_requests/total_requests)*100:.1f}%")
+print(f"   Sampling rate: {(profiled_requests / total_requests) * 100:.1f}%")
 print("   Overhead on non-profiled requests: 0%")
 print("   Overhead on profiled requests: <2%")
 print("   Average overhead across all requests: <0.02%")
@@ -106,6 +107,7 @@ print("=" * 70)
 
 SLA_THRESHOLD_MS = 100  # Service level agreement: <100ms
 
+
 @profile_operation
 def process_request(request_data):
     """Request processing with variable latency"""
@@ -120,25 +122,28 @@ slow_requests = []
 
 for i in range(50):
     import time
+
     start = time.time()
-    
+
     result = process_request({"id": i})
-    
+
     duration_ms = (time.time() - start) * 1000
-    
+
     # Only profile if request was slow
     if duration_ms > SLA_THRESHOLD_MS:
         cp.enable_profiling()
         # Re-run with profiling to understand why it's slow
         process_request({"id": f"{i}_profiled"})
-        
+
         # Store profile for analysis
-        slow_requests.append({
-            'request_id': i,
-            'duration_ms': duration_ms,
-            'profile': cp.profile_report(format='json')
-        })
-        
+        slow_requests.append(
+            {
+                "request_id": i,
+                "duration_ms": duration_ms,
+                "profile": cp.profile_report(format="dict"),
+            }
+        )
+
         cp.clear_profile()
         cp.disable_profiling()
 
@@ -179,7 +184,8 @@ print("=" * 70)
 # Track metrics over time without storing raw profiles
 from collections import defaultdict
 
-metrics = defaultdict(lambda: {'count': 0, 'total_time': 0, 'max_time': 0})
+metrics = defaultdict(lambda: {"count": 0, "total_time": 0, "max_time": 0})
+
 
 @profile_operation
 def monitored_operation(data_size):
@@ -191,22 +197,21 @@ def monitored_operation(data_size):
 # Simulate production traffic over time
 for hour in range(24):
     cp.enable_profiling()
-    
+
     # Process requests for this hour
     for _ in range(100):
         size = random.randint(100, 1000)
         monitored_operation(size)
-    
+
     # Aggregate hourly metrics (don't store raw profiles!)
-    report = cp.profile_report(format='json')
-    for op_name, op_data in report['operations'].items():
-        metrics[op_name]['count'] += op_data['count']
-        metrics[op_name]['total_time'] += op_data['total_time_ms']
-        metrics[op_name]['max_time'] = max(
-            metrics[op_name]['max_time'],
-            op_data['max_time_ms']
+    report = cp.profile_report(format="dict")
+    for op_name, op_data in report["operations"].items():
+        metrics[op_name]["count"] += op_data["count"]
+        metrics[op_name]["total_time"] += op_data["total_time_ms"]
+        metrics[op_name]["max_time"] = max(
+            metrics[op_name]["max_time"], op_data["max_time_ms"]
         )
-    
+
     cp.clear_profile()
 
 # Display aggregated metrics
@@ -214,8 +219,10 @@ print("\n📊 24-HOUR AGGREGATED METRICS:")
 print(f"{'Operation':<20} {'Calls':>10} {'Avg (ms)':>10} {'Max (ms)':>10}")
 print("-" * 55)
 for op_name, op_metrics in metrics.items():
-    avg_time = op_metrics['total_time'] / op_metrics['count']
-    print(f"{op_name:<20} {op_metrics['count']:>10} {avg_time:>10.2f} {op_metrics['max_time']:>10.2f}")
+    avg_time = op_metrics["total_time"] / op_metrics["count"]
+    print(
+        f"{op_name:<20} {op_metrics['count']:>10} {avg_time:>10.2f} {op_metrics['max_time']:>10.2f}"
+    )
 
 print("""
 💡 WHY AGGREGATION WORKS:
@@ -250,37 +257,42 @@ print("=" * 70)
 
 # Define performance thresholds
 THRESHOLDS = {
-    'sum': {'max_time_ms': 1.0, 'count_per_hour': 10000},
-    'mean': {'max_time_ms': 0.5, 'count_per_hour': 5000},
-    'matmul': {'max_time_ms': 50.0, 'count_per_hour': 1000}
+    "sum": {"max_time_ms": 1.0, "count_per_hour": 10000},
+    "mean": {"max_time_ms": 0.5, "count_per_hour": 5000},
+    "matmul": {"max_time_ms": 50.0, "count_per_hour": 1000},
 }
+
 
 def check_alerts(metrics_dict, thresholds):
     """Check if any metrics exceed thresholds"""
     alerts = []
-    
+
     for op_name, thresholds in thresholds.items():
         if op_name in metrics_dict:
             metrics = metrics_dict[op_name]
-            
+
             # Check max time threshold
-            if metrics['max_time'] > thresholds['max_time_ms']:
-                alerts.append({
-                    'severity': 'HIGH',
-                    'operation': op_name,
-                    'issue': f"Max time ({metrics['max_time']:.2f}ms) exceeded threshold ({thresholds['max_time_ms']}ms)",
-                    'action': 'Investigate slow execution paths'
-                })
-            
+            if metrics["max_time"] > thresholds["max_time_ms"]:
+                alerts.append(
+                    {
+                        "severity": "HIGH",
+                        "operation": op_name,
+                        "issue": f"Max time ({metrics['max_time']:.2f}ms) exceeded threshold ({thresholds['max_time_ms']}ms)",
+                        "action": "Investigate slow execution paths",
+                    }
+                )
+
             # Check call count threshold
-            if metrics['count'] > thresholds['count_per_hour']:
-                alerts.append({
-                    'severity': 'MEDIUM',
-                    'operation': op_name,
-                    'issue': f"Call count ({metrics['count']}) exceeded threshold ({thresholds['count_per_hour']})",
-                    'action': 'Consider caching or batching'
-                })
-    
+            if metrics["count"] > thresholds["count_per_hour"]:
+                alerts.append(
+                    {
+                        "severity": "MEDIUM",
+                        "operation": op_name,
+                        "issue": f"Call count ({metrics['count']}) exceeded threshold ({thresholds['count_per_hour']})",
+                        "action": "Consider caching or batching",
+                    }
+                )
+
     return alerts
 
 

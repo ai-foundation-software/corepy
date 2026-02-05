@@ -7,7 +7,7 @@ including SIMD-accelerated operations using AVX2 instructions.
 
 Features Covered:
 1. Element-wise Operations (add, sub, mul, div) - SIMD optimized
-2. Reduction Operations (sum, mean) - SIMD optimized  
+2. Reduction Operations (sum, mean) - SIMD optimized
 3. Matrix Operations (dot product, matmul) - SIMD optimized
 4. Tensor API
 5. Backend System
@@ -15,8 +15,9 @@ Features Covered:
 7. Profiling/Performance Analysis
 """
 
-import corepy as cp
 import time
+
+import corepy as cp
 
 print("=" * 80)
 print("COREPY CPU FEATURES DEMONSTRATION")
@@ -115,19 +116,18 @@ print(f"Vector 2: {vec2}")
 try:
     dot_result = vec1.matmul(vec2)
     print(f"✅ Dot product: {dot_result}")
-    print(f"   Manual calculation: 1*5 + 2*6 + 3*7 + 4*8 = {1*5 + 2*6 + 3*7 + 4*8}")
+    print(
+        f"   Manual calculation: 1*5 + 2*6 + 3*7 + 4*8 = {1 * 5 + 2 * 6 + 3 * 7 + 4 * 8}"
+    )
 except Exception as e:
     print(f"❌ Dot product failed: {e}")
 
 print("\n4.2 Matrix-Matrix Multiplication:")
 try:
     # Create 2x3 matrix
-    mat_a = cp.Tensor([[1.0, 2.0, 3.0],
-                       [4.0, 5.0, 6.0]])
+    mat_a = cp.Tensor([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]])
     # Create 3x2 matrix
-    mat_b = cp.Tensor([[7.0, 8.0],
-                       [9.0, 10.0],
-                       [11.0, 12.0]])
+    mat_b = cp.Tensor([[7.0, 8.0], [9.0, 10.0], [11.0, 12.0]])
     print(f"Matrix A (2x3):\n{mat_a}")
     print(f"Matrix B (3x2):\n{mat_b}")
     mat_result = mat_a.matmul(mat_b)
@@ -194,17 +194,17 @@ large_b = cp.Tensor([float(i) for i in range(10000)])
 start = time.perf_counter()
 result1 = large_a + large_b
 end = time.perf_counter()
-print(f"✅ Addition of 10,000 elements: {(end-start)*1000:.3f}ms")
+print(f"✅ Addition of 10,000 elements: {(end - start) * 1000:.3f}ms")
 
 start = time.perf_counter()
 result2 = large_a * large_b
 end = time.perf_counter()
-print(f"✅ Multiplication of 10,000 elements: {(end-start)*1000:.3f}ms")
+print(f"✅ Multiplication of 10,000 elements: {(end - start) * 1000:.3f}ms")
 
 start = time.perf_counter()
 sum_val = large_a.sum()
 end = time.perf_counter()
-print(f"✅ Sum reduction of 10,000 elements: {(end-start)*1000:.3f}ms")
+print(f"✅ Sum reduction of 10,000 elements: {(end - start) * 1000:.3f}ms")
 
 print("\n6.3 Profile report:")
 try:
@@ -294,22 +294,22 @@ print("-" * 60)
 for size in sizes:
     x = cp.Tensor([float(i) for i in range(size)])
     y = cp.Tensor([float(i) for i in range(size)])
-    
+
     # Addition
     start = time.perf_counter()
     _ = x + y
     add_time = (time.perf_counter() - start) * 1000
-    
+
     # Multiplication
     start = time.perf_counter()
     _ = x * y
     mul_time = (time.perf_counter() - start) * 1000
-    
+
     # Sum
     start = time.perf_counter()
     _ = x.sum()
     sum_time = (time.perf_counter() - start) * 1000
-    
+
     print(f"{size:<10} {add_time:<15.4f} {mul_time:<15.4f} {sum_time:<15.4f}")
 
 # ============================================================================

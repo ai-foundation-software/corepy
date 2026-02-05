@@ -33,10 +33,7 @@ print("=" * 60)
 from corepy.data import Table
 
 # Create a simple data table
-data = {
-    "name": ["Alice", "Bob", "Charlie"],
-    "score": [95.5, 87.3, 92.1]
-}
+data = {"name": ["Alice", "Bob", "Charlie"], "score": [95.5, 87.3, 92.1]}
 
 table = Table(data)
 print(f"Created table:\n{table}")
@@ -62,10 +59,12 @@ print("=" * 60)
 from corepy.schema import Field, Schema
 
 # Define a strict schema
-schema = Schema([
-    Field("user_id", int),
-    Field("score", float),
-])
+schema = Schema(
+    [
+        Field("user_id", int),
+        Field("score", float),
+    ]
+)
 
 print(f"Defined schema: {schema}")
 

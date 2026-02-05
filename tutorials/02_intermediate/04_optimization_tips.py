@@ -132,7 +132,7 @@ print("=" * 70)
 cp.enable_profiling()
 
 # Using float64 when float32 would suffice
-data_f64 = cp.tensor([1.0, 2.0, 3.0], dtype=cp.float64)
+data_f64 = cp.tensor([1.0, 2.0, 3.0], dtype=cp.Float64)
 result_f64 = data_f64 * 2.0
 
 # Profile shows we're using 64-bit floats unnecessarily
@@ -154,8 +154,8 @@ print("""
     ✅ Better cache utilization
   
   Code Change:
-    BEFORE: data = cp.tensor([1.0, 2.0], dtype=cp.float64)
-    AFTER:  data = cp.tensor([1.0, 2.0], dtype=cp.float32)
+    BEFORE: data = cp.tensor([1.0, 2.0], dtype=cp.Float64)
+    AFTER:  data = cp.tensor([1.0, 2.0], dtype=cp.Float32)
     
   When to use float64:
     - Scientific computing requiring high precision
@@ -183,17 +183,17 @@ print("\n🐌 BEFORE OPTIMIZATION:")
 cp.enable_profiling()
 
 with ProfileContext("before"):
-    data = cp.tensor([float(i) for i in range(1000)], dtype=cp.float64)
-    
+    data = cp.tensor([float(i) for i in range(1000)], dtype=cp.Float64)
+
     # Multiple separate operations
     temp1 = data * 2.0
     temp2 = temp1 + 5.0
     temp3 = temp2 - 1.0
-    
+
     # Compute statistics individually
     mean_val = temp3.mean()
     sum_val = temp3.sum()
-    
+
 before_report = cp.profile_report(context="before")
 print(before_report)
 
@@ -212,13 +212,13 @@ cp.enable_profiling()
 
 with ProfileContext("after"):
     # Using float32 (recommendation #1)
-    data = cp.tensor([float(i) for i in range(1000)], dtype=cp.float32)
-    
+    data = cp.tensor([float(i) for i in range(1000)], dtype=cp.Float32)
+
     # Fused operations (recommendation #2)
-    temp = (data * 2.0 + 5.0 - 1.0)
-    
+    temp = data * 2.0 + 5.0 - 1.0
+
     # Batch statistics (recommendation #3)
-    stats = cp.compute_stats(temp, ['mean', 'sum'])  # Computed in one pass
+    stats = cp.compute_stats(temp, ["mean", "sum"])  # Computed in one pass
 
 after_report = cp.profile_report(context="after")
 print(after_report)

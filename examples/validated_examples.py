@@ -37,10 +37,7 @@ print("=" * 70)
 from corepy.data import Table
 
 # Create a table
-data = {
-    "name": ["Alice", "Bob", "Charlie"],
-    "score": [95.5, 87.3, 92.1]
-}
+data = {"name": ["Alice", "Bob", "Charlie"], "score": [95.5, 87.3, 92.1]}
 
 try:
     table = Table(data)
@@ -76,10 +73,12 @@ from corepy.schema import Field, Schema
 
 # Define schema
 try:
-    schema = Schema([
-        Field("user_id", int),
-        Field("score", float),
-    ])
+    schema = Schema(
+        [
+            Field("user_id", int),
+            Field("score", float),
+        ]
+    )
     print(f"✅ Defined schema with {len(schema.fields)} fields")
 except Exception as e:
     print(f"❌ Schema creation: {e}")
@@ -90,7 +89,7 @@ print("=" * 70)
 
 print(f"corepy version: {cp.__version__}")
 print("\nAvailable top-level imports:")
-available = [attr for attr in dir(cp) if not attr.startswith('_')]
+available = [attr for attr in dir(cp) if not attr.startswith("_")]
 for item in sorted(available):
     print(f"  - cp.{item}")
 

@@ -1,4 +1,4 @@
-from typing import Callable, List
+from typing import Callable, List, Optional
 
 from corepy.data import Table
 
@@ -7,7 +7,8 @@ class Pipeline:
     """
     A linear execution pipeline for data transformations.
     """
-    def __init__(self, steps: List[Callable[[Table], Table]] = None):
+
+    def __init__(self, steps: Optional[List[Callable[[Table], Table]]] = None):
         self.steps = steps or []
 
     def add_step(self, step: Callable[[Table], Table]) -> None:

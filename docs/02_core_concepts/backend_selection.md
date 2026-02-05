@@ -6,8 +6,9 @@ Corepy implements a **Correctness-First** backend selection strategy. This ensur
 
 1.  **Correctness > Speed**: If an operation's safety on GPU is ambiguous, it runs on CPU.
 2.  **CPU Default**: The system defaults to CPU. GPU is an opt-in optimization for specific workloads.
-3.  **Data Scalability**: Small data stays on CPU to avoid transfer overhead.
-4.  **Explicitness**: Users can always force a specific backend via API or Environment Variables.
+3.  **Rust Mediation**: All execution paths are validated by the Rust runtime for safety before dispatch.
+4.  **Data Scalability**: Small data stays on CPU to avoid transfer overhead.
+5.  **Explicitness**: Users can always force a specific backend via API or Environment Variables.
 
 ## Operation Classification
 

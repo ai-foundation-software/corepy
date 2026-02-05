@@ -8,7 +8,6 @@ HOW: Simple decorator that wraps any Python function
 Expected Time: 5 minutes
 """
 
-
 import corepy as cp
 from corepy.profiler import profile_operation
 
@@ -38,6 +37,7 @@ print("\n" + "=" * 70)
 print("✅ SOLUTION: The @profile_operation Decorator")
 print("=" * 70)
 
+
 # Just add @profile_operation above any function!
 @profile_operation
 def preprocess_data(data):
@@ -48,17 +48,19 @@ def preprocess_data(data):
     scaled = normalized * 100.0
     return scaled
 
+
 @profile_operation
 def compute_features(data):
     """Feature engineering - automatically profiled!"""
     # Compute various statistics
     features = {
-        'mean': data.mean(),
-        'sum': data.sum(),
-        'max': data.max(),
-        'min': data.min()
+        "mean": data.mean(),
+        "sum": data.sum(),
+        "max": data.max(),
+        "min": data.min(),
     }
     return features
+
 
 @profile_operation
 def apply_transformation(data):
@@ -100,6 +102,7 @@ print("\n" + "=" * 70)
 print("EXAMPLE 2: A/B Testing with Decorators")
 print("=" * 70)
 
+
 # Two different ways to compute the same thing
 @profile_operation
 def method_a_separate_ops(data):
@@ -108,6 +111,7 @@ def method_a_separate_ops(data):
     temp2 = temp1 + 5.0
     temp3 = temp2 - 1.0
     return temp3.mean()
+
 
 @profile_operation
 def method_b_fused_ops(data):
@@ -149,6 +153,7 @@ print("\n" + "=" * 70)
 print("EXAMPLE 3: Profiling Function Call Hierarchies")
 print("=" * 70)
 
+
 @profile_operation
 def load_and_validate(filepath):
     """Simulated data loading"""
@@ -159,6 +164,7 @@ def load_and_validate(filepath):
         raise ValueError("Invalid data")
     return data
 
+
 @profile_operation
 def engineer_features(raw_data):
     """Feature engineering pipeline"""
@@ -166,6 +172,7 @@ def engineer_features(raw_data):
     processed = preprocess_data(raw_data)
     features = compute_features(processed)
     return features
+
 
 @profile_operation
 def full_pipeline(filepath):

@@ -229,22 +229,21 @@ The Rust runtime provides:
 // rust/corepy-runtime/src/lib.rs
 use pyo3::prelude::*;
 
-#[pyfunction]
-fn sum_as_string(a: usize, b: usize) -> PyResult<String> {
-    Ok((a + b).to_string())
-}
-
 #[pymodule]
 fn _corepy_rust(_py: Python, m: &PyModule) -> PyResult<()> {
-    m.add_function(wrap_pyfunction!(sum_as_string, m)?)?;
+    // Active: Profiling, FFI safety, and initial Ops
+    ffi::python::register_functions(m)?;
     Ok(())
 }
 ```
 
 > [!NOTE]
-> **Current Status**: Minimal implementation (demo function only)
+> **Current Status**: Hybrid Active
 > 
-> The Rust runtime in v1 is a placeholder. Full scheduler and safety features are planned for v2.
+> The Rust runtime is **active** in v0.2.0+. It currently manages:
+> - **Profiling**: Low-overhead instrumentation via `corepy.profiler`.
+> - **FFI Safety**: Safe boundary between Python and C++.
+> - **Ops**: Selected operations are being migrated from C++.
 
 ### Planned Features (v2+)
 
@@ -517,7 +516,7 @@ fn safe_process(data: &PyArray1<f32>) -> PyResult<Py<PyArray1<f32>>> {
 - ✅ CPU backend architecture
 - ✅ Device detection
 - ✅ Basic backend selection
-- ⚠️ Minimal Rust runtime (placeholder)
+- ⚠️ Hybrid Rust Runtime (Active for Profiling/FFI)
 
 ### v1.5 (Next 3-6 months)
 - 🔨 Complete CPU SIMD kernels (all operations)

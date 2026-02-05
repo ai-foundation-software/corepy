@@ -7,6 +7,7 @@ class Table:
     """
     A unified data container for tabular data.
     """
+
     def __init__(self, data: List[Dict[str, Any]], schema: Optional[Schema] = None):
         self._data = data
         self._schema = schema

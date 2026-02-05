@@ -121,11 +121,11 @@ print(table)
 Corepy uses a backend abstraction for future CPU/GPU support.
 
 ```python
-from corepy.backend import CPUBackend, CPUDevice
+from corepy.backend import CPUBackend, CPUDevice, detect_devices
 
 # CPU backend is used by default
 backend = CPUBackend()
-device = CPUDevice(device_id=0)
+device = CPUDevice(detect_devices())
 
 print(f"Backend: {backend}")
 print(f"Device: {device}")

@@ -36,6 +36,16 @@ If it prints a version number (like `0.2.0`), you are ready to go!
 
 If you want to modify Corepy or see how it works under the hood, you need to build it from source. This requires a few more tools because Corepy uses **Rust** and **C++**.
 
+### 0. Quick Setup (Automated)
+
+We provide a script that detects your OS, installs dependencies (using `uv` or `pip`), and builds the project.
+
+```bash
+./scripts/setup_dev.sh
+```
+
+If you prefer manual setup, follow the steps below.
+
 ### 1. Install Build Tools
 
 #### Rust

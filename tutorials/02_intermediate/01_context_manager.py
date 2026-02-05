@@ -8,7 +8,6 @@ HOW: Use ProfileContext to isolate profiling to specific blocks
 Expected Time: 5 minutes
 """
 
-
 import corepy as cp
 from corepy.profiler import ProfileContext
 
@@ -49,7 +48,7 @@ with ProfileContext("critical_section"):
     scaled = normalized * 2.0
     result = scaled + 100.0
     final = result.sum()
-    
+
 print(f"   Result: {final}")
 
 # This code runs but is NOT profiled
@@ -121,13 +120,13 @@ cp.clear_profile()
 # You can nest contexts to create hierarchical reports!
 with ProfileContext("outer_pipeline"):
     data = cp.tensor([float(i) for i in range(100)])
-    
+
     with ProfileContext("preprocessing"):
         normalized = data - data.mean()
-    
+
     with ProfileContext("computation"):
         result = normalized * 2.0
-        
+
     with ProfileContext("aggregation"):
         final = result.sum()
 

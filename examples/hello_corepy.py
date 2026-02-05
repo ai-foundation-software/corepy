@@ -3,7 +3,7 @@ import corepy
 
 def main():
     print(f"Corepy Version: {corepy.__version__}")
-    
+
     # Demonstrate C++ extension
     val = 10
     result = corepy.add_one(val)
@@ -14,6 +14,7 @@ def main():
         print(f"Rust Kernel: sum_as_string(2, 2) = {corepy.sum_as_string(2, 2)}")
     else:
         print("Rust Kernel: Not fully linked yet (Placeholder active)")
+
 
 if __name__ == "__main__":
     main()

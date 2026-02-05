@@ -4,6 +4,29 @@ project(corepy_kernels VERSION 0.2.0 LANGUAGES C CXX)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+if(CMAKE_SYSTEM_NAME MATCHES "Darwin")
+    message(STATUS "Configuring for macOS...")
+    
+    # Enable Objective-C++ for Metal
+    enable_language(OBJCXX)
+    
+    find_library(METAL_LIB Metal)
+    find_library(FOUNDATION_LIB Foundation)
+
+    if(CMAKE_SYSTEM_PROCESSOR MATCHES "arm64")
+        message(STATUS "Apple Silicon detected. Building with NEON optimizations (via compiler auto-vectorization).")
+        if(METAL_LIB)
+            message(STATUS "Metal framework found at ${METAL_LIB}. Enabling COREPY_USE_METAL definition.")
+            target_link_libraries(corepy_kernels ${METAL_LIB} ${FOUNDATION_LIB})
+            target_compile_definitions(corepy_kernels PRIVATE COREPY_USE_METAL)
+        else()
+             message(WARNING "Metal framework not found. GPU acceleration will be unavailable.")
+        endif()
+    else()
+        message(STATUS "Intel Mac detected.")
+    endif()
+endif()
+
 # OpenBLAS detection - cross-platform
 if(WIN32)
     # On Windows, check for OPENBLAS_DIR or CMAKE_PREFIX_PATH
@@ -37,11 +60,22 @@ set(SOURCES
     src/cpu/dummy.cpp
     src/cpu/matmul.cpp
     src/cpu/reduce.cpp
+
     src/cpu/blas_kernels.cpp
 )
 
+if(CMAKE_SYSTEM_NAME MATCHES "Darwin" AND CMAKE_SYSTEM_PROCESSOR MATCHES "arm64")
+    list(APPEND SOURCES
+        src/metal/metal_backend.mm
+    )
+endif()
+
 # Create static library
 add_library(corepy_kernels STATIC ${SOURCES})
+
+if(CMAKE_SYSTEM_NAME MATCHES "Darwin")
+    target_link_libraries(corepy_kernels "-framework Metal" "-framework Foundation")
+endif()
 
 if(OpenBLAS_FOUND)
     target_compile_definitions(corepy_kernels PRIVATE COREPY_USE_OPENBLAS)

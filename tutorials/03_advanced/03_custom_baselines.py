@@ -47,6 +47,7 @@ print("=" * 70)
 print("STEP 1: Creating a Performance Baseline")
 print("=" * 70)
 
+
 @profile_operation
 def data_processing_pipeline(data_size):
     """Standard data processing workflow"""
@@ -55,6 +56,7 @@ def data_processing_pipeline(data_size):
     scaled = normalized * 100.0
     result = scaled.sum()
     return result
+
 
 # Profile the current "good" version
 print("\n📊 Profiling baseline (current good performance)...")
@@ -65,11 +67,11 @@ for _ in range(10):
     result = data_processing_pipeline(1000)
 
 # Get the profile data
-baseline_report = cp.profile_report(format='json')
+baseline_report = cp.profile_report(format="dict")
 
 # Save as baseline
 baseline_path = "/tmp/performance_baseline.json"
-with open(baseline_path, 'w') as f:
+with open(baseline_path, "w") as f:
     json.dump(baseline_report, f, indent=2)
 
 print(f"✅ Baseline saved to: {baseline_path}")
@@ -77,7 +79,7 @@ print("\n📋 BASELINE SUMMARY:")
 print(f"   Total operations: {len(baseline_report['operations'])}")
 print(f"   Total time: {baseline_report['total_time_ms']:.2f}ms")
 
-for op_name, op_data in baseline_report['operations'].items():
+for op_name, op_data in baseline_report["operations"].items():
     print(f"   {op_name:15s}: {op_data['avg_time_ms']:6.2f}ms avg")
 
 print("""
@@ -114,21 +116,23 @@ print("\n" + "=" * 70)
 print("STEP 2: Detecting Performance Regressions")
 print("=" * 70)
 
+
 # Simulate a new version with a performance regression
 @profile_operation
 def data_processing_pipeline_v2(data_size):
     """New version with accidental regression"""
     data = cp.tensor([float(i) for i in range(data_size)])
-    
+
     # BUG: Computing mean twice (should be once!)
     normalized = (data - data.mean()) / data.std()
-    
+
     # BUG: Unnecessary extra operation
     temp = normalized + data.mean()  # ← Regression! Extra mean() call
-    
+
     scaled = temp * 100.0
     result = scaled.sum()
     return result
+
 
 # Profile the new version
 print("\n📊 Profiling new version (with regression)...")
@@ -137,7 +141,7 @@ cp.enable_profiling()
 for _ in range(10):
     result = data_processing_pipeline_v2(1000)
 
-new_report = cp.profile_report(format='json')
+new_report = cp.profile_report(format="dict")
 
 # Load baseline for comparison
 with open(baseline_path) as f:
@@ -150,25 +154,24 @@ regressions = []
 improvements = []
 THRESHOLD = 1.2  # 20% slower = regression
 
-for op_name, new_data in new_report['operations'].items():
-    if op_name in baseline['operations']:
-        baseline_time = baseline['operations'][op_name]['avg_time_ms']
-        new_time = new_data['avg_time_ms']
+for op_name, new_data in new_report["operations"].items():
+    if op_name in baseline["operations"]:
+        baseline_time = baseline["operations"][op_name]["avg_time_ms"]
+        new_time = new_data["avg_time_ms"]
         ratio = new_time / baseline_time
-        
+
         if ratio > THRESHOLD:
-            regressions.append({
-                'operation': op_name,
-                'baseline_ms': baseline_time,
-                'new_ms': new_time,
-                'slowdown': ratio,
-                'severity': 'HIGH' if ratio > 2.0 else 'MEDIUM'
-            })
+            regressions.append(
+                {
+                    "operation": op_name,
+                    "baseline_ms": baseline_time,
+                    "new_ms": new_time,
+                    "slowdown": ratio,
+                    "severity": "HIGH" if ratio > 2.0 else "MEDIUM",
+                }
+            )
         elif ratio < 0.9:  # 10% faster
-            improvements.append({
-                'operation': op_name,
-                'speedup': 1.0 / ratio
-            })
+            improvements.append({"operation": op_name, "speedup": 1.0 / ratio})
 
 if regressions:
     print("\n❌ PERFORMANCE REGRESSIONS DETECTED:")
@@ -268,7 +271,7 @@ jobs:
             performance_report.html
 """
 
-with open("/tmp/github_actions_example.yml", 'w') as f:
+with open("/tmp/github_actions_example.yml", "w") as f:
     f.write(ci_script)
 
 print("✅ Example CI/CD config saved to: /tmp/github_actions_example.yml")
@@ -327,10 +330,10 @@ print("=" * 70)
 
 # Define performance budgets (maximum allowed time)
 PERFORMANCE_BUDGETS = {
-    'data_processing_pipeline': 2.0,   # Max 2ms
-    'mean': 0.5,                       # Max 0.5ms
-    'std': 1.0,                        # Max 1.0ms
-    'sum': 0.3                         # Max 0.3ms
+    "data_processing_pipeline": 2.0,  # Max 2ms
+    "mean": 0.5,  # Max 0.5ms
+    "std": 1.0,  # Max 1.0ms
+    "sum": 0.3,  # Max 0.3ms
 }
 
 # Check current performance against budgets
@@ -339,25 +342,31 @@ print("\n📊 PERFORMANCE BUDGET ANALYSIS:")
 budget_violations = []
 
 for op_name, budget_ms in PERFORMANCE_BUDGETS.items():
-    if op_name in new_report['operations']:
-        actual_ms = new_report['operations'][op_name]['avg_time_ms']
+    if op_name in new_report["operations"]:
+        actual_ms = new_report["operations"][op_name]["avg_time_ms"]
         utilization = (actual_ms / budget_ms) * 100
-        
+
         status = "✅" if actual_ms <= budget_ms else "❌"
-        print(f"  {status} {op_name:30s}: {actual_ms:6.2f}ms / {budget_ms:6.2f}ms ({utilization:5.1f}%)")
-        
+        print(
+            f"  {status} {op_name:30s}: {actual_ms:6.2f}ms / {budget_ms:6.2f}ms ({utilization:5.1f}%)"
+        )
+
         if actual_ms > budget_ms:
-            budget_violations.append({
-                'operation': op_name,
-                'budget_ms': budget_ms,
-                'actual_ms': actual_ms,
-                'overage': actual_ms - budget_ms
-            })
+            budget_violations.append(
+                {
+                    "operation": op_name,
+                    "budget_ms": budget_ms,
+                    "actual_ms": actual_ms,
+                    "overage": actual_ms - budget_ms,
+                }
+            )
 
 if budget_violations:
     print("\n❌ BUDGET VIOLATIONS:")
     for violation in budget_violations:
-        print(f"  {violation['operation']}: Over budget by {violation['overage']:.2f}ms")
+        print(
+            f"  {violation['operation']}: Over budget by {violation['overage']:.2f}ms"
+        )
 else:
     print("\n✅ All operations within performance budgets!")
 

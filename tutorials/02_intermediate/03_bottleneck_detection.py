@@ -48,14 +48,14 @@ cp.enable_profiling()
 data = cp.tensor([float(i) for i in range(10000)])
 
 # Fast operations
-temp1 = data + 1.0      # ~0.2ms
-temp2 = data * 2.0      # ~0.2ms
+temp1 = data + 1.0  # ~0.2ms
+temp2 = data * 2.0  # ~0.2ms
 
 # SLOW operation (bottleneck!)
 result = data.matmul(data)  # ~50ms (much slower!)
 
 # Fast operation
-final = result.sum()    # ~0.3ms
+final = result.sum()  # ~0.3ms
 
 # Get bottleneck analysis
 bottlenecks = cp.detect_bottlenecks()
@@ -94,10 +94,10 @@ data = cp.tensor([float(i) for i in range(5000)])
 
 # Several operations with varying costs
 for i in range(10):
-    temp1 = data + i          # Many small operations
-    
+    temp1 = data + i  # Many small operations
+
 # Two potential bottlenecks
-stats = data.std()            # Moderately slow (~2ms)
+stats = data.std()  # Moderately slow (~2ms)
 correlation = data.matmul(data)  # Very slow (~20ms)
 
 # More fast operations
@@ -135,10 +135,12 @@ print("\n" + "=" * 70)
 print("EXAMPLE 3: Bottlenecks in Custom Code")
 print("=" * 70)
 
+
 @profile_operation
 def fast_preprocessing(data):
     """Quick normalization"""
     return (data - data.mean()) / data.std()
+
 
 @profile_operation
 def slow_feature_engineering(data):
@@ -148,6 +150,7 @@ def slow_feature_engineering(data):
     for _ in range(50):
         result = result * 1.001 + 0.001
     return result
+
 
 @profile_operation
 def fast_postprocessing(data):
@@ -196,18 +199,21 @@ print("=" * 70)
 
 # Set a baseline (from previous profiling sessions)
 baseline = {
-    'preprocess': 1.0,    # ms
-    'compute': 5.0,       # ms
-    'aggregate': 0.5      # ms
+    "preprocess": 1.0,  # ms
+    "compute": 5.0,  # ms
+    "aggregate": 0.5,  # ms
 }
+
 
 @profile_operation
 def preprocess(data):
     return data - data.mean()
 
+
 @profile_operation
 def compute(data):
     return data.matmul(data)
+
 
 @profile_operation
 def aggregate(data):

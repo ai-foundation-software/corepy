@@ -8,7 +8,6 @@ HOW: Export to Speedscope format and analyze visually
 Expected Time: 10 minutes
 """
 
-
 import corepy as cp
 from corepy.profiler import ProfileContext, profile_operation
 
@@ -51,11 +50,13 @@ print("=" * 70)
 print("EXAMPLE 1: Generating a Flamegraph")
 print("=" * 70)
 
+
 # Create a realistic nested call structure
 @profile_operation
 def load_data():
     """Data loading"""
     return cp.tensor([float(i) for i in range(1000)])
+
 
 @profile_operation
 def normalize(data):
@@ -63,6 +64,7 @@ def normalize(data):
     mean = data.mean()
     std = data.std()
     return (data - mean) / std
+
 
 @profile_operation
 def compute_features(data):
@@ -73,12 +75,14 @@ def compute_features(data):
     stats = prod.mean()
     return stats
 
+
 @profile_operation
 def process_pipeline(data):
     """Main processing pipeline"""
     normalized = normalize(data)
     features = compute_features(normalized)
     return features
+
 
 @profile_operation
 def full_workflow():
@@ -133,14 +137,17 @@ print("=" * 70)
 cp.clear_profile()
 cp.enable_profiling()
 
+
 # Simulate a bottleneck scenario
 @profile_operation
 def fast_operation_1(data):
     return data + 1.0
 
+
 @profile_operation
 def fast_operation_2(data):
     return data * 2.0
+
 
 @profile_operation
 def slow_bottleneck(data):
@@ -149,6 +156,7 @@ def slow_bottleneck(data):
     for _ in range(100):
         result = result * 1.001
     return result
+
 
 @profile_operation
 def mixed_pipeline(data):
@@ -205,12 +213,12 @@ cp.enable_profiling()
 
 with ProfileContext("before_optimization"):
     data = cp.tensor([float(i) for i in range(1000)])
-    
+
     # Inefficient: multiple passes over data
     mean_val = data.mean()
     std_val = data.std()
     sum_val = data.sum()
-    
+
     result = (data - mean_val) / std_val + sum_val
 
 cp.export_profile("/tmp/before_optimization.json", format="flamegraph")
@@ -222,10 +230,10 @@ cp.enable_profiling()
 
 with ProfileContext("after_optimization"):
     data = cp.tensor([float(i) for i in range(1000)])
-    
+
     # Efficient: compute stats in one pass
-    stats = cp.compute_stats(data, ['mean', 'std', 'sum'])
-    result = (data - stats['mean']) / stats['std'] + stats['sum']
+    stats = cp.compute_stats(data, ["mean", "std", "sum"])
+    result = (data - stats["mean"]) / stats["std"] + stats["sum"]
 
 cp.export_profile("/tmp/after_optimization.json", format="flamegraph")
 

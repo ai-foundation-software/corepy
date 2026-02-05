@@ -8,17 +8,22 @@ class Field(BaseModel):
     """
     Represents a single field in a schema.
     """
+
     name: str
     dtype: str
     metadata: Dict[str, Any] = PydanticField(default_factory=dict)
+
 
 class Schema(BaseModel):
     """
     Defines the structure of a dataset.
     """
+
     fields: List[Field]
 
-    def add_field(self, name: str, dtype: str, metadata: Optional[Dict[str, Any]] = None) -> None:
+    def add_field(
+        self, name: str, dtype: str, metadata: Optional[Dict[str, Any]] = None
+    ) -> None:
         """
         Adds a field to the schema.
         """

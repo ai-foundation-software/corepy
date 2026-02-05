@@ -120,11 +120,11 @@ EXAMPLE BASELINES (CPU, 1000 elements):
 """)
 
 baselines = {
-    "add":    "0.01 ms",
-    "mul":    "0.01 ms", 
-    "sum":    "0.05 ms",
-    "mean":   "0.08 ms",
-    "matmul": "0.50 ms"
+    "add": "0.01 ms",
+    "mul": "0.01 ms",
+    "sum": "0.05 ms",
+    "mean": "0.08 ms",
+    "matmul": "0.50 ms",
 }
 
 for op, time in baselines.items():

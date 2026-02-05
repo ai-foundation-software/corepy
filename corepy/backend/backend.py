@@ -8,7 +8,7 @@ class Backend(ABC):
     Abstract base class for an execution backend.
     Responsible for memory allocation and operation execution.
     """
-    
+
     @property
     @abstractmethod
     def device_type(self) -> BackendType:
@@ -21,6 +21,7 @@ class Backend(ABC):
     @abstractmethod
     def supports_operation(self, op_type: OperationType) -> bool:
         pass
+
 
 class CPUBackend(Backend):
     def __init__(self):
@@ -37,6 +38,7 @@ class CPUBackend(Backend):
         # CPU supports everything, though some things might be slow
         return True
 
+
 # Placeholder for GPUBackend - would be loaded if available
 class GPUBackend(Backend):
     def __init__(self):
@@ -45,13 +47,13 @@ class GPUBackend(Backend):
     @property
     def device_type(self) -> BackendType:
         return BackendType.GPU
-    
+
     def is_available(self) -> bool:
         # This would check actual driver availability
         return False
 
     def supports_operation(self, op_type: OperationType) -> bool:
-        # GPU typically doesn't support complex control flow or arbitrary scalar logic well 
+        # GPU typically doesn't support complex control flow or arbitrary scalar logic well
         # (at least not via this dispatch mechanism)
         if op_type in (OperationType.CONTROL, OperationType.SCALAR):
             return False

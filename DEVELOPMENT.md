@@ -17,7 +17,7 @@ Run the automated setup script:
 
 ```bash
 chmod +x setup_dev.sh
-./setup_dev.sh
+./scripts/setup_dev.sh
 ```
 
 This script will:

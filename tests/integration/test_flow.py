@@ -14,5 +14,5 @@ def test_end_to_end_flow():
     # 3. Process
     pipeline = cp.runtime.Pipeline()
     pipeline.run(table)
-    
+
     assert len(table) == 5

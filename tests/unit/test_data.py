@@ -9,16 +9,19 @@ def test_table_creation():
     assert t.to_list() == data
     assert t.schema is None
 
+
 def test_table_repr():
     data = [{"a": 1}]
     t = Table(data)
     assert "Table(rows=1" in repr(t)
     assert "schema=None" in repr(t)
 
+
 def test_table_creation(sample_data):
     table = Table(sample_data)
     assert len(table) == 2
     assert table.to_list() == sample_data
+
 
 def test_table_with_schema():
     schema = Schema(fields=[])

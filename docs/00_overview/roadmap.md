@@ -8,7 +8,7 @@ This document outlines the development milestones for Corepy.
   - ✅ Hybrid Python/Rust/C++ Architecture
   - ✅ Zero-config Profiling System (`corepy.profiler`)
   - ✅ Basic Tensor Operations (add, sub, mul, matmul)
-  - ✅ Rust FFI Integration (`corepy-runtime`)
+  - ✅ Rust FFI Integration (`corepy-runtime`) - **Active**
   - ✅ Python API (`corepy.tensor`, explicit Backend selection)
 
 ---
@@ -23,7 +23,7 @@ This document outlines the development milestones for Corepy.
   - [ ] Slicing and Indexing support (`tensor[0:5]`)
   - [ ] Save/Load tensors to disk
 - **Tech Stack**: 
-  - Migrate more C++ fallback kernels to Rust/SIMD.
+  - Migrate C++ fallback kernels to Rust/SIMD (Active).
 
 ### v0.4.0: The "GPU Prototype" Release (Q3 2026)
 **Goal**: First working GPU acceleration on consumer hardware.

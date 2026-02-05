@@ -52,12 +52,14 @@ print("=" * 70)
 print("FORMAT 1: JSON Export")
 print("=" * 70)
 
+
 @profile_operation
 def sample_workflow():
     data = cp.tensor([float(i) for i in range(1000)])
     normalized = (data - data.mean()) / data.std()
     result = normalized.sum()
     return result
+
 
 cp.enable_profiling()
 result = sample_workflow()
@@ -78,7 +80,7 @@ print(f"   Total time: {profile_data['total_time_ms']:.2f}ms")
 print(f"   Profiling session: {profile_data['metadata']['session_id']}")
 
 print("\n   First operation:")
-first_op = list(profile_data['operations'].values())[0]
+first_op = list(profile_data["operations"].values())[0]
 print(f"     {json.dumps(first_op, indent=6)}")
 
 print("""
@@ -140,7 +142,9 @@ with open(csv_path) as f:
     print(f"   Columns: {', '.join(reader.fieldnames)}\n")
     for i, row in enumerate(reader):
         if i < 3:  # Show first 3 rows
-            print(f"   {row['operation']:<15} | {row['count']:>5} calls | {row['avg_time_ms']:>8} ms | {row['backend']}")
+            print(
+                f"   {row['operation']:<15} | {row['count']:>5} calls | {row['avg_time_ms']:>8} ms | {row['backend']}"
+            )
 
 print("""
 💡 CSV FORMAT USE CASES:

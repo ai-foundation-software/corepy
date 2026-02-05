@@ -10,6 +10,7 @@ def test_python_version():
     print(f"Running on Python {major}.{minor}")
     assert (major, minor) >= (3, 9), f"Python version {major}.{minor} is too old!"
 
+
 def test_platform_info():
     """Verify platform detection works and lists supported OSes."""
     system = platform.system()
@@ -17,6 +18,7 @@ def test_platform_info():
     # We expect one of these, but we don't strictly fail if it's something else (e.g. some other Unix),
     # unless we want to be strict. For now, just logging it is fine, but let's assert it's a "known" one.
     assert system in ["Linux", "Darwin", "Windows"]
+
 
 def test_corepy_import():
     """Ensure corepy can be imported and has version metadata."""

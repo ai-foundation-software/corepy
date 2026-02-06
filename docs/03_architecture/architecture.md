@@ -226,7 +226,7 @@ The Rust runtime provides:
 ### Current Implementation Status (v1)
 
 ```rust
-// rust/corepy-runtime/src/lib.rs
+// rust/core/src/lib.rs
 use pyo3::prelude::*;
 
 #[pymodule]
@@ -593,7 +593,7 @@ large_data.to_device("gpu")  # Transfer cost amortized over compute
 
 - [ARCHITECTURE_VISION.md](file:///home/crazyguy/VSCode/corepy/ARCHITECTURE_VISION.md) - Long-term architecture
 - [COREPY_V1_REVIEW.md](file:///home/crazyguy/VSCode/corepy/COREPY_V1_REVIEW.md) - v1 scope and constraints
-- [Rust Source](file:///home/crazyguy/VSCode/corepy/rust/corepy-runtime/src/lib.rs) - Current Rust implementation
+- [Rust Source](file:///home/crazyguy/VSCode/corepy/rust/core/src/lib.rs) - Current Rust implementation
 - [Backend Source](file:///home/crazyguy/VSCode/corepy/corepy/backend/) - Python backend code
 
 ---

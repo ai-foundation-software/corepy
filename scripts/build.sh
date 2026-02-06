@@ -47,9 +47,11 @@ echo "✅ C++ kernels built"
 echo ""
 echo "Step 2/2: Building Rust runtime..."
 if command -v uv >/dev/null 2>&1; then
-    uv run maturin develop --release --manifest-path rust/corepy-runtime/Cargo.toml
+    echo "Using uv to sync and build..."
+    uv sync
 else
-    maturin develop --release --manifest-path rust/corepy-runtime/Cargo.toml
+    echo "Using maturin to build..."
+    maturin develop --release
 fi
 echo "✅ Rust runtime built"
 

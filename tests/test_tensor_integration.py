@@ -49,11 +49,46 @@ def test_tensor_auto_gpu_threshold_mock(monkeypatch):
         session._session = old_session
 
 
-def test_tensor_explicit_override_api():
-    t = Tensor([1, 2, 3], backend="gpu")
-    assert t.backend == BackendType.GPU
+def test_tensor_explicit_override_api(monkeypatch):
+    # Mock GPU presence
+    from corepy.backend.device import DeviceInfo
+    gpu_info = DeviceInfo(cpu_cores=4, gpu_count=1)
+    
+    from corepy.backend import session
+    with monkeypatch.context() as m:
+        m.setattr("corepy.backend.session.detect_devices", lambda: gpu_info)
+        m.setattr("corepy.backend.device.detect_devices", lambda: gpu_info)
+        
+        # Reset session
+        old_session_var = session._session
+        old_session_instance = session.Session._instance
+        session._session = None
+        session.Session._instance = None
+        try:
+            t = Tensor([1, 2, 3], backend="gpu")
+            assert t.backend == BackendType.GPU
+        finally:
+            session._session = old_session_var
+            session.Session._instance = old_session_instance
 
 
-def test_tensor_explicit_device_api():
-    t = Tensor([1, 2, 3], device="cuda:0")
-    assert t.backend == BackendType.GPU
+def test_tensor_explicit_device_api(monkeypatch):
+    # Mock GPU presence for "cuda:0" request
+    from corepy.backend.device import DeviceInfo
+    gpu_info = DeviceInfo(cpu_cores=4, gpu_count=1)
+    
+    from corepy.backend import session
+    with monkeypatch.context() as m:
+        m.setattr("corepy.backend.session.detect_devices", lambda: gpu_info)
+        m.setattr("corepy.backend.device.detect_devices", lambda: gpu_info)
+        
+        old_session_var = session._session
+        old_session_instance = session.Session._instance
+        session._session = None
+        session.Session._instance = None
+        try:
+            t = Tensor([1, 2, 3], device="cuda:0")
+            assert t.backend == BackendType.GPU
+        finally:
+            session._session = old_session_var
+            session.Session._instance = old_session_instance

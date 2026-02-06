@@ -149,7 +149,7 @@ ctypes.CDLL("libcorepy.so").add(...)  # BYPASS DETECTED
 ### 2. Rust Layer (Brain/Auditor)
 
 **Purpose**: Execution controller and safety boundary  
-**Implementation**: `rust/corepy-runtime/`  
+**Implementation**: `rust/core/`  
 **Dependencies**: PyO3 (Python FFI), rayon (threading), libc (C++ FFI)
 
 #### Allowed Responsibilities
@@ -586,7 +586,7 @@ __global__ void add_f32_cuda(
 ### Implementation Locations
 
 - **Python API**: `corepy/*.py`
-- **Rust Runtime**: `rust/corepy-runtime/src/`
+- **Rust Runtime**: `rust/core/src/`
 - **C++ Kernels**: `csrc/`
 - **FFI Bindings**: `bindings/`
 

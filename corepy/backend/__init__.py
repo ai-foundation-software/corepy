@@ -15,7 +15,6 @@ class BackendPolicy(IntEnum):
     CUDA = 3
 
 
-
 _GLOBAL_POLICY = BackendPolicy.DEFAULT
 
 

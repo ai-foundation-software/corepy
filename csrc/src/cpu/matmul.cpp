@@ -77,12 +77,13 @@ void matmul_f32(
     size_t m, size_t k, size_t n
 ) {
     // Zero-initialize output matrix
+    // Zero-initialize output matrix
     for (size_t i = 0; i < m * n; ++i) c[i] = 0.0f;
 
-    // Unrolled (i, p, j) implementation
-    // This order access row_b[p, :] and row_c[i, :] contiguously.
-    // Unrolling i by 4 reduces B bandwidth by 4x.
+    #ifdef __AVX2__
     
+    // AVX2 Implementation
+    // Unrolled (i, p, j) implementation
     size_t i = 0;
     for (; i + 3 < m; i += 4) {
         for (size_t p = 0; p < k; ++p) {
@@ -116,8 +117,11 @@ void matmul_f32(
             // Scalar remainder for j
             for (; j < n; ++j) {
                 float bv = rb[j];
-                rc0[j] += va0[0] * bv; // va0[0] is not valid, use scalar part or broadcasted set
-                // Actually easier to just use a[i*k+p]
+                // Fix MSVC error: Cannot use va0[0]. Use original scalar value.
+                rc0[j] += a[(i + 0) * k + p] * bv;
+                rc1[j] += a[(i + 1) * k + p] * bv;
+                rc2[j] += a[(i + 2) * k + p] * bv;
+                rc3[j] += a[(i + 3) * k + p] * bv;
             }
         }
     }
@@ -131,6 +135,18 @@ void matmul_f32(
             }
         }
     }
+
+    #else
+    // Scalar Fallback (No AVX2)
+    for (size_t i = 0; i < m; ++i) {
+        for (size_t k_idx = 0; k_idx < k; ++k_idx) {
+            float val_a = a[i * k + k_idx];
+            for (size_t j = 0; j < n; ++j) {
+                c[i * n + j] += val_a * b[k_idx * n + j];
+            }
+        }
+    }
+    #endif
 }
 
 } // namespace corepy::backend::avx2

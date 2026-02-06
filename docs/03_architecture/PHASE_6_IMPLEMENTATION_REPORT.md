@@ -27,7 +27,7 @@ Successfully implemented **Phase 6.1 (Arena Integration)** and **Phase 6.2 (Para
 
 ### Implementation
 
-**Modified File**: [`rust/corepy-runtime/src/ops/reduce.rs`](file:///home/crazyguy/VSCode/corepy/rust/corepy-runtime/src/ops/reduce.rs)
+**Modified File**: [`rust/corepy-runtime/src/ops/reduce.rs`](file:corepy/rust/corepy-runtime/src/ops/reduce.rs)
 
 Wrapped all dispatch functions with `with_arena()`:
 
@@ -278,4 +278,4 @@ Rayon automatically releases Python GIL during parallel work. ✅
 - NumPy's highly optimized BLAS is a tough competitor
 - Rayon + SIMD combination is the path forward
 
-**Status**: Ready for Phase 6.3 (matmul optimization) 🚀
+**Status**: ✅ Phase 6.1 (Arena Integration) & 6.2 (Parallel Dispatch) Complete 🚀

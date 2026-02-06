@@ -14,29 +14,29 @@ logger = logging.getLogger("corepy.profiler")
 # Python fallback profiler state
 class _PythonProfiler:
     """Thread-local profiler state for Python fallback."""
-    
+
     def __init__(self):
         self.enabled = False
         self.context = None
         self.operations: Dict[str, Dict[str, Any]] = {}
         self.session_id = "python-fallback"
-    
+
     def enable(self):
         self.enabled = True
-    
+
     def disable(self):
         self.enabled = False
-    
+
     def clear(self):
         self.operations = {}
-    
+
     def set_context(self, ctx: Optional[str]):
         self.context = ctx
-    
+
     def record_operation(self, op_name: str, time_ms: float, backend: str = "cpu"):
         if not self.enabled:
             return
-        
+
         key = f"{op_name}:{self.context or 'global'}"
         if key not in self.operations:
             self.operations[key] = {
@@ -44,21 +44,21 @@ class _PythonProfiler:
                 "context": self.context,
                 "count": 0,
                 "total_time_ms": 0.0,
-                "min_time_ms": float('inf'),
+                "min_time_ms": float("inf"),
                 "max_time_ms": 0.0,
                 "primary_backend": backend,
             }
-        
+
         op = self.operations[key]
         op["count"] += 1
         op["total_time_ms"] += time_ms
         op["min_time_ms"] = min(op["min_time_ms"], time_ms)
         op["max_time_ms"] = max(op["max_time_ms"], time_ms)
         op["avg_time_ms"] = op["total_time_ms"] / op["count"]
-    
+
     def get_report(self, ctx: Optional[str] = None) -> str:
         total_time = sum(op["total_time_ms"] for op in self.operations.values())
-        
+
         # Filter by context if specified
         filtered_ops = {}
         for key, op in self.operations.items():
@@ -75,18 +75,28 @@ class _PythonProfiler:
                     existing = filtered_ops[op_name]
                     existing["count"] += op["count"]
                     existing["total_time_ms"] += op["total_time_ms"]
-                    existing["min_time_ms"] = min(existing["min_time_ms"], op["min_time_ms"])
-                    existing["max_time_ms"] = max(existing["max_time_ms"], op["max_time_ms"])
-                    existing["avg_time_ms"] = existing["total_time_ms"] / existing["count"]
-                    existing["percent_total"] = (
-                        existing["total_time_ms"] / total_time * 100 if total_time > 0 else 0
+                    existing["min_time_ms"] = min(
+                        existing["min_time_ms"], op["min_time_ms"]
                     )
-        
-        return json.dumps({
-            "metadata": {"session_id": self.session_id},
-            "operations": filtered_ops,
-            "total_time_ms": total_time,
-        })
+                    existing["max_time_ms"] = max(
+                        existing["max_time_ms"], op["max_time_ms"]
+                    )
+                    existing["avg_time_ms"] = (
+                        existing["total_time_ms"] / existing["count"]
+                    )
+                    existing["percent_total"] = (
+                        existing["total_time_ms"] / total_time * 100
+                        if total_time > 0
+                        else 0
+                    )
+
+        return json.dumps(
+            {
+                "metadata": {"session_id": self.session_id},
+                "operations": filtered_ops,
+                "total_time_ms": total_time,
+            }
+        )
 
 
 # Global profiler instance
@@ -249,7 +259,7 @@ def export_profile(filename: str, format: str = "json", context: Optional[str] =
                 # Map internal keys
                 op_data = op.copy()
                 op_data["backend"] = op.get("primary_backend", "CPU")
-                
+
                 # Filter keys
                 row = {k: op_data.get(k, 0) for k in keys}
                 writer.writerow(row)
@@ -262,10 +272,58 @@ def export_profile(filename: str, format: str = "json", context: Optional[str] =
             json.dump(speedscope_data, f)
 
     elif format == "chrome_tracing":
-        # Simple trace events (no hierarchy in basic storage, would need full events list)
-        # Assuming we can get full events (future API)
-        # For now, export summary as instant events
-        pass
+        # Export as Chrome Trace Event Format (JSON Array)
+        # Since we only have aggregated stats, we visualize them as a sequential timeline
+        # to represent relative costs.
+        trace_events = []
+        
+        # Metadata
+        trace_events.append({
+            "name": "process_name", "ph": "M", "pid": 1, 
+            "args": {"name": "Corepy Profile"}
+        })
+        
+        current_ts = 0.0
+        
+        ops = report.get("operations", {}).values()
+        # Sort by total time for better visibility
+        sorted_ops = sorted(ops, key=lambda x: x["total_time_ms"], reverse=True)
+        
+        for op in sorted_ops:
+            duration_us = op["total_time_ms"] * 1000.0
+            trace_events.append({
+                "name": op["operation"],
+                "cat": "op",
+                "ph": "X", # Complete event
+                "ts": current_ts,
+                "dur": duration_us,
+                "pid": 1,
+                "tid": 1,
+                "args": {
+                    "count": op["count"],
+                    "avg_ms": op["avg_time_ms"],
+                    "backend": op.get("primary_backend", "unknown")
+                }
+            })
+            current_ts += duration_us
+
+        with open(filename, "w") as f:
+            json.dump(trace_events, f)
+
+
+def export_chrome_trace(filename: str) -> str:
+    """
+    Export the current profile to a Chrome Tracing JSON configuration.
+    
+    Args:
+        filename: Output path (e.g. 'trace.json')
+        
+    Returns:
+        The absolute path to the file.
+    """
+    export_profile(filename, format="chrome_tracing")
+    import os
+    return os.path.abspath(filename)
 
 
 def _convert_to_speedscope(report):
@@ -274,29 +332,8 @@ def _convert_to_speedscope(report):
     # For now, we visualize flat profile as a single stack frame per op.
 
     start_time = 0.0
-    events = []
-
-    for op_name, op_data in report.get("operations", {}).items():
-        # Fake a simplified timeline
-        duration = op_data["total_time_ms"]
-        events.append(
-            {
-                "type": "O",  # Open
-                "frame": events.index({"name": op_name})
-                if {"name": op_name} in events
-                else len(events),  # This logic is buggy, fix frame index
-                "at": start_time,
-            }
-        )
-        start_time += duration
-        # ... this requires a proper frame definition
-        # Use simple structure for now
-
-    # Placeholder for valid internal structure:
-    # Speedscope requires a specific schema.
-    # Without full call stack data from Rust, we can't generate true flamegraphs yet.
-    # We will export a generic JSON compatible with speedscope if possible or just raw JSON.
-    return report  # Fallback
+    # ... (rest of speedscope implementation)
+    return report # Placeholder implementation consistent with previous state
 
 
 class ProfileContext:

@@ -1,3 +1,4 @@
+import argparse
 import time
 
 import numpy as np
@@ -5,69 +6,64 @@ import numpy as np
 import corepy as cp
 
 
-def bench_matmul_2d():
-    print("=" * 70)
-    print("2D Matrix Multiplication Benchmark (Optimized AVX2)")
-    print("=" * 70)
+def benchmark_matmul(m: int, k: int, n: int, num_iters: int = 10):
+    print(f"Benchmarking 2D Matmul: ({m}x{k}) @ ({k}x{n})")
 
-    test_sizes = [
-        (100, 100),
-        (256, 256),
-        (512, 512),
-        (1024, 1024),
-    ]
+    # Setup
+    a_np = np.random.randn(m, k).astype(np.float32)
+    b_np = np.random.randn(k, n).astype(np.float32)
 
-    for m, n in test_sizes:
-        k = n
-        print(f"\nSize: {m} x {k} x {n}")
+    a_cp = cp.Tensor(a_np)
+    b_cp = cp.Tensor(b_np)
 
-        a_np = np.random.rand(m, k).astype(np.float32)
-        b_np = np.random.rand(k, n).astype(np.float32)
+    # Warmup
+    _ = a_cp.matmul(b_cp)
+    _ = a_np @ b_np
 
-        a_cp = cp.Tensor(a_np)
-        b_cp = cp.Tensor(b_np)
+    # NumPy Benchmark
+    start = time.perf_counter()
+    for _ in range(num_iters):
+        res_np = a_np @ b_np
+    end = time.perf_counter()
+    np_time = (end - start) / num_iters
+    np_gflops = (2 * m * k * n) / (np_time * 1e9)
 
-        iterations = 50 if m < 512 else 10
+    # Corepy Benchmark
+    start = time.perf_counter()
+    for _ in range(num_iters):
+        res_cp = a_cp.matmul(b_cp)
+    end = time.perf_counter()
+    cp_time = (end - start) / num_iters
+    cp_gflops = (2 * m * k * n) / (cp_time * 1e9)
 
-        # Warmup
-        for _ in range(5):
-            _ = a_cp.matmul(b_cp)
-            _ = a_np @ b_np
+    # Verification
+    if hasattr(res_cp, "_backing_data") and isinstance(
+        res_cp._backing_data, np.ndarray
+    ):
+        res_cp_np = res_cp._backing_data
+    else:
+        # Fallback for list-backed tensors
+        res_cp_np = np.array(res_cp._backing_data).reshape(m, n)
 
-        # NumPy
-        start = time.perf_counter()
-        for _ in range(iterations):
-            expected = a_np @ b_np
-        numpy_time = (time.perf_counter() - start) / iterations
+    diff = np.abs(res_cp_np - res_np).max()
+    is_correct = diff < 1e-4
 
-        # Corepy
-        start = time.perf_counter()
-        for _ in range(iterations):
-            result = a_cp.matmul(b_cp)
-        corepy_time = (time.perf_counter() - start) / iterations
-
-        # GFLOPS: 2 * m * n * k operations
-        flops = 2 * m * n * k
-        numpy_gflops = (flops / numpy_time) / 1e9
-        corepy_gflops = (flops / corepy_time) / 1e9
-
-        speedup = numpy_time / corepy_time
-
-        # Accuracy check
-        result_np = np.array(result._backing_data).reshape(m, n)
-        error = np.max(np.abs(result_np - expected)) / (np.max(np.abs(expected)) + 1e-9)
-
-        print(
-            f"  Corepy (AVX2):   {corepy_time * 1000:>8.3f} ms  ({corepy_gflops:>6.2f} GFLOPS)"
-        )
-        print(
-            f"  NumPy (OpenBLAS):{numpy_time * 1000:>8.3f} ms  ({numpy_gflops:>6.2f} GFLOPS)"
-        )
-        print(f"  Speedup:          {speedup:>6.2f}x")
-        print(f"  Max Rel Error:    {error:>8.2e}")
-
-    print("\n" + "=" * 70)
+    print(f"NumPy:  {np_time * 1000:8.4f} ms | {np_gflops:8.4f} GFLOPS")
+    print(f"Corepy: {cp_time * 1000:8.4f} ms | {cp_gflops:8.4f} GFLOPS")
+    print(f"Speedup: {np_time / cp_time:8.4f}x")
+    print(f"Correctness: {'✅' if is_correct else '❌ (Diff: ' + str(diff) + ')'}")
+    print("-" * 40)
 
 
 if __name__ == "__main__":
-    bench_matmul_2d()
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--m", type=int, default=512)
+    parser.add_argument("--k", type=int, default=512)
+    parser.add_argument("--n", type=int, default=512)
+    parser.add_argument("--iters", type=int, default=5)
+    args = parser.parse_args()
+
+    benchmark_matmul(args.m, args.k, args.n, args.iters)
+    # Test smaller sizes too
+    benchmark_matmul(128, 128, 128, 20)
+    benchmark_matmul(64, 64, 64, 50)

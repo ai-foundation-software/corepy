@@ -87,7 +87,7 @@ class Tensor:
         # Resolve requested backend/device
         requested_backend = None
         if device:
-            if "cuda" in device or "gpu" in device:
+            if "cuda" in device or "gpu" in device or "metal" in device:
                 requested_backend = BackendType.GPU
             elif "cpu" in device:
                 requested_backend = BackendType.CPU
@@ -170,6 +170,10 @@ class Tensor:
         """Element-wise division."""
         return self._binary_op("div", other)
 
+    def __matmul__(self, other: Any) -> "Tensor":
+        """Matrix multiplication (@ operator)."""
+        return self.matmul(other)
+
     def _get_scalar_value(self) -> float:
         """Extract scalar value from single-element tensor."""
         if self._element_count != 1:
@@ -180,19 +184,101 @@ class Tensor:
 
     def __lt__(self, other: Any) -> bool:
         """Less than comparison (for scalar tensors)."""
-        return self._get_scalar_value() < (other._get_scalar_value() if isinstance(other, Tensor) else float(other))
+        return self._get_scalar_value() < (
+            other._get_scalar_value() if isinstance(other, Tensor) else float(other)
+        )
 
     def __le__(self, other: Any) -> bool:
         """Less than or equal comparison (for scalar tensors)."""
-        return self._get_scalar_value() <= (other._get_scalar_value() if isinstance(other, Tensor) else float(other))
+        return self._get_scalar_value() <= (
+            other._get_scalar_value() if isinstance(other, Tensor) else float(other)
+        )
 
     def __gt__(self, other: Any) -> bool:
         """Greater than comparison (for scalar tensors)."""
-        return self._get_scalar_value() > (other._get_scalar_value() if isinstance(other, Tensor) else float(other))
+        return self._get_scalar_value() > (
+            other._get_scalar_value() if isinstance(other, Tensor) else float(other)
+        )
 
     def __ge__(self, other: Any) -> bool:
         """Greater than or equal comparison (for scalar tensors)."""
-        return self._get_scalar_value() >= (other._get_scalar_value() if isinstance(other, Tensor) else float(other))
+        return self._get_scalar_value() >= (
+            other._get_scalar_value() if isinstance(other, Tensor) else float(other)
+        )
+
+    def _get_buffer_view(self) -> "BufferView":
+        """
+        Extract BufferView for zero-copy FFI.
+
+        Returns a BufferView abstraction that provides:
+        - Stride awareness (is_contiguous check)
+        - Device tracking (CPU/GPU)
+        - Explicit ownership (keeps data alive)
+        - Cleaner dispatch paths
+
+        Returns:
+            BufferView wrapping the backing data
+
+        Raises:
+            ValueError: If backing data cannot be wrapped
+        """
+        from .buffer import CPU, METAL, BufferView, from_buffer, from_numpy
+
+        # Determine target device
+        target_device = CPU
+        if self.backend == BackendType.GPU:
+            import platform
+
+            if platform.system() == "Darwin":
+                target_device = METAL
+            # Future: CUDA support
+
+        # Case 1: NumPy array (fastest path)
+        if isinstance(self._backing_data, np.ndarray):
+            return from_numpy(self._backing_data, device=target_device, dtype=self._dtype)
+
+        # Case 2: bytes/bytearray/memoryview (buffer protocol)
+        elif isinstance(self._backing_data, (bytes, bytearray, memoryview)):
+            return from_buffer(
+                self._backing_data,
+                dtype=self._dtype,
+                shape=self._shape,
+                device=target_device,
+            )
+
+        # Case 3: List (convert to NumPy first)
+        elif isinstance(self._backing_data, list):
+            import struct
+
+            # Flatten nested lists
+            def flatten(items):
+                for x in items:
+                    if isinstance(x, (list, tuple)):
+                        yield from flatten(x)
+                    else:
+                        yield x
+
+            # Convert to numpy based on dtype
+            if self._dtype == DataType.FLOAT32:
+                arr = np.array(list(flatten(self._backing_data)), dtype=np.float32)
+            elif self._dtype == DataType.INT32:
+                arr = np.array(list(flatten(self._backing_data)), dtype=np.int32)
+            elif self._dtype == DataType.FLOAT64:
+                arr = np.array(list(flatten(self._backing_data)), dtype=np.float64)
+            elif self._dtype == DataType.INT64:
+                arr = np.array(list(flatten(self._backing_data)), dtype=np.int64)
+            else:
+                arr = np.array(list(flatten(self._backing_data)), dtype=np.float32)
+
+            return from_numpy(arr, device=target_device, dtype=self._dtype)
+
+        # Case 4: Unknown type
+        else:
+            raise ValueError(
+                f"Cannot create BufferView from {type(self._backing_data)}. "
+                "Object must be NumPy array, list, or support buffer protocol."
+            )
+
 
     def _get_buffer_pointer(self, dtype_char="u1") -> Tuple[int, int, Any]:
         """
@@ -220,15 +306,12 @@ class Tensor:
             # We must ensure the array is C-contiguous before extracting the raw pointer.
             # Passing non-contiguous strides to a dense kernel results in data corruption.
             if not array.flags["C_CONTIGUOUS"]:
-                # Option A: Error
-                # raise ValueError("Non-contiguous arrays not supported yet")
-
-                # Option B: Safe Copy (Performance Penalty, but Correct)
-                # We log this because hidden copies are a performance pitfall.
-                if logger.isEnabledFor(logging.DEBUG):
-                    logger.debug(
-                        f"Copying non-contiguous array (shape={array.shape}) for zero-copy access"
-                    )
+                # Safe Copy (Performance Penalty, but Correct)
+                # Log at WARNING level so hidden copies are visible in production
+                logger.warning(
+                    f"Copying non-contiguous array (shape={array.shape}) for kernel; "
+                    "consider using contiguous arrays for better performance"
+                )
 
                 array = np.ascontiguousarray(array)
 
@@ -363,25 +446,41 @@ class Tensor:
     def sum(self) -> "Tensor":
         """Returns sum of all elements."""
         import time
+
         from .profiler.core import record_op
-        
+
         start_time = time.perf_counter()
         try:
             from ._corepy_rust import (  # type: ignore[import-untyped]
+                metal_sum_f32,
                 tensor_sum_f32,
+                tensor_sum_f32_strided,
                 tensor_sum_i32,
             )
 
+            # Use BufferView for dispatch decision
+            view = self._get_buffer_view()
+
             if self._dtype == DataType.INT32:
+                # INT32 path (contiguous only for now)
                 ptr, count, _ref = self._get_buffer_pointer("i4")
                 result = tensor_sum_i32(ptr, count)
+            elif view.device.is_metal():
+                # Metal GPU path
+                result = metal_sum_f32(view.data_ptr, view.element_count)
+            elif view.is_contiguous():
+                # Fast path: contiguous f32
+                result = tensor_sum_f32(view.data_ptr, view.element_count)
             else:
-                # Default to float32
-                ptr, count, _ref = self._get_buffer_pointer("f4")
-                result = tensor_sum_f32(ptr, count)
+                # Zero-copy path: strided f32
+                result = tensor_sum_f32_strided(
+                    view.data_ptr,
+                    list(view.shape),
+                    list(view.strides),
+                )
 
             elapsed_ms = (time.perf_counter() - start_time) * 1000
-            record_op("sum", elapsed_ms, "CPU")
+            record_op("sum", elapsed_ms, "CPU" if not view.device.is_metal() else "Metal")
             return Tensor([result], dtype=self._dtype, backend=self.backend)
         except ImportError:
             from .backend.dispatch import dispatch_kernel
@@ -393,14 +492,38 @@ class Tensor:
 
     def mean(self) -> "Tensor":
         """Returns arithmetic mean of all elements."""
+        import time
+
+        from .profiler.core import record_op
+
+        start_time = time.perf_counter()
         try:
-            from ._corepy_rust import tensor_mean_f32  # type: ignore[import-untyped]
+            from ._corepy_rust import (  # type: ignore[import-untyped]
+                metal_mean_f32,
+                tensor_mean_f32,
+                tensor_mean_f32_strided,
+            )
 
-            # Mean implies float result usually
-            ptr, count, _ref = self._get_buffer_pointer("f4")
-            result = tensor_mean_f32(ptr, count)
+            # Use BufferView for dispatch decision
+            view = self._get_buffer_view()
 
-            return Tensor(result, dtype=DataType.FLOAT32, backend=self.backend)
+            if view.device.is_metal():
+                # Metal GPU path
+                result = metal_mean_f32(view.data_ptr, view.element_count)
+            elif view.is_contiguous():
+                # Fast path: contiguous f32
+                result = tensor_mean_f32(view.data_ptr, view.element_count)
+            else:
+                # Zero-copy path: strided f32
+                result = tensor_mean_f32_strided(
+                    view.data_ptr,
+                    list(view.shape),
+                    list(view.strides),
+                )
+
+            elapsed_ms = (time.perf_counter() - start_time) * 1000
+            record_op("mean", elapsed_ms, "CPU" if not view.device.is_metal() else "Metal")
+            return Tensor([result], dtype=DataType.FLOAT32, backend=self.backend)
         except ImportError:
             from .backend.dispatch import dispatch_kernel
 
@@ -436,6 +559,38 @@ class Tensor:
             new_data = self._backing_data
         return Tensor(new_data, dtype=self._dtype, backend=self.backend)
 
+    def to_numpy(self) -> "NDArray[Any]":
+        """
+        Convert the tensor to a NumPy array.
+        Returns:
+            NDArray: NumPy array containing the data.
+        """
+        if isinstance(self._backing_data, np.ndarray):
+            return self._backing_data
+        elif isinstance(self._backing_data, list):
+            # Same logic as _get_buffer_view for consistency
+            import struct
+
+            def flatten(items):
+                for x in items:
+                    if isinstance(x, (list, tuple)):
+                        yield from flatten(x)
+                    else:
+                        yield x
+
+            dtype_map = {
+                DataType.FLOAT32: np.float32,
+                DataType.FLOAT64: np.float64,
+                DataType.INT32: np.int32,
+                DataType.INT64: np.int64,
+                DataType.BOOL: bool,
+            }
+            np_dtype = dtype_map.get(self._dtype, np.float32)
+            return np.array(list(flatten(self._backing_data)), dtype=np_dtype).reshape(self.shape)
+        else:
+            # Fallback for buffer protocol objects
+            return np.array(self._backing_data).reshape(self.shape)
+
     def __len__(self) -> int:
         """Returns the number of elements in the tensor."""
         return self._element_count
@@ -443,15 +598,22 @@ class Tensor:
     def _binary_op(self, op: str, other: Any) -> "Tensor":
         """Helper for binary operations via Rust FFI."""
         import time
+
         from .profiler.core import record_op
-        
+
         start_time = time.perf_counter()
         if isinstance(other, (int, float)):
             other = Tensor([float(other)] * self._element_count, device=self._device)
         elif isinstance(other, Tensor) and other._element_count == 1:
             # Broadcasting: single-element tensor to match self's size
-            scalar_val = other._backing_data[0] if isinstance(other._backing_data, list) else float(other._backing_data)
-            other = Tensor([float(scalar_val)] * self._element_count, device=self._device)
+            scalar_val = (
+                other._backing_data[0]
+                if isinstance(other._backing_data, list)
+                else float(other._backing_data)
+            )
+            other = Tensor(
+                [float(scalar_val)] * self._element_count, device=self._device
+            )
 
         if not isinstance(other, Tensor):
             raise ValueError("Binary ops require Tensor or scalar")
@@ -517,18 +679,44 @@ class Tensor:
     def matmul(self, other: "Tensor") -> "Tensor":
         """Matrix multiplication (handles 1D dot product and 2D matmul)."""
         import time
+
         from .profiler.core import record_op
-        
+
         start_time = time.perf_counter()
         if not isinstance(other, Tensor):
             raise ValueError("matmul requires Tensor")
 
-        if self.backend == BackendType.CPU:
+        if self.backend == BackendType.CPU or (self.backend == BackendType.GPU and "metal" in str(self._get_buffer_view().device)):
             try:
                 from . import _corepy_rust as ffi  # type: ignore[import-untyped]
 
+                # Check for Metal dispatch
+                view = self._get_buffer_view()
+                is_metal = view.device.is_metal()
+
+                if is_metal and len(self.shape) == 2 and len(other.shape) == 2:
+                    # Metal Matrix Multiplication
+                    m, k1 = self.shape
+                    k2, n = other.shape
+
+                    if k1 != k2:
+                        raise ValueError(f"Matrix dimension mismatch: ({m}, {k1}) @ ({k2}, {n})")
+
+                    view_b = other._get_buffer_view()
+
+                    # Allocate output
+                    import numpy as np
+                    final_np = np.empty((m, n), dtype=np.float32)
+                    ptr_out = final_np.__array_interface__["data"][0]
+
+                    ffi.metal_matmul_f32(view.data_ptr, view_b.data_ptr, ptr_out, m, k1, n)
+
+                    elapsed_ms = (time.perf_counter() - start_time) * 1000
+                    record_op("matmul", elapsed_ms, "Metal")
+                    return Tensor(final_np, dtype=self._dtype, backend=self.backend)
+
                 # Case 1: Dot Product (1D @ 1D)
-                if len(self.shape) == 1 and len(other.shape) == 1:
+                if len(self.shape) == 1 and len(other.shape) == 1 and not is_metal:
                     ptr_a, count_a, _ref_a = self._get_buffer_pointer("f4")
                     ptr_b, count_b, _ref_b = other._get_buffer_pointer("f4")
 
@@ -542,8 +730,8 @@ class Tensor:
                     record_op("matmul", elapsed_ms, "CPU")
                     return Tensor(result, dtype=self._dtype, backend=self.backend)
 
-                # Case 2: Matrix Multiplication (2D @ 2D)
-                elif len(self.shape) == 2 and len(other.shape) == 2:
+                # Case 2: Matrix Multiplication (2D @ 2D) - CPU
+                elif len(self.shape) == 2 and len(other.shape) == 2 and not is_metal:
                     m, k1 = self.shape
                     k2, n = other.shape
 

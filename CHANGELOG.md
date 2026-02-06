@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.3] - 2026-02-06
+
+### Added
+- **Metal GPU Support (macOS)**: Native `sum`, `mean`, and `matmul` kernels for Apple Silicon (M1/M2/M3). Enable with `device="metal"`.
+- **Profiler Export**: New `export_chrome_trace` to visualize performance in `chrome://tracing`.
+- **Zero-Copy Strided Views**: `BufferView` now supports non-contiguous memory layouts without data duplication.
+- **Robust Build System**: New `csrc/CMakeLists.txt` with cross-platform support (Linux/macOS/Windows) and optional OpenBLAS detection.
+- **Root Makefile**: Added `make build`, `make test`, `make clean` for standardized developer workflows.
+
+### Changed
+- **Installation**: Recommended `uv` for faster, distinct-platform installation.
+- **OpenBLAS**: Now optional on all platforms; falls back to generic C++ kernels if missing.
+
 ## [0.2.1] - 2026-01-30
 
 ### Added

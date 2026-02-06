@@ -194,9 +194,9 @@ $ RUST_LOG=debug python tests/bench_arena.py
 
 ---
 
-## Future: Actual Arena Usage (Phase 6.2)
+## Phase 6.2: Parallel Dispatch (Implemented)
 
-**Use Case**: Parallel reduction with per-thread scratch space
+**Use Case**: Parallel reduction with per-thread scratch space for Kahan summation
 
 ```rust
 pub unsafe fn parallel_sum_f32_cpu(data: *const f32, count: usize) -> f32 {
@@ -227,12 +227,12 @@ pub unsafe fn parallel_sum_f32_cpu(data: *const f32, count: usize) -> f32 {
 
 ## Validation Checklist
 
-- [ ] All dispatch functions wrapped in `with_arena()`
-- [ ] Benchmark shows <1% overhead
-- [ ] Tests still pass (`pytest tests/ -v`)
-- [ ] No memory leaks (`valgrind --leak-check=full`)
-- [ ] Arena stats show correct reset behavior
-- [ ] Documentation updated in code comments
+- [x] All dispatch functions wrapped in `with_arena()`
+- [x] Benchmark shows <1% overhead
+- [x] Tests still pass (`pytest tests/ -v`)
+- [x] No memory leaks (`valgrind --leak-check=full`)
+- [x] Arena stats show correct reset behavior
+- [x] Documentation updated in code comments
 
 ---
 
@@ -254,7 +254,7 @@ pub unsafe fn parallel_sum_f32_cpu(data: *const f32, count: usize) -> f32 {
 
 ## Next Steps After Arena Integration
 
-1. **Parallel Dispatch** (P6.2): Use arenas in parallel context
+1. **Parallel Dispatch** (P6.2): Use arenas in parallel context ✅ (Done)
 2. **GPU Arenas** (P5.3): Implement device-side arena for CUDA
 3. **Custom Allocators** (P8): Per-operation arena size tuning
 
@@ -262,6 +262,6 @@ pub unsafe fn parallel_sum_f32_cpu(data: *const f32, count: usize) -> f32 {
 
 ## References
 
-- **Arena Allocator Design**: [Rust arena.rs](file:///home/crazyguy/VSCode/corepy/rust/corepy-runtime/src/scheduler/arena.rs)
+- **Arena Allocator Design**: [Rust arena.rs](file:rust/corepy-runtime/src/ops/reduce.rs)
 - **Bump Allocation**: [bumpalo crate](https://docs.rs/bumpalo/)
 - **Performance**: [Memory Allocation Strategies](https://www.gingerbill.org/article/2019/02/08/memory-allocation-strategies/)

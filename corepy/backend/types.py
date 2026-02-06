@@ -55,3 +55,15 @@ class DataType(Enum):
     INT64 = "int64"
     BOOL = "bool"
     # complex types etc.
+
+    @property
+    def itemsize(self) -> int:
+        """Size in bytes for this data type."""
+        sizes = {
+            "float32": 4,
+            "float64": 8,
+            "int32": 4,
+            "int64": 8,
+            "bool": 1,
+        }
+        return sizes.get(self.value, 4)

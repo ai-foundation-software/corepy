@@ -55,7 +55,7 @@ uv sync --all-extras --group dev
 ### 4. Build Rust Runtime
 
 ```bash
-cd rust/corepy-runtime
+cd rust/core
 cargo build --release
 cd ../..
 ```

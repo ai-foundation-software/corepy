@@ -2,6 +2,20 @@
 Corepy: A unified, high-performance core runtime.
 """
 
+import os
+import platform
+
+# Windows DLL Handling for OpenBLAS
+if platform.system() == "Windows":
+    openblas_dir = os.environ.get("OPENBLAS_DIR")
+    if openblas_dir:
+        bin_dir = os.path.join(openblas_dir, "bin")
+        if os.path.exists(bin_dir):
+            try:
+                os.add_dll_directory(bin_dir)
+            except Exception:
+                pass # Fallback, might already be in PATH
+
 from corepy import data, runtime, schema
 
 from . import backend
@@ -31,20 +45,23 @@ except ImportError:
 try:
     from . import _corepy_rust  # type: ignore[import-untyped]
 except ImportError:
-    pass  # Managed in usage sites
+    try:
+        import _corepy_rust  # type: ignore[import-untyped]
+    except ImportError:
+        pass  # Managed in usage sites
 
 tensor = Tensor
 
-__version__ = "0.2.1"
+__version__ = "0.2.3"
 
 # Expose types and backend control
 from .backend import (
     BackendPolicy,
     DataType,
+    detect_devices,
     explain_last_dispatch,
     get_backend_policy,
     set_backend_policy,
-    detect_devices,
 )
 
 get_device_info = detect_devices
@@ -72,11 +89,11 @@ Bool = DataType.BOOL
 def compute_stats(tensor: Tensor, stats: list) -> dict:
     """
     Compute multiple statistics on a tensor in one call.
-    
+
     Args:
         tensor: Input tensor
         stats: List of stat names to compute (e.g., ["mean", "sum", "std"])
-        
+
     Returns:
         Dictionary mapping stat names to their computed values
     """
@@ -95,6 +112,7 @@ def compute_stats(tensor: Tensor, stats: list) -> dict:
         else:
             raise ValueError(f"Unknown stat: {stat}")
     return result
+
 
 __all__ = [
     "data",
@@ -128,4 +146,8 @@ __all__ = [
     "explain_last_dispatch",
     "get_device_info",
     "matmul",
+    "dot",
 ]
+
+# Alias dor dot product
+dot = matmul

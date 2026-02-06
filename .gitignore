@@ -63,7 +63,7 @@ venv.bak/
 *_output.txt
 *.log
 *.tmp
-
+*.json
 # Rust
 target/
 **/*.rs.bk

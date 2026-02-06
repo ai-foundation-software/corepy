@@ -84,6 +84,13 @@ jobs:
             cmake -S csrc -B csrc/build -G Ninja -DCMAKE_BUILD_TYPE=Release
           fi
           cmake --build csrc/build --config Release
+          
+          if [ "$RUNNER_OS" == "macOS" ]; then
+             echo "Compiling Metal Kernels..."
+             xcrun -sdk macosx metal -v -c csrc/src/metal/kernels.metal -o csrc/build/kernels.air
+             xcrun -sdk macosx metallib csrc/build/kernels.air -o csrc/build/default.metallib
+             echo "COREPY_METAL_LIB_PATH=$(pwd)/csrc/build/default.metallib" >> $GITHUB_ENV
+          fi
 
       # ========================================
       # STEP 3: Install Python deps & Build Rust
@@ -101,44 +108,7 @@ jobs:
           # Install all dev dependencies (includes maturin)
           uv sync --all-extras --group dev
           # Build Rust extension using maturin from the dev environment
-          uv run maturin develop --release --manifest-path rust/corepy-runtime/Cargo.toml
-          # Copy the _corepy_rust package to corepy/ for relative imports
-          # The Rust extension is installed as a Python package with __init__.py + .so/.pyd
-          # Use sysconfig for reliable cross-platform site-packages detection
-          SITE_PACKAGES=$(uv run python -c "import sysconfig; print(sysconfig.get_path('purelib'))")
-          echo "=== Site packages: $SITE_PACKAGES ==="
-          
-          # Check if _corepy_rust package exists
-          if [ -d "$SITE_PACKAGES/_corepy_rust" ]; then
-            echo "=== Found _corepy_rust package ==="
-            ls -la "$SITE_PACKAGES/_corepy_rust/"
-            # Copy entire package directory to corepy/
-            cp -r "$SITE_PACKAGES/_corepy_rust" corepy/
-            echo "=== Copied _corepy_rust package to corepy/ ==="
-            ls -la corepy/_corepy_rust/
-            
-            # On Windows, copy OpenBLAS DLL alongside the .pyd to avoid DLL load failures
-            if [ "$RUNNER_OS" == "Windows" ]; then
-              echo "=== Copying OpenBLAS DLLs for Windows ==="
-              if [ -f "$OPENBLAS_DIR/bin/libopenblas.dll" ]; then
-                cp "$OPENBLAS_DIR/bin/libopenblas.dll" corepy/_corepy_rust/
-                echo "=== Copied libopenblas.dll ==="
-              fi
-              # Also check for flang runtime DLLs that OpenBLAS may need
-              for dll in "$OPENBLAS_DIR/bin/"*.dll; do
-                if [ -f "$dll" ]; then
-                  cp "$dll" corepy/_corepy_rust/
-                  echo "=== Copied $(basename $dll) ==="
-                fi
-              done
-              ls -la corepy/_corepy_rust/
-            fi
-          else
-            echo "=== ERROR: _corepy_rust package not found in site-packages! ==="
-            echo "=== Contents of site-packages ==="
-            ls -la "$SITE_PACKAGES" | head -30
-            exit 1
-          fi
+          uv run maturin develop --release --manifest-path rust/core/Cargo.toml
 
       # ========================================
       # STEP 4: Verify & Test

@@ -55,15 +55,15 @@ def test_select_backend_control_always_cpu(gpu_device):
     assert backend == BackendType.CPU
 
 
-def test_select_backend_explicit_request(cpu_only_device):
+def test_select_backend_explicit_request():
+    # We must mock a GPU device for the request to be honored now
+    gpu_info = DeviceInfo(cpu_cores=4, gpu_count=1)
     op_props = OperationProperties(element_count=100, shape=(100,))
-    # Arguably if we request GPU on CPU-only device it might fail later,
-    # but selector should respect the request or warn.
-    # In our current impl, selector returns requested_backend.
+    
     backend = select_backend(
         OperationType.COMPUTE_VECTOR,
         op_props,
-        cpu_only_device,
+        gpu_info,  # Pass fake GPU info
         requested_backend=BackendType.GPU,
     )
     assert backend == BackendType.GPU

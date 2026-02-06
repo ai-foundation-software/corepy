@@ -46,8 +46,11 @@ class Session:
 
 
 # Global session instance
-_session = Session()
+_session = None
 
 
 def get_session() -> Session:
+    global _session
+    if _session is None:
+        _session = Session()
     return _session

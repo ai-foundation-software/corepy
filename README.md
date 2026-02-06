@@ -1,6 +1,6 @@
 # Corepy
 <h1 align="center">
-<img src="assets/logo.svg" width="300">
+<img src="assets/logo.svg" width="300" alt="Corepy Logo" style="background-color: white;">
 </h1><br>
 
 [![CI](https://github.com/ai-foundation-software/corepy/actions/workflows/ci.yml/badge.svg)](https://github.com/ai-foundation-software/corepy/actions/workflows/ci.yml)
@@ -8,114 +8,116 @@
 [![uv](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/uv/main/assets/badge/v0.json)](https://github.com/astral-sh/uv)
 [![Python](https://img.shields.io/badge/python-3.9%20|%203.10%20|%203.11%20|%203.12%20|%203.13-blue)](https://www.python.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-<!-- ![Corepy Logo](assets/logo.svg) -->
 
-> **A high-performance Python foundation for data and AI.**
-> *Correctness First. Device Aware. Built to Last.*
+> **High-Performance Tensor Runtime for Python.**
+> *Rust-Powered Backend. Correctness First. Hardware Aware.*
 
 ## 📖 What is Corepy?
 
-Corepy is a library that helps you write fast and safe Python code for data processing and AI.
+Corepy is a high-performance tensor library that bridges Python's ease of use with the raw speed and safety of **Rust** and **C++**.
 
-If you have ever:
-- Waited too long for a Python loop to finish.
-- Crashed your program because of a "Segmentation Fault" in a C extension.
-- Struggled to get your code running on both a laptop (CPU) and a powerful server (GPU).
+Unlike untyped array libraries, Corepy is built on a **strict runtime** that ensures:
+1.  **Safety**: Rust ownership guarantees prevent common segmentation faults.
+2.  **Performance**: C++ kernels (AVX2, NEON) and **Metal** shaders for heavy number crunching.
+3.  **Observability**: Zero-overhead built-in profiler to visualize bottlenecks.
 
-Corepy is designed to solve these problems. It combines the ease of **Python**, the raw speed of **C++**, and the safety of **Rust**.
+It is designed for developers building **AI foundations**, **scientific simulations**, and **high-performance systems**.
 
 ### Key Features
-- **🚀 Fast**: Uses C++ for heavy number crunching (SIMD optimized).
-- **🛡️ Safe**: Uses Rust to manage memory and parallel tasks, preventing crashes.
-- **🎮 GPU Accelerated**: Support for NVIDIA RTX GPUs (2000/3000/4000/5000 series).
-- **💻 Everywhere**: Works on Linux, macOS (including Apple Silicon), and Windows.
-- **🤖 Smart**: Automatically uses your hardware (like multiple CPU cores) without complex setup.
+- **🚀 Metal GPU**: Native acceleration on macOS (Apple Silicon) with `device="metal"`.
+- **📊 Profiler Export**: Visualise traces in Chrome/Perfetto with `cp.profiler.export_chrome_trace()`.
+- **⚡ Hybrid Runtime**: Rust dispatcher + C++ kernels + Objective-C++ (Metal).
+- **🛡️ Cross-Platform Build**: CMake-based build system that works on Linux, macOS, and Windows.
 
 ---
 
 ## 💻 Supported Platforms
 
-Corepy works on all major operating systems with both **CPU** and **GPU** acceleration:
-
-| Platform | Architecture | CPU Support | GPU Support | Notes |
-| :--- | :--- | :--- | :--- | :--- |
-| **Linux** | x86_64, aarch64 | ✅ Full | ✅ NVIDIA RTX (CUDA) | Ubuntu 20.04+ (primary), Debian, Fedora, RHEL |
-| **macOS** | Apple Silicon (M1/M2/M3/M4) | ✅ Full | ✅ Metal Acceleration | Optimized for Apple's hardware with unified memory |
-| **macOS** | Intel x86_64 | ✅ Full | ❌ CPU-only | Intel Macs supported (no GPU acceleration) |
-| **Windows** | x86_64 | ✅ Full | ✅ NVIDIA RTX (CUDA) | Windows 10/11 with Visual Studio 2022 |
-
-**GPU Support:**
-- **NVIDIA RTX**: 2000, 3000, 4000, 5000 series (Linux & Windows)
-- **Apple Silicon**: M1, M2, M3, M4 and Pro/Max/Ultra variants (macOS)
-
-See [Platform Support Guide](docs/01_quickstart/platform_support.md) for detailed setup instructions.
+| Platform | Architecture | Accelerators | Status |
+| :--- | :--- | :--- | :--- |
+| **Linux** | x86_64 | AVX2, OpenBLAS | ✅ Production |
+| **macOS** | Apple Silicon | **Metal**, NEON | ✅ Beta (0.2.3+) |
+| **Windows** | x86_64 | AVX2 | ✅ Experimental |
 
 ---
 
 ## 🛠️ Installation
 
-### Option 1: Install via pip (Recommended)
-If you just want to use the library:
+### Preferred Method (uv)
+We recommend `uv` for fast, correct cross-platform installation.
+
+```bash
+# Install corepy
+uv pip install corepy
+```
+
+### Fallback (pip)
+Standard pip installation works if dependencies (CMake, Rust) are present.
 
 ```bash
 pip install corepy
 ```
 
-### Option 2: Install from Source (For Developers)
-If you want to contribute or change the code, see our [Installation Guide](docs/01_quickstart/install.md).
+### From Source
+```bash
+git clone https://github.com/ai-foundation-software/corepy.git
+cd corepy
+
+# Using Make (Recommended)
+make build && make install
+
+# Manual
+./scripts/build.sh
+pip install .
+```
 
 ---
 
 ## ⚡ Quick Start
 
-Here is a simple example showing how to load some data and process it safely.
-
+### 1. Metal Acceleration (macOS)
 ```python
 import corepy as cp
 
-# 1. Load data efficiently (automatically uses parallel processing)
-# This looks like normal Python, but it's powered by Rust under the hood.
-data = cp.read_csv("data.csv")
-
-# 2. Perform a calculation
-# Corepy automatically selects the best way to run this on your CPU.
-result = data.select("price").mean()
-
-print(f"Average Price: {result}")
+# Automatically uses Metal if available on macOS
+t = cp.Tensor([1.0, 2.0, 3.0], device="metal")
+result = t.sum()
+print(f"Result (GPU): {result}")
 ```
 
-
-For more examples, see the [Usage Guide](docs/01_quickstart/usage.md).
-
-## 🚀 Performance Profiling
-
-Corepy includes a built-in zero-config profiler to help you optimize your code.
+### 2. Performance Profiling
+Stop guessing where your code is slow. Corepy has a built-in profiler.
 
 ```python
 import corepy as cp
+
+# 1. Enable profiling
 cp.enable_profiling()
-# ... run your code ...
-print(cp.profile_report())
-```
 
-See the [Profiling Guide](docs/02_core_concepts/profiling.md) for full details.
+# 2. Run your heavy workload
+x = cp.Tensor([1.0] * 1_000_000)
+y = x * 3.14159
+result = y.mean()
+
+# 3. Export to Chrome Tracing format
+cp.profiler.export_chrome_trace("trace.json")
+```
 
 ---
 
 ## 📚 Documentation
-- [**Platform Support Guide**](docs/01_quickstart/platform_support.md): CPU & GPU setup for Linux, macOS, and Windows.
-- [**Installation Guide**](docs/01_quickstart/install.md): Detailed setup instructions.
-- **GPU Setup Guides**:
-  - [Linux (NVIDIA RTX 2000-5000)](docs/01_quickstart/gpu_setup.md) - CUDA setup for RTX GPUs
-  - [macOS (Apple Silicon)](docs/01_quickstart/gpu_setup_macos.md) - Metal acceleration for M1/M2/M3/M4
-  - [Windows (NVIDIA RTX)](docs/01_quickstart/gpu_setup_windows.md) - CUDA setup on Windows
-  - [All Platforms Quick Reference](docs/01_quickstart/gpu_quick_reference.md) - Quick setup checklist
-- [**Usage Guide**](docs/01_quickstart/usage.md): How to use Corepy for real work.
-- [**Profiling Guide**](docs/02_core_concepts/profiling.md): Performance optimization guide.
-- [**Architecture**](docs/03_architecture/architecture.md): Internal design and data flow.
-- [**Roadmap**](docs/00_overview/roadmap.md): Future plans and milestones.
-- [**Contributing**](docs/07_contributing/CONTRIBUTING.md): How to help build Corepy.
+- **[Getting Started](docs/getting-started.md)**: First steps and installation details.
+- **[Metal GPU Guide](docs/05_advanced/metal_gpu.md)**: using Apple Silicon acceleration.
+- **[Architecture](docs/architecture.md)**: Deep dive into the Rust/C++ hybrid runtime.
+- **[Examples](examples/)**: Runnable scripts for common patterns.
+- **[Contributing](docs/07_contributing/CONTRIBUTING.md)**: Build and test guide.
 
-## 🤝 Stability
-Corepy is currently in **Alpha** (v0.2.0). 
-See [Roadmap](docs/00_overview/roadmap.md) for our path to v1.0.
+---
+
+## 🤝 Stability & Roadmap
+Corepy is currently **Alpha (v0.2.3)**.
+- **v0.2.3**: Metal GPU Support, Robust CMake Build, Profiler Export.
+- **v0.3.0**: CUDA Support and Tiled Matmul Optimization.
+- **v1.0**: Stable API promise.
+
+See [Roadmap](docs/00_overview/roadmap.md) for details.

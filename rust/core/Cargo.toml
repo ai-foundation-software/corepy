@@ -1,0 +1,21 @@
+[package]
+name = "corepy-backend"
+version = "0.2.3"
+edition = "2021"
+
+[lib]
+name = "_corepy_rust"
+crate-type = ["cdylib"]
+
+[dependencies]
+pyo3 = { version = "0.20.0", features = ["extension-module", "abi3-py39"] }
+rayon = "1.8"
+num_cpus = "1.16"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+chrono = "0.4"
+parking_lot = "0.12"
+uuid = { version = "1.0", features = ["v4", "serde"] }
+lazy_static = "1.4"
+cblas-sys = "0.1.4"
+

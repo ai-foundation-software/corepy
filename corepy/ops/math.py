@@ -25,26 +25,26 @@ from ..backend.types import BackendType
 def _flatten(data: Any) -> List[float]:
     """Recursively flatten nested lists/tuples/arrays to a flat list of floats."""
     import numpy as np
-    
+
     # Handle numpy arrays first
     if isinstance(data, np.ndarray):
         return [float(x) for x in data.flatten()]
-    
+
     # Handle memoryview
     if isinstance(data, memoryview):
         return [float(x) for x in data.tolist()]
-    
+
     # Handle bytes/bytearray
     if isinstance(data, (bytes, bytearray)):
         return [float(x) for x in data]
-    
+
     # Handle lists/tuples recursively
     if isinstance(data, (list, tuple)):
         result = []
         for item in data:
             result.extend(_flatten(item))
         return result
-    
+
     # Scalar value
     return [float(data)]
 
@@ -55,28 +55,30 @@ def _reshape(flat: List[float], shape: tuple) -> Any:
         return flat[0] if flat else 0.0
     if len(shape) == 1:
         return flat
-    
+
     # Multi-dimensional reshape
     size = 1
     for dim in shape[1:]:
         size *= dim
-    
-    return [_reshape(flat[i * size:(i + 1) * size], shape[1:]) for i in range(shape[0])]
+
+    return [
+        _reshape(flat[i * size : (i + 1) * size], shape[1:]) for i in range(shape[0])
+    ]
 
 
 @register_kernel("add", BackendType.CPU)
 def cpu_add(a: Any, b: Any) -> Any:
     """
     Element-wise addition (Python fallback).
-    
+
     Used when Rust FFI is not available. Slower but cross-platform compatible.
     """
     flat_a = _flatten(a)
     flat_b = _flatten(b)
-    
+
     if len(flat_a) != len(flat_b):
         raise ValueError(f"Shape mismatch: {len(flat_a)} vs {len(flat_b)}")
-    
+
     return [x + y for x, y in zip(flat_a, flat_b)]
 
 
@@ -87,10 +89,10 @@ def cpu_sub(a: Any, b: Any) -> Any:
     """
     flat_a = _flatten(a)
     flat_b = _flatten(b)
-    
+
     if len(flat_a) != len(flat_b):
         raise ValueError(f"Shape mismatch: {len(flat_a)} vs {len(flat_b)}")
-    
+
     return [x - y for x, y in zip(flat_a, flat_b)]
 
 
@@ -101,10 +103,10 @@ def cpu_mul(a: Any, b: Any) -> Any:
     """
     flat_a = _flatten(a)
     flat_b = _flatten(b)
-    
+
     if len(flat_a) != len(flat_b):
         raise ValueError(f"Shape mismatch: {len(flat_a)} vs {len(flat_b)}")
-    
+
     return [x * y for x, y in zip(flat_a, flat_b)]
 
 
@@ -115,10 +117,10 @@ def cpu_div(a: Any, b: Any) -> Any:
     """
     flat_a = _flatten(a)
     flat_b = _flatten(b)
-    
+
     if len(flat_a) != len(flat_b):
         raise ValueError(f"Shape mismatch: {len(flat_a)} vs {len(flat_b)}")
-    
+
     return [x / y for x, y in zip(flat_a, flat_b)]
 
 
@@ -146,22 +148,22 @@ def cpu_mean(a: Any) -> float:
 def cpu_matmul(a: Any, b: Any, shape_a: Any = None, shape_b: Any = None) -> Any:
     """
     Matrix multiplication (Python fallback).
-    
+
     Supports:
     - 1D @ 1D: dot product -> scalar
     - 2D @ 2D: matrix multiply -> 2D
     """
     flat_a = _flatten(a)
     flat_b = _flatten(b)
-    
+
     # 2D case
     if shape_a and len(shape_a) == 2 and shape_b and len(shape_b) == 2:
         m, k1 = shape_a
         k2, n = shape_b
-        
+
         if k1 != k2:
             raise ValueError(f"Matrix dimension mismatch: k={k1} vs k={k2}")
-            
+
         # Result M x N
         # Naive O(M*N*K) implementation
         result_rows = []
@@ -178,7 +180,7 @@ def cpu_matmul(a: Any, b: Any, shape_a: Any = None, shape_b: Any = None) -> Any:
     # Fallback/1D case
     if len(flat_a) != len(flat_b):
         raise ValueError(f"Dot product size mismatch: {len(flat_a)} vs {len(flat_b)}")
-    
+
     return sum(x * y for x, y in zip(flat_a, flat_b))
 
 
@@ -210,7 +212,7 @@ def cpu_std(a: Any) -> float:
         return 0.0
     mean = sum(flat) / len(flat)
     variance = sum((x - mean) ** 2 for x in flat) / len(flat)
-    return variance ** 0.5
+    return variance**0.5
 
 
 @register_kernel("max", BackendType.CPU)

@@ -25,7 +25,7 @@ fi
 # Phase 1: Clean
 echo "Phase 1/4: Cleaning..."
 rm -rf csrc/build
-rm -rf rust/corepy-runtime/target
+rm -rf rust/core/target
 
 # Phase 2: Build C++ kernels
 echo ""
@@ -47,9 +47,9 @@ echo "✅ C++ kernels built"
 echo ""
 echo "Phase 3/4: Building Rust Runtime..."
 if command -v uv >/dev/null 2>&1; then
-    uv run maturin develop --release --manifest-path rust/corepy-runtime/Cargo.toml
+    uv run maturin develop --release --manifest-path rust/core/Cargo.toml
 else
-    maturin develop --release --manifest-path rust/corepy-runtime/Cargo.toml
+    maturin develop --release --manifest-path rust/core/Cargo.toml
 fi
 echo "✅ Rust runtime built"
 

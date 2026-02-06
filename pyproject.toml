@@ -1,16 +1,16 @@
 [build-system]
-requires = ["scikit-build-core>=0.4.3", "pybind11", "cmake>=3.15", "ninja"]
-build-backend = "scikit_build_core.build"
+requires = ["maturin>=1.0,<2.0"]
+build-backend = "maturin"
 
 [project]
 name = "corepy"
-version = "0.2.1"
+version = "0.2.3"
 description = "A unified, high-performance core runtime for data, computation, and AI workflows."
 readme = "README.md"
 requires-python = ">=3.9"
 license = { file = "LICENSE" }
 authors = [
-  { name = "Corepy Team", email = "maintainers@corepy.dev" },
+  { name = "Corepy Team", email = "ai.foundation.software@gmail.com" },
 ]
 classifiers = [
     "Development Status :: 3 - Alpha",
@@ -29,9 +29,13 @@ classifiers = [
 dependencies = [
     "typing-extensions>=4.6.0",
     "pydantic>=2.0.0",
-    "corepy-runtime==0.2.1",  # Exact version - must match Rust runtime
     "numpy>=2.0.2",
 ]
+
+[tool.maturin]
+manifest-path = "rust/core/Cargo.toml"
+module-name = "corepy._corepy_rust"
+python-source = "."
 
 [project.optional-dependencies]
 
@@ -43,7 +47,7 @@ docs = [
 
 [project.urls]
 Homepage = "https://github.com/ai-foundation-software/corepy"
-Documentation = "https://corepy.readthedocs.io/"
+Documentation = "https://github.com/ai-foundation-software/corepy/docs/"
 Repository = "https://github.com/ai-foundation-software/corepy.git"
 Issues = "https://github.com/ai-foundation-software/corepy/issues"
 
@@ -87,7 +91,4 @@ dev = [
     "patchelf>=0.17.2; sys_platform == 'linux'",
 ]
 
-[tool.uv]
 
-[tool.uv.sources]
-corepy-runtime = { path = "rust/corepy-runtime" }

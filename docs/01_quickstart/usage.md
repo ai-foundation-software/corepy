@@ -13,9 +13,9 @@ These examples work in the current released version and have been tested.
 
 ---
 
-### 🌟 Example 1: Basic Tensor Creation and Addition
+### 🌟 Example 1: Basic Tensor Operations (Math & Reductions)
 
-The core feature currently working is tensor creation and addition operations.
+Corepy supports standard arithmetic and reduction operations.
 
 ```python
 import corepy as cp
@@ -24,31 +24,51 @@ import corepy as cp
 a = cp.Tensor([1.0, 2.0, 3.0])
 b = cp.Tensor([4.0, 5.0, 6.0])
 
-print(f"Tensor a: {a}")
-# Output: Tensor([1.0, 2.0, 3.0], backend='cpu')
+# Element-wise arithmetic (Works!)
+print(f"a + b = {a + b}")
+print(f"a - b = {a - b}")
+print(f"a * b = {a * b}")
+print(f"a / b = {a / b}")
 
-print(f"Tensor b: {b}")
-# Output: Tensor([4.0, 5.0, 6.0], backend='cpu')
+# Scalar operations
+print(f"a * 2.0 = {a * 2.0}")
 
-# Element-wise addition (fully supported)
-c = a + b
-print(f"a + b = {c}")
-# Output: Tensor([5.0, 7.0, 9.0], backend='cpu')
+# Reductions
+print(f"Sum: {a.sum()}")
+print(f"Mean: {a.mean()}")
 ```
 
 **What works:**
 - ✅ Tensor creation from Python lists
-- ✅ Element-wise addition (`+`)
+- ✅ Element-wise arithmetic (`+`, `-`, `*`, `/`)
+- ✅ Scalar operations (`tensor * scalar`)
+- ✅ Reductions (`sum`, `mean`)
 - ✅ CPU backend (automatic)
 
 **What doesn't work yet:**
-- ❌ Subtraction (`-`), multiplication (`*`), division (`/`)
-- ❌ Scalar operations (e.g., `tensor * 2.0`)
-- ❌ Matrix multiplication (`@`)
+- ❌ Matrix multiplication (`@`) - partially implemented but not exposed via operator
 
 ---
 
-### 🔍 Example 2: Device Detection
+### 🚀 Example 2: Performance Features (Arena & Parallelism)
+
+Corepy v0.2.2 introduces advanced memory management and parallel execution.
+
+```python
+# Automatic Parallelism
+# Tensors > 1M elements automatically use multi-threaded execution
+large_tensor = cp.Tensor([1.0] * 1_000_000)
+result = large_tensor.sum() # Runs in parallel using Rayon
+```
+
+**New Features:**
+- ✅ **Arena Allocation**: Zero-overhead memory management for reductions
+- ✅ **Parallel Dispatch**: Automatic multi-threading for large arrays
+- ✅ **SIMD**: AVX2 optimized kernels (where available)
+
+---
+
+### 🔍 Example 3: Device Detection
 
 Corepy can detect your system's hardware capabilities automatically.
 
@@ -60,9 +80,6 @@ info = detect_devices()
 
 print(f"CPU Cores: {info.cpu_cores}")
 print(f"Has AVX2: {info.has_avx2}")
-print(f"Has AVX-512: {info.has_avx512}")
-print(f"Has NEON: {info.has_neon}")
-print(f"GPU Count: {info.gpu_count}")
 print(f"Platform: {info.platform_system}")
 ```
 
@@ -88,12 +105,11 @@ Platform: Darwin
 
 **Use Cases:**
 - Understand what hardware optimizations are available
-- Adapt your code based on CPU capabilities
 - Debug platform-specific issues
 
 ---
 
-### 📊 Example 3: Data Tables
+### 📊 Example 4: Data Tables
 
 Basic data table functionality for structured data.
 
@@ -116,48 +132,19 @@ print(table)
 
 ---
 
-### 🏗️ Example 4: Understanding the Backend System
+### 🧪 Example 5: Testing & Debugging
 
-Corepy uses a backend abstraction for future CPU/GPU support.
-
-```python
-from corepy.backend import CPUBackend, CPUDevice, detect_devices
-
-# CPU backend is used by default
-backend = CPUBackend()
-device = CPUDevice(detect_devices())
-
-print(f"Backend: {backend}")
-print(f"Device: {device}")
-```
-
-**Current Status:**
-- ✅ CPU backend architecture in place
-- ✅ Device detection working
-- 🔮 GPU backend planned for v2.0
-
----
-
-### 📝 Example 5: Checking Package Installation
-
-Verify your Corepy installation is working correctly.
+Verify your installation and explore the backend.
 
 ```python
 import corepy as cp
+from corepy.backend import ReferenceBackend
 
 # Check version
 print(f"Corepy version: {cp.__version__}")
 
-# Check available modules
-available = [attr for attr in dir(cp) if not attr.startswith('_')]
-print(f"Available modules: {', '.join(available)}")
-
-# Test basic operation
-try:
-    result = cp.Tensor([1, 2, 3]) + cp.Tensor([4, 5, 6])
-    print(f"✅ Basic operations working: {result}")
-except Exception as e:
-    print(f"❌ Error: {e}")
+# Access reference backend (pure Python implementation for debugging)
+ref_backend = ReferenceBackend()
 ```
 
 ---
@@ -383,31 +370,19 @@ final = result.compute()  # ❌ Lazy execution not implemented
 
 ## 🚫 Current Limitations
 
-**v0.2.0 has the following known limitations:**
+**v0.2.2 Work in Progress:**
 
 ### Operations
-- ❌ Only addition (`+`) works for tensors
-- ❌ No subtraction, multiplication, division operators
-- ❌ No scalar operations
-- ❌ No matrix multiplication
-- ❌ No reduction operations (sum, mean, etc.)
-
-### Extensions
-- ❌ C++ extension may not be loaded in PyPI wheel
-- ❌ No SIMD optimizations active (pure Python fallback)
-- ❌ Reference backend not exposed
+- ❌ Matrix multiplication (`@`) operator not yet hooked up
+- ❌ Advanced linear algebra (inverse, svd, etc.)
 
 ### Modules
 - ❌ No I/O module (`cp.io`)
 - ❌ No vision module (`cp.vision`)
-- ❌ Limited data operations
 
 ### Execution
-- ❌ No lazy execution (eager only)
-- ❌ No GPU support (CPU only)
-- ❌ No multi-threading (single-threaded)
-
-**These will be addressed in upcoming releases.** See the [Roadmap](../00_overview/roadmap.md) for details.
+- ❌ GPU support (Planned for v2.0)
+- ❌ Lazy execution graph (Planned for v2.0)
 
 ---
 
@@ -434,9 +409,8 @@ table = Table({"col1": [1, 2], "col2": [3, 4]})
 ### ❌ Don't Do This (Yet)
 
 ```python
-# These don't work in v0.2.0
-result = a - b         # ❌ Not implemented
-result = a * 2.0       # ❌ Not implemented
+# These don't work in v0.2.2
+result = a @ b         # ❌ Matrix multiplication (operator not hooked up)
 result = cp.io.read()  # ❌ Module doesn't exist
 ```
 
@@ -472,6 +446,6 @@ A: Not yet. v0.2.0 is for experimentation and feedback. Wait for v1.0 for produc
 
 ---
 
-**Last Updated**: 2026-01-27  
-**Next Planned Release**: v0.3.0 (February 2026)  
-**Documentation Version**: Matches released package v0.2.0
+**Last Updated**: 2026-02-05
+**Next Planned Release**: v0.3.0 (March 2026)  
+**Documentation Version**: Matches released package v0.2.2

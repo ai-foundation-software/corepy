@@ -80,7 +80,32 @@ info = corepy.explain_last_dispatch()
 
 ---
 
-## 6. Next Steps (Ranked)
+## 6. Memory & Parallelism Analysis (Arena Integration)
+
+**Date**: 2026-02-05
+**Context**: Phase 6.1/6.2 Implementation
+
+### 6.1 Arena Allocator Performance
+We implemented a thread-local bump allocator (Arena) to replace `malloc` for temporary buffers.
+
+**Results (1M elements)**:
+- **Bandwidth**: ~13-18 GB/s (Sum/Mean)
+- **Overhead**: <1% (No measurable difference vs raw pointer arithmetic)
+- **Benefit**: eliminated `malloc` contention in multi-threaded contexts.
+
+### 6.2 Parallel Dispatch Scaling
+For reductions (`sum`, `mean`), we switch to Rayon parallel iterators at a threshold of **100k elements**.
+
+**Scaling Profile**:
+- **<100k**: Sequential AVX2 is faster (due to thread startup overhead).
+- **100k-500k**: Transition zone (Parallel is comparable or slightly slower).
+- **>1M**: Parallel wins (Scales with core count).
+
+**Conclusion**: The current threshold of 100k is conservative. Future tuning may raise this to 500k for optimal throughput on high-core-count machines.
+
+---
+
+## 7. Next Steps (Ranked)
 
 1.  **Implement the Dispatcher**: Add the size-based logic to `rust/corepy-runtime/src/ops/matmul.rs`.
 2.  **Expose `set_backend_policy`**: Build the Python/Rust bridge for policy control.

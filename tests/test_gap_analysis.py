@@ -19,7 +19,7 @@ def test_tensor_any():
     print("Testing tensor_any()...")
 
     try:
-        from _corepy_rust import tensor_any
+        from corepy._corepy_rust import tensor_any
 
         # Test 1: All false -> False
         data1 = bytearray([0, 0, 0, 0])
@@ -52,7 +52,7 @@ def test_tensor_sum_f32():
     print("Testing tensor_sum_f32()...")
 
     try:
-        from _corepy_rust import tensor_sum_f32
+        from corepy._corepy_rust import tensor_sum_f32
 
         # Create f32 array
         data = np.array([1.0, 2.0, 3.0, 4.0, 5.0], dtype=np.float32)
@@ -76,7 +76,7 @@ def test_tensor_sum_i32():
     print("Testing tensor_sum_i32()...")
 
     try:
-        from _corepy_rust import tensor_sum_i32
+        from corepy._corepy_rust import tensor_sum_i32
 
         # Create i32 array
         data = np.array([10, 20, 30, 40, 50], dtype=np.int32)
@@ -99,7 +99,7 @@ def test_tensor_mean_f32():
     print("Testing tensor_mean_f32()...")
 
     try:
-        from _corepy_rust import tensor_mean_f32
+        from corepy._corepy_rust import tensor_mean_f32
 
         # Create f32 array
         data = np.array([1.0, 2.0, 3.0, 4.0, 5.0], dtype=np.float32)
@@ -122,7 +122,7 @@ def test_tensor_add_f32():
     print("Testing tensor_add_f32()...")
 
     try:
-        from _corepy_rust import tensor_add_f32
+        from corepy._corepy_rust import tensor_add_f32
 
         a = np.array([1.0, 2.0, 3.0, 4.0], dtype=np.float32)
         b = np.array([10.0, 20.0, 30.0, 40.0], dtype=np.float32)
@@ -144,7 +144,7 @@ def test_tensor_mul_f32():
     print("Testing tensor_mul_f32()...")
 
     try:
-        from _corepy_rust import tensor_mul_f32
+        from corepy._corepy_rust import tensor_mul_f32
 
         a = np.array([2.0, 3.0, 4.0, 5.0], dtype=np.float32)
         b = np.array([10.0, 10.0, 10.0, 10.0], dtype=np.float32)
@@ -168,7 +168,7 @@ def test_simd_performance():
     try:
         import time
 
-        from _corepy_rust import tensor_add_f32, tensor_sum_f32
+        from corepy._corepy_rust import tensor_add_f32, tensor_sum_f32
 
         # Large array to trigger SIMD paths
         size = 10000
@@ -201,7 +201,7 @@ def test_numpy_ffi_integration():
     print("Testing NumPy FFI integration...")
 
     try:
-        from _corepy_rust import tensor_sum_f32
+        from corepy._corepy_rust import tensor_sum_f32
 
         # NumPy array
         arr = np.array([1.0, 2.0, 3.0, 4.0, 5.0], dtype=np.float32)

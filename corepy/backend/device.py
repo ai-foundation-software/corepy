@@ -136,16 +136,15 @@ def _detect_cuda_gpus() -> List[int]:
     return []
 
 
-
 def _detect_metal_gpus() -> tuple[List[str], List[int]]:
     """
     Detects Apple Silicon/Metal GPUs using system_profiler.
     Returns (names, memory_bytes).
     """
-    import subprocess
     import json
+    import subprocess
     import sys
-    
+
     if sys.platform != "darwin":
         return [], []
 
@@ -154,18 +153,18 @@ def _detect_metal_gpus() -> tuple[List[str], List[int]]:
         cmd = ["/usr/sbin/system_profiler", "SPDisplaysDataType", "-json"]
         output = subprocess.check_output(cmd, stderr=subprocess.DEVNULL)
         data = json.loads(output)
-        
+
         names = []
         mems = []
-        
+
         items = data.get("SPDisplaysDataType", [])
         for item in items:
             name = item.get("sppci_model", "Unknown GPU")
-            
+
             # Parse VRAM string (e.g., "16 GB", "1536 MB")
             # Apple Silicon often reports unified memory or specific VRAM allocation
             vram_str = item.get("spdisplays_vram", "0 MB")
-            
+
             try:
                 parts = vram_str.split()
                 if len(parts) >= 2:
@@ -183,12 +182,12 @@ def _detect_metal_gpus() -> tuple[List[str], List[int]]:
                     mem_bytes = 0
             except ValueError:
                 mem_bytes = 0
-                
+
             names.append(name)
             mems.append(mem_bytes)
-            
+
         return names, mems
-        
+
     except Exception:
         # Fallback if system_profiler fails or is missing
         return [], []
@@ -209,7 +208,22 @@ def detect_devices() -> DeviceInfo:
 
     # GPU Detection
     if platform.system() == "Darwin":
-        gpu_names, gpu_mems = _detect_metal_gpus()
+        # Primary Check: Ask Rust runtime if Metal is actually usable
+        # This handles cases where system_profiler fails (CI) or Metal is unsupported
+        try:
+            from .. import _corepy_rust
+            
+            if _corepy_rust.metal_is_available():
+                gpu_names, gpu_mems = _detect_metal_gpus()
+                # If system_profiler failed but Rust says yes, add a generic Metal GPU
+                if not gpu_names:
+                    gpu_names = ["Metal GPU"]
+                    gpu_mems = [0] # Unknown memory
+            else:
+                 gpu_names, gpu_mems = [], []
+        except ImportError:
+             # Fallback if Rust not loaded (shouldn't happen in installed pkg)
+             gpu_names, gpu_mems = [], []
     else:
         # CUDA Detection
         gpu_mems = _detect_cuda_gpus()
@@ -217,10 +231,9 @@ def detect_devices() -> DeviceInfo:
 
     info.gpu_count = len(gpu_mems)
     info.gpu_memory_bytes = gpu_mems
-    
+
     # Only overwrite gpu_names if we found something, to handle empty list correctly
     if info.gpu_count > 0:
         info.gpu_names = gpu_names
 
     return info
-

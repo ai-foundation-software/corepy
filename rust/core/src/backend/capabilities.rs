@@ -61,7 +61,7 @@ fn detect_capabilities_impl() -> SystemCapabilities {
 /// Detect CPU features at runtime
 fn detect_cpu_capabilities() -> CpuCapabilities {
     let arch = detect_arch();
-    
+
     CpuCapabilities {
         arch,
         has_avx2: detect_avx2(),
@@ -87,16 +87,24 @@ fn detect_gpu_capabilities() -> GpuCapabilities {
 
 fn detect_arch() -> CpuArch {
     #[cfg(target_arch = "x86")]
-    { CpuArch::X86 }
-    
+    {
+        CpuArch::X86
+    }
+
     #[cfg(target_arch = "x86_64")]
-    { CpuArch::X86_64 }
-    
+    {
+        CpuArch::X86_64
+    }
+
     #[cfg(target_arch = "aarch64")]
-    { CpuArch::Aarch64 }
-    
+    {
+        CpuArch::Aarch64
+    }
+
     #[cfg(not(any(target_arch = "x86", target_arch = "x86_64", target_arch = "aarch64")))]
-    { CpuArch::Other }
+    {
+        CpuArch::Other
+    }
 }
 
 // ============================================================================
@@ -180,7 +188,7 @@ impl SystemCapabilities {
             "Scalar"
         }
     }
-    
+
     /// Get a human-readable description of the best available GPU backend
     pub fn best_gpu_backend(&self) -> Option<&'static str> {
         if self.gpu.metal_available {
@@ -193,7 +201,7 @@ impl SystemCapabilities {
             None
         }
     }
-    
+
     /// Generate a summary string for display
     pub fn summary(&self) -> String {
         let gpu_str = self.best_gpu_backend().unwrap_or("None");
@@ -214,26 +222,26 @@ mod tests {
     #[test]
     fn test_capabilities_detection() {
         let caps = get_capabilities();
-        
+
         // Basic sanity checks
         assert!(caps.cpu.core_count > 0);
-        
+
         // Architecture should be detected
         #[cfg(target_arch = "x86_64")]
         assert_eq!(caps.cpu.arch, CpuArch::X86_64);
-        
+
         #[cfg(target_arch = "aarch64")]
         {
             assert_eq!(caps.cpu.arch, CpuArch::Aarch64);
             assert!(caps.cpu.has_neon); // NEON is mandatory on aarch64
         }
     }
-    
+
     #[test]
     fn test_summary() {
         let caps = get_capabilities();
         let summary = caps.summary();
-        
+
         // Should contain meaningful info
         assert!(summary.contains("CPU:"));
         assert!(summary.contains("cores"));

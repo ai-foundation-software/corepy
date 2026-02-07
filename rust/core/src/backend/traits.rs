@@ -65,34 +65,34 @@ pub struct BackendCapabilities {
 }
 
 /// Abstract compute backend trait
-/// 
+///
 /// Implementations must be thread-safe (Send + Sync).
 /// All methods that perform computation should be safe to call
 /// from multiple threads concurrently.
 pub trait ComputeBackend: Send + Sync {
     /// Human-readable name of this backend
     fn name(&self) -> &'static str;
-    
+
     /// Unique identifier for this backend type
     fn backend_id(&self) -> u8;
-    
+
     /// Check if this backend is available on the current system
     fn is_available(&self) -> bool;
-    
+
     /// Get backend capabilities
     fn capabilities(&self) -> BackendCapabilities;
-    
+
     /// Check if a specific data type is supported
     fn supports_dtype(&self, dtype: DataType) -> bool {
         self.capabilities().supported_dtypes.contains(&dtype)
     }
-    
+
     // =========================================================================
     // Matrix Operations
     // =========================================================================
-    
+
     /// Matrix multiplication: C = A @ B
-    /// 
+    ///
     /// # Safety
     /// - Pointers must be valid and aligned
     /// - Output buffer must be pre-allocated with size m * n
@@ -105,30 +105,30 @@ pub trait ComputeBackend: Send + Sync {
         k: usize,
         n: usize,
     ) -> BackendResult<()>;
-    
+
     // =========================================================================
     // Reduction Operations
     // =========================================================================
-    
+
     /// Sum reduction
     unsafe fn sum_f32(&self, data: *const f32, count: usize) -> BackendResult<f32>;
-    
+
     /// Mean reduction
     unsafe fn mean_f32(&self, data: *const f32, count: usize) -> BackendResult<f32> {
         let sum = self.sum_f32(data, count)?;
         Ok(sum / count as f32)
     }
-    
+
     /// Max reduction
     unsafe fn max_f32(&self, data: *const f32, count: usize) -> BackendResult<f32>;
-    
+
     /// Min reduction
     unsafe fn min_f32(&self, data: *const f32, count: usize) -> BackendResult<f32>;
-    
+
     // =========================================================================
     // Element-wise Operations
     // =========================================================================
-    
+
     /// Element-wise addition: result = a + b
     unsafe fn add_f32(
         &self,
@@ -137,7 +137,7 @@ pub trait ComputeBackend: Send + Sync {
         result: *mut f32,
         count: usize,
     ) -> BackendResult<()>;
-    
+
     /// Element-wise subtraction: result = a - b
     unsafe fn sub_f32(
         &self,
@@ -146,7 +146,7 @@ pub trait ComputeBackend: Send + Sync {
         result: *mut f32,
         count: usize,
     ) -> BackendResult<()>;
-    
+
     /// Element-wise multiplication: result = a * b
     unsafe fn mul_f32(
         &self,
@@ -155,7 +155,7 @@ pub trait ComputeBackend: Send + Sync {
         result: *mut f32,
         count: usize,
     ) -> BackendResult<()>;
-    
+
     /// Element-wise division: result = a / b
     unsafe fn div_f32(
         &self,
@@ -164,21 +164,21 @@ pub trait ComputeBackend: Send + Sync {
         result: *mut f32,
         count: usize,
     ) -> BackendResult<()>;
-    
+
     // =========================================================================
     // Lifecycle
     // =========================================================================
-    
+
     /// Initialize the backend (called once before first use)
     fn init(&self) -> BackendResult<()> {
         Ok(())
     }
-    
+
     /// Cleanup resources (called when backend is no longer needed)
     fn cleanup(&self) -> BackendResult<()> {
         Ok(())
     }
-    
+
     /// Downcast to concrete type for backend-specific operations
     fn as_any(&self) -> &dyn Any;
 }
@@ -197,12 +197,12 @@ impl BackendRegistry {
             default_backend_idx: 0,
         }
     }
-    
+
     /// Register a new backend
     pub fn register(&mut self, backend: Box<dyn ComputeBackend>) {
         self.backends.push(backend);
     }
-    
+
     /// Get all available backends
     pub fn available_backends(&self) -> Vec<&dyn ComputeBackend> {
         self.backends
@@ -211,7 +211,7 @@ impl BackendRegistry {
             .map(|b| b.as_ref())
             .collect()
     }
-    
+
     /// Get backend by name
     pub fn get_by_name(&self, name: &str) -> Option<&dyn ComputeBackend> {
         self.backends
@@ -219,12 +219,14 @@ impl BackendRegistry {
             .find(|b| b.name() == name)
             .map(|b| b.as_ref())
     }
-    
+
     /// Get the default backend
     pub fn default_backend(&self) -> Option<&dyn ComputeBackend> {
-        self.backends.get(self.default_backend_idx).map(|b| b.as_ref())
+        self.backends
+            .get(self.default_backend_idx)
+            .map(|b| b.as_ref())
     }
-    
+
     /// Set default backend by name
     pub fn set_default(&mut self, name: &str) -> bool {
         if let Some(idx) = self.backends.iter().position(|b| b.name() == name) {
@@ -252,17 +254,31 @@ mod tests {
     }
 
     impl ComputeBackend for MockBackend {
-        fn name(&self) -> &'static str { "mock" }
-        fn backend_id(&self) -> u8 { 255 }
-        fn is_available(&self) -> bool { self.available }
+        fn name(&self) -> &'static str {
+            "mock"
+        }
+        fn backend_id(&self) -> u8 {
+            255
+        }
+        fn is_available(&self) -> bool {
+            self.available
+        }
         fn capabilities(&self) -> BackendCapabilities {
             BackendCapabilities {
                 supported_dtypes: vec![DataType::F32],
                 ..Default::default()
             }
         }
-        
-        unsafe fn matmul_f32(&self, _: *const f32, _: *const f32, _: *mut f32, _: usize, _: usize, _: usize) -> BackendResult<()> {
+
+        unsafe fn matmul_f32(
+            &self,
+            _: *const f32,
+            _: *const f32,
+            _: *mut f32,
+            _: usize,
+            _: usize,
+            _: usize,
+        ) -> BackendResult<()> {
             Err(BackendError::UnsupportedOperation("mock".into()))
         }
         unsafe fn sum_f32(&self, _: *const f32, _: usize) -> BackendResult<f32> {
@@ -274,19 +290,45 @@ mod tests {
         unsafe fn min_f32(&self, _: *const f32, _: usize) -> BackendResult<f32> {
             Err(BackendError::UnsupportedOperation("mock".into()))
         }
-        unsafe fn add_f32(&self, _: *const f32, _: *const f32, _: *mut f32, _: usize) -> BackendResult<()> {
+        unsafe fn add_f32(
+            &self,
+            _: *const f32,
+            _: *const f32,
+            _: *mut f32,
+            _: usize,
+        ) -> BackendResult<()> {
             Err(BackendError::UnsupportedOperation("mock".into()))
         }
-        unsafe fn sub_f32(&self, _: *const f32, _: *const f32, _: *mut f32, _: usize) -> BackendResult<()> {
+        unsafe fn sub_f32(
+            &self,
+            _: *const f32,
+            _: *const f32,
+            _: *mut f32,
+            _: usize,
+        ) -> BackendResult<()> {
             Err(BackendError::UnsupportedOperation("mock".into()))
         }
-        unsafe fn mul_f32(&self, _: *const f32, _: *const f32, _: *mut f32, _: usize) -> BackendResult<()> {
+        unsafe fn mul_f32(
+            &self,
+            _: *const f32,
+            _: *const f32,
+            _: *mut f32,
+            _: usize,
+        ) -> BackendResult<()> {
             Err(BackendError::UnsupportedOperation("mock".into()))
         }
-        unsafe fn div_f32(&self, _: *const f32, _: *const f32, _: *mut f32, _: usize) -> BackendResult<()> {
+        unsafe fn div_f32(
+            &self,
+            _: *const f32,
+            _: *const f32,
+            _: *mut f32,
+            _: usize,
+        ) -> BackendResult<()> {
             Err(BackendError::UnsupportedOperation("mock".into()))
         }
-        fn as_any(&self) -> &dyn Any { self }
+        fn as_any(&self) -> &dyn Any {
+            self
+        }
     }
 
     #[test]
@@ -294,7 +336,7 @@ mod tests {
         let mut registry = BackendRegistry::new();
         registry.register(Box::new(MockBackend { available: true }));
         registry.register(Box::new(MockBackend { available: false }));
-        
+
         assert_eq!(registry.available_backends().len(), 1);
         assert!(registry.get_by_name("mock").is_some());
     }

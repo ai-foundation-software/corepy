@@ -6,10 +6,8 @@
 
 use std::any::Any;
 
-use super::traits::{
-    BackendCapabilities, BackendError, BackendResult, ComputeBackend, DataType,
-};
 use super::capabilities::get_capabilities;
+use super::traits::{BackendCapabilities, BackendError, BackendResult, ComputeBackend, DataType};
 
 /// CPU backend using SIMD-accelerated kernels
 pub struct CpuBackend {
@@ -55,7 +53,7 @@ impl ComputeBackend for CpuBackend {
     fn capabilities(&self) -> BackendCapabilities {
         let caps = get_capabilities();
         let mut properties = std::collections::HashMap::new();
-        
+
         // Report SIMD capabilities
         if caps.cpu.has_avx512f {
             properties.insert("simd".to_string(), "AVX-512".to_string());
@@ -66,12 +64,18 @@ impl ComputeBackend for CpuBackend {
         } else {
             properties.insert("simd".to_string(), "Scalar".to_string());
         }
-        
+
         properties.insert("cores".to_string(), caps.cpu.core_count.to_string());
         properties.insert("fma".to_string(), caps.cpu.has_fma.to_string());
-        
+
         BackendCapabilities {
-            supported_dtypes: vec![DataType::F32, DataType::F64, DataType::I32, DataType::I64, DataType::Bool],
+            supported_dtypes: vec![
+                DataType::F32,
+                DataType::F64,
+                DataType::I32,
+                DataType::I64,
+                DataType::Bool,
+            ],
             max_tensor_bytes: None, // Limited by system memory
             supports_async: false,
             supports_inplace: true,
@@ -91,7 +95,7 @@ impl ComputeBackend for CpuBackend {
         if a.is_null() || b.is_null() || c.is_null() {
             return Err(BackendError::InvalidInput("Null pointer".to_string()));
         }
-        
+
         // Delegate to existing matmul implementation
         crate::ops::matmul::matmul_f32_cpu_dispatch(a, b, c, m, k, n);
         Ok(())
@@ -104,7 +108,7 @@ impl ComputeBackend for CpuBackend {
         if count == 0 {
             return Err(BackendError::InvalidInput("Empty array".to_string()));
         }
-        
+
         Ok(crate::ops::reduce::sum_f32_cpu_dispatch(data, count))
     }
 
@@ -115,7 +119,7 @@ impl ComputeBackend for CpuBackend {
         if count == 0 {
             return Err(BackendError::InvalidInput("Empty array".to_string()));
         }
-        
+
         // Simple implementation for now (can be optimized with SIMD later)
         let slice = std::slice::from_raw_parts(data, count);
         Ok(slice.iter().fold(f32::NEG_INFINITY, |a, &b| a.max(b)))
@@ -128,7 +132,7 @@ impl ComputeBackend for CpuBackend {
         if count == 0 {
             return Err(BackendError::InvalidInput("Empty array".to_string()));
         }
-        
+
         let slice = std::slice::from_raw_parts(data, count);
         Ok(slice.iter().fold(f32::INFINITY, |a, &b| a.min(b)))
     }
@@ -143,7 +147,7 @@ impl ComputeBackend for CpuBackend {
         if a.is_null() || b.is_null() || result.is_null() {
             return Err(BackendError::InvalidInput("Null pointer".to_string()));
         }
-        
+
         crate::ops::elementwise::add_f32_cpu_dispatch(a, b, result, count);
         Ok(())
     }
@@ -158,7 +162,7 @@ impl ComputeBackend for CpuBackend {
         if a.is_null() || b.is_null() || result.is_null() {
             return Err(BackendError::InvalidInput("Null pointer".to_string()));
         }
-        
+
         crate::ops::elementwise::sub_f32_cpu_dispatch(a, b, result, count);
         Ok(())
     }
@@ -173,7 +177,7 @@ impl ComputeBackend for CpuBackend {
         if a.is_null() || b.is_null() || result.is_null() {
             return Err(BackendError::InvalidInput("Null pointer".to_string()));
         }
-        
+
         crate::ops::elementwise::mul_f32_cpu_dispatch(a, b, result, count);
         Ok(())
     }
@@ -188,7 +192,7 @@ impl ComputeBackend for CpuBackend {
         if a.is_null() || b.is_null() || result.is_null() {
             return Err(BackendError::InvalidInput("Null pointer".to_string()));
         }
-        
+
         crate::ops::elementwise::div_f32_cpu_dispatch(a, b, result, count);
         Ok(())
     }

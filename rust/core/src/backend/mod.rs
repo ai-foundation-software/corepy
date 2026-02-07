@@ -97,7 +97,9 @@ pub fn get_last_dispatch() -> String {
                     0 => {
                         // Architecture-aware SIMD backend name with runtime detection
                         #[cfg(target_arch = "aarch64")]
-                        { "Corepy NEON" }
+                        {
+                            "Corepy NEON"
+                        }
                         #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
                         {
                             if is_x86_feature_detected!("avx512f") {
@@ -106,9 +108,15 @@ pub fn get_last_dispatch() -> String {
                                 "Corepy AVX2"
                             }
                         }
-                        #[cfg(not(any(target_arch = "aarch64", target_arch = "x86", target_arch = "x86_64")))]
-                        { "Corepy Scalar" }
-                    },
+                        #[cfg(not(any(
+                            target_arch = "aarch64",
+                            target_arch = "x86",
+                            target_arch = "x86_64"
+                        )))]
+                        {
+                            "Corepy Scalar"
+                        }
+                    }
                     1 => "OpenBLAS",
                     2 => "BLAS",
                     3 => "CUDA",

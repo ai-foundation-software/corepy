@@ -28,14 +28,7 @@ mod ffi {
         pub fn metal_div(a: *const f32, b: *const f32, result: *mut f32, size: i32);
 
         // Matrix multiplication
-        pub fn metal_matmul_f32(
-            a: *const f32,
-            b: *const f32,
-            c: *mut f32,
-            m: i32,
-            k: i32,
-            n: i32,
-        );
+        pub fn metal_matmul_f32(a: *const f32, b: *const f32, c: *mut f32, m: i32, k: i32, n: i32);
     }
 }
 
@@ -103,42 +96,22 @@ pub unsafe fn min_f32_metal_dispatch(data_ptr: *const f32, count: usize) -> f32 
 // ============================================================================
 
 #[cfg(target_os = "macos")]
-pub unsafe fn add_f32_metal_dispatch(
-    a: *const f32,
-    b: *const f32,
-    result: *mut f32,
-    count: usize,
-) {
+pub unsafe fn add_f32_metal_dispatch(a: *const f32, b: *const f32, result: *mut f32, count: usize) {
     ffi::metal_add(a, b, result, count as i32)
 }
 
 #[cfg(target_os = "macos")]
-pub unsafe fn sub_f32_metal_dispatch(
-    a: *const f32,
-    b: *const f32,
-    result: *mut f32,
-    count: usize,
-) {
+pub unsafe fn sub_f32_metal_dispatch(a: *const f32, b: *const f32, result: *mut f32, count: usize) {
     ffi::metal_sub(a, b, result, count as i32)
 }
 
 #[cfg(target_os = "macos")]
-pub unsafe fn mul_f32_metal_dispatch(
-    a: *const f32,
-    b: *const f32,
-    result: *mut f32,
-    count: usize,
-) {
+pub unsafe fn mul_f32_metal_dispatch(a: *const f32, b: *const f32, result: *mut f32, count: usize) {
     ffi::metal_mul(a, b, result, count as i32)
 }
 
 #[cfg(target_os = "macos")]
-pub unsafe fn div_f32_metal_dispatch(
-    a: *const f32,
-    b: *const f32,
-    result: *mut f32,
-    count: usize,
-) {
+pub unsafe fn div_f32_metal_dispatch(a: *const f32, b: *const f32, result: *mut f32, count: usize) {
     ffi::metal_div(a, b, result, count as i32)
 }
 

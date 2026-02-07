@@ -229,13 +229,13 @@ pub unsafe fn sum_f32_strided_dispatch(
     strides: &[i64],
 ) -> f32 {
     let mut sum = 0.0f32;
-    
+
     for_each_strided_index(shape, |indices| {
         let byte_offset = compute_byte_offset(&indices, strides);
         let elem_offset = byte_offset / 4; // f32 = 4 bytes
         sum += *data_ptr.offset(elem_offset as isize);
     });
-    
+
     sum
 }
 
@@ -247,11 +247,11 @@ pub unsafe fn mean_f32_strided_dispatch(
 ) -> f32 {
     let sum = sum_f32_strided_dispatch(data_ptr, shape, strides);
     let count = shape.iter().product::<i64>() as f32;
-    
+
     if count == 0.0 {
         return 0.0;
     }
-    
+
     sum / count
 }
 
@@ -263,7 +263,7 @@ pub unsafe fn max_f32_strided_dispatch(
 ) -> f32 {
     let mut max_val = f32::NEG_INFINITY;
     let mut found_any = false;
-    
+
     for_each_strided_index(shape, |indices| {
         let byte_offset = compute_byte_offset(&indices, strides);
         let elem_offset = byte_offset / 4;
@@ -273,8 +273,12 @@ pub unsafe fn max_f32_strided_dispatch(
             found_any = true;
         }
     });
-    
-    if found_any { max_val } else { f32::NAN }
+
+    if found_any {
+        max_val
+    } else {
+        f32::NAN
+    }
 }
 
 /// Strided min for non-contiguous f32 arrays
@@ -285,7 +289,7 @@ pub unsafe fn min_f32_strided_dispatch(
 ) -> f32 {
     let mut min_val = f32::INFINITY;
     let mut found_any = false;
-    
+
     for_each_strided_index(shape, |indices| {
         let byte_offset = compute_byte_offset(&indices, strides);
         let elem_offset = byte_offset / 4;
@@ -295,8 +299,12 @@ pub unsafe fn min_f32_strided_dispatch(
             found_any = true;
         }
     });
-    
-    if found_any { min_val } else { f32::NAN }
+
+    if found_any {
+        min_val
+    } else {
+        f32::NAN
+    }
 }
 
 // ============================================================================
@@ -304,7 +312,7 @@ pub unsafe fn min_f32_strided_dispatch(
 // ============================================================================
 
 /// Iterate through all index combinations for a given shape
-/// 
+///
 /// Uses row-major (C-order) iteration.
 /// Example: shape [2, 3] iterates: [0,0], [0,1], [0,2], [1,0], [1,1], [1,2]
 fn for_each_strided_index<F>(shape: &[i64], mut callback: F)
@@ -314,13 +322,13 @@ where
     if shape.is_empty() {
         return;
     }
-    
+
     let ndim = shape.len();
     let mut indices = vec![0i64; ndim];
-    
+
     loop {
         callback(indices.clone());
-        
+
         // Increment indices (right to left, like an odometer)
         let mut dim = ndim - 1;
         loop {
@@ -340,7 +348,8 @@ where
 /// Compute byte offset from indices and byte strides
 #[inline]
 fn compute_byte_offset(indices: &[i64], strides: &[i64]) -> i64 {
-    indices.iter()
+    indices
+        .iter()
         .zip(strides.iter())
         .map(|(idx, stride)| idx * stride)
         .sum()
@@ -354,11 +363,11 @@ mod tests {
     fn test_for_each_strided_index_2d() {
         let shape = vec![2, 3];
         let mut collected = Vec::new();
-        
+
         for_each_strided_index(&shape, |indices| {
             collected.push(indices);
         });
-        
+
         assert_eq!(collected.len(), 6);
         assert_eq!(collected[0], vec![0, 0]);
         assert_eq!(collected[5], vec![1, 2]);
@@ -369,7 +378,7 @@ mod tests {
         // 2D array, strides (12, 4) bytes (3x? float32)
         let indices = vec![1, 2];
         let strides = vec![12, 4];
-        
+
         // offset = 1*12 + 2*4 = 20 bytes
         assert_eq!(compute_byte_offset(&indices, &strides), 20);
     }

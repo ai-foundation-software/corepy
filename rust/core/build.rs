@@ -14,9 +14,24 @@ fn main() {
 
     // Check if C++ library is built
     if !build_path.exists() {
-        eprintln!("WARNING: C++ kernels not built!");
-        eprintln!("Run: ./scripts/build.sh or check 'build' directory");
-        return;
+        // Prepare a detailed error message
+        let msg = format!(
+            "C++ kernels not found at '{}'.\n\
+             Please run `./scripts/build.sh` or ensure `cmake` build has completed before compiling Rust.\n\
+             The build script expects the C++ library in `build/csrc` relative to the repository root.",
+            build_path.display()
+        );
+
+        // Emit a cargo warning so it's visible even if we panic convention changes
+        println!("cargo:warning={}", msg);
+
+        // Check if we are in a CI/Release environment where this SHOULD exist
+        if std::env::var("CI").is_ok() || std::env::var("PROFILE").unwrap_or_default() == "release"
+        {
+            panic!("{}", msg);
+        } else {
+            println!("cargo:warning=Continuing without C++ kernels (symbols will be missing at runtime).");
+        }
     }
 
     // On Windows with MSVC, the library is in a Release subdirectory

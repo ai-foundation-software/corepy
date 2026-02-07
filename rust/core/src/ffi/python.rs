@@ -1,7 +1,4 @@
-// ============================================================================
-// FFI: Python ↔ Rust Bridge
-// ============================================================================
-// This module handles PyO3 integration and exports Rust functions to Python.
+#![allow(clippy::useless_conversion)]
 
 use pyo3::prelude::*;
 
@@ -112,11 +109,11 @@ fn set_profile_context(context: Option<String>) -> PyResult<()> {
 /// Get system capabilities as a Python dict
 #[pyfunction]
 fn get_system_capabilities(py: Python<'_>) -> PyResult<pyo3::Py<pyo3::types::PyDict>> {
-    use pyo3::types::PyDict;
     use crate::backend::get_capabilities;
-    
+    use pyo3::types::PyDict;
+
     let caps = get_capabilities();
-    
+
     let cpu_dict = PyDict::new_bound(py);
     cpu_dict.set_item("arch", format!("{:?}", caps.cpu.arch))?;
     cpu_dict.set_item("cores", caps.cpu.core_count)?;
@@ -125,7 +122,7 @@ fn get_system_capabilities(py: Python<'_>) -> PyResult<pyo3::Py<pyo3::types::PyD
     cpu_dict.set_item("has_fma", caps.cpu.has_fma)?;
     cpu_dict.set_item("has_neon", caps.cpu.has_neon)?;
     cpu_dict.set_item("best_simd", caps.best_simd_backend())?;
-    
+
     let gpu_dict = PyDict::new_bound(py);
     gpu_dict.set_item("metal_available", caps.gpu.metal_available)?;
     gpu_dict.set_item("cuda_available", caps.gpu.cuda_available)?;
@@ -133,11 +130,11 @@ fn get_system_capabilities(py: Python<'_>) -> PyResult<pyo3::Py<pyo3::types::PyD
     if let Some(best) = caps.best_gpu_backend() {
         gpu_dict.set_item("best_gpu", best)?;
     }
-    
+
     let result = PyDict::new_bound(py);
     result.set_item("cpu", cpu_dict)?;
     result.set_item("gpu", gpu_dict)?;
-    
+
     Ok(result.into())
 }
 
@@ -293,11 +290,7 @@ fn tensor_mean_f32(data_ptr: usize, count: usize) -> PyResult<f32> {
 // ============================================================================
 
 #[pyfunction]
-fn tensor_sum_f32_strided(
-    data_ptr: usize,
-    shape: Vec<i64>,
-    strides: Vec<i64>,
-) -> PyResult<f32> {
+fn tensor_sum_f32_strided(data_ptr: usize, shape: Vec<i64>, strides: Vec<i64>) -> PyResult<f32> {
     use crate::ops::reduce::sum_f32_strided_dispatch;
 
     if data_ptr == 0 {
@@ -326,11 +319,7 @@ fn tensor_sum_f32_strided(
 }
 
 #[pyfunction]
-fn tensor_mean_f32_strided(
-    data_ptr: usize,
-    shape: Vec<i64>,
-    strides: Vec<i64>,
-) -> PyResult<f32> {
+fn tensor_mean_f32_strided(data_ptr: usize, shape: Vec<i64>, strides: Vec<i64>) -> PyResult<f32> {
     use crate::ops::reduce::mean_f32_strided_dispatch;
 
     if data_ptr == 0 {
@@ -361,11 +350,7 @@ fn tensor_mean_f32_strided(
 }
 
 #[pyfunction]
-fn tensor_max_f32_strided(
-    data_ptr: usize,
-    shape: Vec<i64>,
-    strides: Vec<i64>,
-) -> PyResult<f32> {
+fn tensor_max_f32_strided(data_ptr: usize, shape: Vec<i64>, strides: Vec<i64>) -> PyResult<f32> {
     use crate::ops::reduce::max_f32_strided_dispatch;
 
     if data_ptr == 0 {
@@ -396,11 +381,7 @@ fn tensor_max_f32_strided(
 }
 
 #[pyfunction]
-fn tensor_min_f32_strided(
-    data_ptr: usize,
-    shape: Vec<i64>,
-    strides: Vec<i64>,
-) -> PyResult<f32> {
+fn tensor_min_f32_strided(data_ptr: usize, shape: Vec<i64>, strides: Vec<i64>) -> PyResult<f32> {
     use crate::ops::reduce::min_f32_strided_dispatch;
 
     if data_ptr == 0 {
@@ -1050,4 +1031,3 @@ fn metal_div_f32(a_ptr: usize, b_ptr: usize, result_ptr: usize, count: usize) ->
         ))
     }
 }
-

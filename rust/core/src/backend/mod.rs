@@ -1,3 +1,10 @@
+pub mod capabilities;
+pub mod cpu;
+pub mod traits;
+
+pub use capabilities::get_capabilities;
+pub use traits::ComputeBackend;
+
 use lazy_static::lazy_static;
 use std::sync::atomic::{AtomicU8, Ordering};
 use std::sync::Mutex;
@@ -87,10 +94,25 @@ pub fn get_last_dispatch() -> String {
                 "{} → {} (size={}x{}x{}, policy={:?}, {}µs ago)",
                 info.operation,
                 match info.backend_id {
-                    0 => "Corepy AVX2",
+                    0 => {
+                        // Architecture-aware SIMD backend name with runtime detection
+                        #[cfg(target_arch = "aarch64")]
+                        { "Corepy NEON" }
+                        #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+                        {
+                            if is_x86_feature_detected!("avx512f") {
+                                "Corepy AVX-512"
+                            } else {
+                                "Corepy AVX2"
+                            }
+                        }
+                        #[cfg(not(any(target_arch = "aarch64", target_arch = "x86", target_arch = "x86_64")))]
+                        { "Corepy Scalar" }
+                    },
                     1 => "OpenBLAS",
                     2 => "BLAS",
                     3 => "CUDA",
+                    4 => "Metal",
                     _ => "Unknown",
                 },
                 m,

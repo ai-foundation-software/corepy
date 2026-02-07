@@ -13,30 +13,47 @@ from .backend.types import BackendType, DataType, OperationProperties, Operation
 if TYPE_CHECKING:
     from numpy.typing import NDArray
 
-logger = logging.getLogger("corepy.tensor")
+    from .buffer import BufferView
+
+logger = logging.getLogger("corepy.array")
 
 
-class Tensor:
+class ndarray:
     """
-    A multi-dimensional array object that automatically selects the best
-    execution backend (CPU/GPU) based on data size and operation complexity.
-    """
+    A multi-dimensional array object (NumPy-compatible naming).
 
-    _backing_data: Any
-    _shape: Tuple[int, ...]
+    This is the primary array type in CorePy, designed to be a drop-in
+    replacement for NumPy's ndarray where applicable. It automatically
+    selects the best execution backend (CPU/GPU) based on data size
+    and operation complexity.
+
+    Attributes:
+        shape: Tuple of array dimensions.
+        dtype: Data type of array elements.
+        ndim: Number of dimensions.
+        size: Total number of elements.
+
+    Example:
+        >>> import corepy as cp
+        >>> arr = cp.array([1.0, 2.0, 3.0])
+        >>> arr.shape
+        (3,)
+        >>> arr.dtype
+        DataType.FLOAT32
+    """
 
     def __init__(
         self,
-        data: Union[Sequence[Any], "Tensor", "NDArray[Any]"],
+        data: Union[Sequence[Any], "ndarray", "NDArray[Any]"],
         dtype: DataType = DataType.FLOAT32,
         backend: Optional[Union[str, BackendType]] = None,
         device: Optional[str] = None,
     ):
         """
-        Initialize a Tensor.
+        Initialize an array.
 
         Args:
-            data: Input data (list, tuple, or another Tensor).
+            data: Input data (list, tuple, or another array).
             dtype: Data type (default: float32).
             backend: Explicitly requested backend ('cpu', 'gpu').
             device: Explicit device string (e.g. 'cuda:0', 'cpu').
@@ -112,11 +129,11 @@ class Tensor:
         # We treat 'allocation' as a memory operation.
         # However, for 'Correctness-First', we usually default to CPU for storage
         # unless explicitly told otherwise or if we are consuming GPU data.
-        # BUT, the goal is "Tensor(data) # auto".
+        # BUT, the goal is "ndarray(data) # auto".
         # So we should check if this data is "large enough" to justify GPU storage?
         # Usually, just storing is not compute. So auto-placement should default CPU
         # unless immediate heavy compute is expected?
-        # Actually, "Tensor(data)" usually implies "Ready for compute".
+        # Actually, "ndarray(data)" usually implies "Ready for compute".
         # Let's use COMPUTE_VECTOR as a proxy for "Will I use this for compute?"
         # to see if it qualifies for GPU memory residence.
         # This is a heuristic. Stronger approach: Default CPU, move on demand.
@@ -131,7 +148,7 @@ class Tensor:
         )
         self._device = device
 
-        logger.debug(f"Tensor created on {self._backend_type}. Shape={self._shape}")
+        logger.debug(f"Array created on {self._backend_type}. Shape={self._shape}")
 
     @property
     def backend(self) -> BackendType:
@@ -141,36 +158,129 @@ class Tensor:
     def shape(self) -> Tuple[int, ...]:
         return self._shape
 
-    def to(self, device: str) -> "Tensor":
+    @property
+    def dtype(self) -> DataType:
+        """Data type of the array elements (NumPy-compatible)."""
+        return self._dtype
+
+    @property
+    def ndim(self) -> int:
+        """Number of array dimensions (NumPy-compatible)."""
+        return len(self._shape)
+
+    @property
+    def size(self) -> int:
+        """Total number of elements in the array (NumPy-compatible)."""
+        return self._element_count
+
+    @property
+    def T(self) -> "ndarray":
+        """Transpose of the array (NumPy-compatible). For 2D arrays only."""
+        return self.transpose()
+
+    def reshape(self, *shape) -> "ndarray":
+        """
+        Return array reshaped to given dimensions (NumPy-compatible).
+
+        Args:
+            shape: New shape as multiple arguments or single tuple/list.
+
+        Returns:
+            Reshaped array with same data.
+        """
+        if len(shape) == 1 and isinstance(shape[0], (tuple, list)):
+            shape = tuple(shape[0])
+        np_arr = self.to_numpy().reshape(shape)
+        return ndarray(np_arr, dtype=self._dtype, backend=self.backend)
+
+    def transpose(self, *axes) -> "ndarray":
+        """
+        Return transposed array (NumPy-compatible).
+
+        Args:
+            axes: Optional permutation of dimensions.
+
+        Returns:
+            Transposed array.
+        """
+        np_arr = self.to_numpy()
+        if axes:
+            np_arr = np_arr.transpose(*axes)
+        else:
+            np_arr = np_arr.T
+        return ndarray(np_arr, dtype=self._dtype, backend=self.backend)
+
+    def to(self, device: str) -> "ndarray":
         """
         Explicitly move tensor to a device.
         Arguments:
             device: 'cpu' or 'gpu'
         """
-        # Create a new Tensor with explicit backend
+        # Create a new array with explicit backend
         # In real impl, we would copy data buffer
-        return Tensor(self._backing_data, dtype=self._dtype, device=device)
+        return ndarray(self._backing_data, dtype=self._dtype, device=device)
+
+    def __getitem__(self, item) -> Union["ndarray", float, int, bool]:
+        """
+        Access element or slice of the array.
+
+        Args:
+            item: Index or slice.
+
+        Returns:
+            ndarray or scalar: Result of indexing.
+        """
+        # Delegate to backing data
+        if isinstance(self._backing_data, list):
+            # List slicing returns list, indexing returns element
+            try:
+                result = self._backing_data[item]
+            except TypeError:
+                # Handle tuple indexing for lists (not supported natively)
+                # Fallback to numpy conversion for advanced indexing
+                return self.to_numpy()[item]
+
+            if isinstance(result, list):
+                return ndarray(result, dtype=self._dtype, backend=self.backend)
+            else:
+                return result  # scalar
+        elif isinstance(self._backing_data, np.ndarray):
+            # NumPy slicing returns view or scalar
+            result = self._backing_data[item]
+            if isinstance(result, np.ndarray):
+                # View (keeps backing data)
+                return ndarray(result, dtype=self._dtype, backend=self.backend)
+            else:
+                # Scalar (numpy scalar)
+                return result.item() if hasattr(result, "item") else result
+        else:
+            # Fallback for other types
+            result = self.to_numpy()[item]
+            if isinstance(result, np.ndarray):
+                return ndarray(result, dtype=self._dtype, backend=self.backend)
+            else:
+                return result.item() if hasattr(result, "item") else result
 
     def __repr__(self):
-        return f"Tensor({self._backing_data}, backend='{self._backend_type.value}')"
+        return f"ndarray({self._backing_data}, backend='{self._backend_type.value}')"
 
-    def __add__(self, other: Any) -> "Tensor":
+    def __add__(self, other: Any) -> "ndarray":
         """Element-wise addition."""
         return self._binary_op("add", other)
 
-    def __sub__(self, other: Any) -> "Tensor":
+    def __sub__(self, other: Any) -> "ndarray":
         """Element-wise subtraction."""
         return self._binary_op("sub", other)
 
-    def __mul__(self, other: Any) -> "Tensor":
+    def __mul__(self, other: Any) -> "ndarray":
         """Element-wise multiplication."""
         return self._binary_op("mul", other)
 
-    def __truediv__(self, other: Any) -> "Tensor":
+    def __truediv__(self, other: Any) -> "ndarray":
         """Element-wise division."""
         return self._binary_op("div", other)
 
-    def __matmul__(self, other: Any) -> "Tensor":
+    def __matmul__(self, other: Any) -> "ndarray":
         """Matrix multiplication (@ operator)."""
         return self.matmul(other)
 
@@ -185,25 +295,25 @@ class Tensor:
     def __lt__(self, other: Any) -> bool:
         """Less than comparison (for scalar tensors)."""
         return self._get_scalar_value() < (
-            other._get_scalar_value() if isinstance(other, Tensor) else float(other)
+            other._get_scalar_value() if isinstance(other, ndarray) else float(other)
         )
 
     def __le__(self, other: Any) -> bool:
         """Less than or equal comparison (for scalar tensors)."""
         return self._get_scalar_value() <= (
-            other._get_scalar_value() if isinstance(other, Tensor) else float(other)
+            other._get_scalar_value() if isinstance(other, ndarray) else float(other)
         )
 
     def __gt__(self, other: Any) -> bool:
         """Greater than comparison (for scalar tensors)."""
         return self._get_scalar_value() > (
-            other._get_scalar_value() if isinstance(other, Tensor) else float(other)
+            other._get_scalar_value() if isinstance(other, ndarray) else float(other)
         )
 
     def __ge__(self, other: Any) -> bool:
         """Greater than or equal comparison (for scalar tensors)."""
         return self._get_scalar_value() >= (
-            other._get_scalar_value() if isinstance(other, Tensor) else float(other)
+            other._get_scalar_value() if isinstance(other, ndarray) else float(other)
         )
 
     def _get_buffer_view(self) -> "BufferView":
@@ -235,7 +345,9 @@ class Tensor:
 
         # Case 1: NumPy array (fastest path)
         if isinstance(self._backing_data, np.ndarray):
-            return from_numpy(self._backing_data, device=target_device, dtype=self._dtype)
+            return from_numpy(
+                self._backing_data, device=target_device, dtype=self._dtype
+            )
 
         # Case 2: bytes/bytearray/memoryview (buffer protocol)
         elif isinstance(self._backing_data, (bytes, bytearray, memoryview)):
@@ -278,7 +390,6 @@ class Tensor:
                 f"Cannot create BufferView from {type(self._backing_data)}. "
                 "Object must be NumPy array, list, or support buffer protocol."
             )
-
 
     def _get_buffer_pointer(self, dtype_char="u1") -> Tuple[int, int, Any]:
         """
@@ -411,7 +522,7 @@ class Tensor:
                     "Object must support buffer protocol or be a list."
                 ) from None
 
-    def all(self) -> "Tensor":
+    def all(self) -> "ndarray":
         """Returns True if all elements evaluate to True."""
         try:
             from ._corepy_rust import tensor_all  # type: ignore[import-untyped]
@@ -419,16 +530,16 @@ class Tensor:
             ptr, count, _ref = self._get_buffer_pointer("u1")
             result = tensor_all(ptr, count)
 
-            return Tensor(result, dtype=DataType.BOOL, backend=self.backend)
+            return ndarray(result, dtype=DataType.BOOL, backend=self.backend)
 
         except ImportError:
             logger.warning("Rust extension not available.")
             from .backend.dispatch import dispatch_kernel
 
             result = dispatch_kernel("all", self.backend, self._backing_data)
-            return Tensor(result, dtype=DataType.BOOL, backend=self.backend)
+            return ndarray(result, dtype=DataType.BOOL, backend=self.backend)
 
-    def any(self) -> "Tensor":
+    def any(self) -> "ndarray":
         """Returns True if any element evaluates to True."""
         try:
             from ._corepy_rust import tensor_any  # type: ignore[import-untyped]
@@ -436,14 +547,14 @@ class Tensor:
             ptr, count, _ref = self._get_buffer_pointer("u1")
             result = tensor_any(ptr, count)
 
-            return Tensor(result, dtype=DataType.BOOL, backend=self.backend)
+            return ndarray(result, dtype=DataType.BOOL, backend=self.backend)
         except ImportError:
             from .backend.dispatch import dispatch_kernel
 
             result = dispatch_kernel("any", self.backend, self._backing_data)
-            return Tensor(result, dtype=DataType.BOOL, backend=self.backend)
+            return ndarray(result, dtype=DataType.BOOL, backend=self.backend)
 
-    def sum(self) -> "Tensor":
+    def sum(self) -> "ndarray":
         """Returns sum of all elements."""
         import time
 
@@ -480,17 +591,19 @@ class Tensor:
                 )
 
             elapsed_ms = (time.perf_counter() - start_time) * 1000
-            record_op("sum", elapsed_ms, "CPU" if not view.device.is_metal() else "Metal")
-            return Tensor([result], dtype=self._dtype, backend=self.backend)
+            record_op(
+                "sum", elapsed_ms, "CPU" if not view.device.is_metal() else "Metal"
+            )
+            return ndarray([result], dtype=self._dtype, backend=self.backend)
         except ImportError:
             from .backend.dispatch import dispatch_kernel
 
             result = dispatch_kernel("sum", self.backend, self._backing_data)
             elapsed_ms = (time.perf_counter() - start_time) * 1000
             record_op("sum", elapsed_ms, self.backend.name)
-            return Tensor(result, dtype=self._dtype, backend=self.backend)
+            return ndarray(result, dtype=self._dtype, backend=self.backend)
 
-    def mean(self) -> "Tensor":
+    def mean(self) -> "ndarray":
         """Returns arithmetic mean of all elements."""
         import time
 
@@ -522,46 +635,48 @@ class Tensor:
                 )
 
             elapsed_ms = (time.perf_counter() - start_time) * 1000
-            record_op("mean", elapsed_ms, "CPU" if not view.device.is_metal() else "Metal")
-            return Tensor([result], dtype=DataType.FLOAT32, backend=self.backend)
+            record_op(
+                "mean", elapsed_ms, "CPU" if not view.device.is_metal() else "Metal"
+            )
+            return ndarray([result], dtype=DataType.FLOAT32, backend=self.backend)
         except ImportError:
             from .backend.dispatch import dispatch_kernel
 
             result = dispatch_kernel("mean", self.backend, self._backing_data)
-            return Tensor(result, dtype=DataType.FLOAT32, backend=self.backend)
+            return ndarray(result, dtype=DataType.FLOAT32, backend=self.backend)
 
-    def std(self) -> "Tensor":
+    def std(self) -> "ndarray":
         """Returns standard deviation of all elements."""
         from .backend.dispatch import dispatch_kernel
 
         result = dispatch_kernel("std", self.backend, self._backing_data)
-        return Tensor(result, dtype=DataType.FLOAT32, backend=self.backend)
+        return ndarray(result, dtype=DataType.FLOAT32, backend=self.backend)
 
-    def max(self) -> "Tensor":
+    def max(self) -> "ndarray":
         """Returns maximum value of all elements."""
         from .backend.dispatch import dispatch_kernel
 
         result = dispatch_kernel("max", self.backend, self._backing_data)
-        return Tensor(result, dtype=self._dtype, backend=self.backend)
+        return ndarray(result, dtype=self._dtype, backend=self.backend)
 
-    def min(self) -> "Tensor":
+    def min(self) -> "ndarray":
         """Returns minimum value of all elements."""
         from .backend.dispatch import dispatch_kernel
 
         result = dispatch_kernel("min", self.backend, self._backing_data)
-        return Tensor(result, dtype=self._dtype, backend=self.backend)
+        return ndarray(result, dtype=self._dtype, backend=self.backend)
 
-    def copy(self) -> "Tensor":
-        """Returns a copy of the tensor."""
+    def copy(self) -> "ndarray":
+        """Returns a copy of the array."""
         if isinstance(self._backing_data, list):
             new_data = list(self._backing_data)
         else:
             new_data = self._backing_data
-        return Tensor(new_data, dtype=self._dtype, backend=self.backend)
+        return ndarray(new_data, dtype=self._dtype, backend=self.backend)
 
     def to_numpy(self) -> "NDArray[Any]":
         """
-        Convert the tensor to a NumPy array.
+        Convert the array to a NumPy array.
         Returns:
             NDArray: NumPy array containing the data.
         """
@@ -586,16 +701,18 @@ class Tensor:
                 DataType.BOOL: bool,
             }
             np_dtype = dtype_map.get(self._dtype, np.float32)
-            return np.array(list(flatten(self._backing_data)), dtype=np_dtype).reshape(self.shape)
+            return np.array(list(flatten(self._backing_data)), dtype=np_dtype).reshape(
+                self.shape
+            )
         else:
             # Fallback for buffer protocol objects
             return np.array(self._backing_data).reshape(self.shape)
 
     def __len__(self) -> int:
-        """Returns the number of elements in the tensor."""
+        """Returns the number of elements in the array."""
         return self._element_count
 
-    def _binary_op(self, op: str, other: Any) -> "Tensor":
+    def _binary_op(self, op: str, other: Any) -> "ndarray":
         """Helper for binary operations via Rust FFI."""
         import time
 
@@ -603,20 +720,20 @@ class Tensor:
 
         start_time = time.perf_counter()
         if isinstance(other, (int, float)):
-            other = Tensor([float(other)] * self._element_count, device=self._device)
-        elif isinstance(other, Tensor) and other._element_count == 1:
+            other = ndarray([float(other)] * self._element_count, device=self._device)
+        elif isinstance(other, ndarray) and other._element_count == 1:
             # Broadcasting: single-element tensor to match self's size
             scalar_val = (
                 other._backing_data[0]
                 if isinstance(other._backing_data, list)
                 else float(other._backing_data)
             )
-            other = Tensor(
+            other = ndarray(
                 [float(scalar_val)] * self._element_count, device=self._device
             )
 
-        if not isinstance(other, Tensor):
-            raise ValueError("Binary ops require Tensor or scalar")
+        if not isinstance(other, ndarray):
+            raise ValueError("Binary ops require array or scalar")
 
         if other.backend != self.backend:
             raise BackendError(f"Backend mismatch: {self.backend} vs {other.backend}")
@@ -661,7 +778,7 @@ class Tensor:
                 ]
                 elapsed_ms = (time.perf_counter() - start_time) * 1000
                 record_op(op, elapsed_ms, "CPU")
-                return Tensor(out_floats, dtype=self._dtype, backend=self.backend)
+                return ndarray(out_floats, dtype=self._dtype, backend=self.backend)
 
             except ImportError:
                 pass  # Fallback to dispatch
@@ -674,19 +791,22 @@ class Tensor:
         )
         elapsed_ms = (time.perf_counter() - start_time) * 1000
         record_op(op, elapsed_ms, self.backend.name)
-        return Tensor(result, dtype=self._dtype, backend=self.backend)
+        return ndarray(result, dtype=self._dtype, backend=self.backend)
 
-    def matmul(self, other: "Tensor") -> "Tensor":
+    def matmul(self, other: "ndarray") -> "ndarray":
         """Matrix multiplication (handles 1D dot product and 2D matmul)."""
         import time
 
         from .profiler.core import record_op
 
         start_time = time.perf_counter()
-        if not isinstance(other, Tensor):
-            raise ValueError("matmul requires Tensor")
+        if not isinstance(other, ndarray):
+            raise ValueError("matmul requires array")
 
-        if self.backend == BackendType.CPU or (self.backend == BackendType.GPU and "metal" in str(self._get_buffer_view().device)):
+        if self.backend == BackendType.CPU or (
+            self.backend == BackendType.GPU
+            and "metal" in str(self._get_buffer_view().device)
+        ):
             try:
                 from . import _corepy_rust as ffi  # type: ignore[import-untyped]
 
@@ -700,20 +820,25 @@ class Tensor:
                     k2, n = other.shape
 
                     if k1 != k2:
-                        raise ValueError(f"Matrix dimension mismatch: ({m}, {k1}) @ ({k2}, {n})")
+                        raise ValueError(
+                            f"Matrix dimension mismatch: ({m}, {k1}) @ ({k2}, {n})"
+                        )
 
                     view_b = other._get_buffer_view()
 
                     # Allocate output
                     import numpy as np
+
                     final_np = np.empty((m, n), dtype=np.float32)
                     ptr_out = final_np.__array_interface__["data"][0]
 
-                    ffi.metal_matmul_f32(view.data_ptr, view_b.data_ptr, ptr_out, m, k1, n)
+                    ffi.metal_matmul_f32(
+                        view.data_ptr, view_b.data_ptr, ptr_out, m, k1, n
+                    )
 
                     elapsed_ms = (time.perf_counter() - start_time) * 1000
                     record_op("matmul", elapsed_ms, "Metal")
-                    return Tensor(final_np, dtype=self._dtype, backend=self.backend)
+                    return ndarray(final_np, dtype=self._dtype, backend=self.backend)
 
                 # Case 1: Dot Product (1D @ 1D)
                 if len(self.shape) == 1 and len(other.shape) == 1 and not is_metal:
@@ -728,7 +853,7 @@ class Tensor:
                     result = ffi.tensor_matmul_f32(ptr_a, ptr_b, count_a)
                     elapsed_ms = (time.perf_counter() - start_time) * 1000
                     record_op("matmul", elapsed_ms, "CPU")
-                    return Tensor(result, dtype=self._dtype, backend=self.backend)
+                    return ndarray(result, dtype=self._dtype, backend=self.backend)
 
                 # Case 2: Matrix Multiplication (2D @ 2D) - CPU
                 elif len(self.shape) == 2 and len(other.shape) == 2 and not is_metal:
@@ -756,10 +881,10 @@ class Tensor:
                     # Dispatch 2D kernel
                     ffi.tensor_matmul_2d_f32(ptr_a, ptr_b, ptr_out, m, k1, n)
 
-                    # Return wrapped Tensor
+                    # Return wrapped array
                     elapsed_ms = (time.perf_counter() - start_time) * 1000
                     record_op("matmul", elapsed_ms, "CPU")
-                    return Tensor(final_np, dtype=self._dtype, backend=self.backend)
+                    return ndarray(final_np, dtype=self._dtype, backend=self.backend)
 
                 else:
                     # Generic shapes not supported in optimized kernel yet
@@ -780,4 +905,21 @@ class Tensor:
         )
         elapsed_ms = (time.perf_counter() - start_time) * 1000
         record_op("matmul", elapsed_ms, self.backend.name)
-        return Tensor(result, dtype=self._dtype, backend=self.backend)
+        return ndarray(result, dtype=self._dtype, backend=self.backend)
+
+
+# Backward compatibility alias (deprecated)
+import warnings
+
+
+def _deprecated_tensor_class(*args, **kwargs):
+    """Deprecated: Use ndarray instead."""
+    warnings.warn(
+        "corepy.Tensor is deprecated, use corepy.array() or corepy.ndarray instead",
+        DeprecationWarning,
+        stacklevel=2,
+    )
+
+
+# Keep Tensor as deprecated alias for backward compatibility
+Tensor = ndarray

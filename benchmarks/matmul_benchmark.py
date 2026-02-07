@@ -24,8 +24,8 @@ def benchmark_matmul():
 
         for m, n in sizes:
             # Create random matrices
-            a = corepy.Tensor(np.random.randn(m, n).astype(np.float32))
-            b = corepy.Tensor(np.random.randn(n, m).astype(np.float32))
+            a = corepy.array(np.random.randn(m, n).astype(np.float32))
+            b = corepy.array(np.random.randn(n, m).astype(np.float32))
 
             # Warmup
             _ = a.matmul(b)

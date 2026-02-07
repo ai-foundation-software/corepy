@@ -22,7 +22,7 @@ class OperationType(Enum):
     CONTROL = auto()  # Control flow, scalar logic (always CPU)
     MEMORY_BOUND = auto()  # Element-wise, copy, cast (CPU preferred unless huge)
     COMPUTE_VECTOR = auto()  # Vectorized math (potential for GPU if large)
-    COMPUTE_MATRIX = auto()  # Matrix/Tensor math (Strong candidate for GPU)
+    COMPUTE_MATRIX = auto()  # Matrix/Array math (Strong candidate for GPU)
     SCALAR = auto()  # Single value ops (strictly CPU)
 
 

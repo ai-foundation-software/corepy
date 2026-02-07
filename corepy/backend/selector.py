@@ -49,14 +49,14 @@ def select_backend(
     # 1. User Override (API argument)
     if requested_backend:
         logger.debug(f"User requested backend: {requested_backend}")
-        
+
         # Verify availability
         if requested_backend == BackendType.GPU and not device_info.has_gpu:
             logger.warning(
                 f"Requested backend {requested_backend} but no GPU/Accelerator detected. Falling back to CPU."
             )
             return BackendType.CPU
-            
+
         return requested_backend
 
     # 2. Environment Variable Override

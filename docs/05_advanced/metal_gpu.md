@@ -10,13 +10,14 @@ Corepy provides native support for Apple Silicon GPU acceleration using the **Me
 
 ## Enabling Metal
 
-To use the Metal backend, simply specify `device="metal"` when creating a tensor:
+To use the Metal backend, simply specify `device="metal"` when creating an array:
 
 ```python
 import corepy as cp
 
 # Allocate directly on Metal GPU
-t = cp.Tensor([1.0, 2.0, 3.0, 4.0], device="metal")
+# Note: You can also use cp.array([...], device="metal")
+t = cp.array([1.0, 2.0, 3.0, 4.0], device="metal")
 
 # Perform operations (executed largely on GPU)
 result = t.sum() 
@@ -31,12 +32,12 @@ If you request `device="metal"` on a non-Mac or an Intel Mac without Metal suppo
 As of v0.2.3, the following operations are optimized for Metal:
 
 *   **Reduction**: `sum`, `mean`, `max`, `min`
-*   **Matrix Multiplication**: `matmul` (@) for 2D tensors
+*   **Matrix Multiplication**: `matmul` (@) for 2D arrays
 *   **Element-wise**: `add`, `sub`, `mul`, `div` (Basic kernels)
 
 ## Performance considerations
 
-1.  **Transfer Overhead**: Moving data between CPU (Python/NumPy) and GPU (Metal) has a cost. For small tensors (< 1M elements), the CPU is often faster due to lower latency.
+1.  **Transfer Overhead**: Moving data between CPU (Python/NumPy) and GPU (Metal) has a cost. For small arrays (< 1M elements), the CPU is often faster due to lower latency.
 2.  **Shared Memory**: Corepy uses `MTLResourceStorageModeShared` on Apple Silicon, which allows the CPU and GPU to share system memory without explicit copies in some cases, but cache coherency must be managed.
 3.  **Compilation**: Metal kernels are compiled at runtime (or loaded from `.metallib` if pre-compiled). The first operation might be slightly slower due to pipeline state creation.
 
@@ -49,10 +50,10 @@ xcode-select --install
 ```
 
 ### Verification
-You can verify Metal is active by checking the tensor's device:
+You can verify Metal is active by checking the array's device:
 
 ```python
-t = cp.Tensor([1.0], device="metal")
+t = cp.array([1.0], device="metal")
 # Internal buffer check (advanced)
 print(t._get_buffer_view().device.is_metal()) # True
 ```

@@ -50,7 +50,17 @@ pub fn register_functions(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(metal_is_available, m)?)?;
     m.add_function(wrap_pyfunction!(metal_sum_f32, m)?)?;
     m.add_function(wrap_pyfunction!(metal_mean_f32, m)?)?;
+    m.add_function(wrap_pyfunction!(metal_max_f32, m)?)?;
+    m.add_function(wrap_pyfunction!(metal_min_f32, m)?)?;
     m.add_function(wrap_pyfunction!(metal_matmul_f32, m)?)?;
+    m.add_function(wrap_pyfunction!(metal_add_f32, m)?)?;
+    m.add_function(wrap_pyfunction!(metal_sub_f32, m)?)?;
+    m.add_function(wrap_pyfunction!(metal_mul_f32, m)?)?;
+    m.add_function(wrap_pyfunction!(metal_div_f32, m)?)?;
+
+    // System capabilities
+    m.add_function(wrap_pyfunction!(get_system_capabilities, m)?)?;
+    m.add_function(wrap_pyfunction!(get_capabilities_summary, m)?)?;
 
     // Demo functions (backward compatibility)
     m.add_function(wrap_pyfunction!(sum_as_string, m)?)?;
@@ -93,6 +103,48 @@ fn get_profile_report(context: Option<String>) -> PyResult<String> {
 fn set_profile_context(context: Option<String>) -> PyResult<()> {
     crate::profiler::set_context(context);
     Ok(())
+}
+
+// ============================================================================
+// System Capabilities
+// ============================================================================
+
+/// Get system capabilities as a Python dict
+#[pyfunction]
+fn get_system_capabilities(py: Python<'_>) -> PyResult<pyo3::Py<pyo3::types::PyDict>> {
+    use pyo3::types::PyDict;
+    use crate::backend::get_capabilities;
+    
+    let caps = get_capabilities();
+    
+    let cpu_dict = PyDict::new_bound(py);
+    cpu_dict.set_item("arch", format!("{:?}", caps.cpu.arch))?;
+    cpu_dict.set_item("cores", caps.cpu.core_count)?;
+    cpu_dict.set_item("has_avx2", caps.cpu.has_avx2)?;
+    cpu_dict.set_item("has_avx512", caps.cpu.has_avx512f)?;
+    cpu_dict.set_item("has_fma", caps.cpu.has_fma)?;
+    cpu_dict.set_item("has_neon", caps.cpu.has_neon)?;
+    cpu_dict.set_item("best_simd", caps.best_simd_backend())?;
+    
+    let gpu_dict = PyDict::new_bound(py);
+    gpu_dict.set_item("metal_available", caps.gpu.metal_available)?;
+    gpu_dict.set_item("cuda_available", caps.gpu.cuda_available)?;
+    gpu_dict.set_item("rocm_available", caps.gpu.rocm_available)?;
+    if let Some(best) = caps.best_gpu_backend() {
+        gpu_dict.set_item("best_gpu", best)?;
+    }
+    
+    let result = PyDict::new_bound(py);
+    result.set_item("cpu", cpu_dict)?;
+    result.set_item("gpu", gpu_dict)?;
+    
+    Ok(result.into())
+}
+
+/// Get a human-readable summary of system capabilities
+#[pyfunction]
+fn get_capabilities_summary() -> String {
+    crate::backend::get_capabilities().summary()
 }
 
 // ============================================================================
@@ -758,3 +810,244 @@ fn metal_matmul_f32(
         ))
     }
 }
+
+// ============================================================================
+// Metal Reduction Operations (max, min)
+// ============================================================================
+
+#[pyfunction]
+fn metal_max_f32(data_ptr: usize, count: usize) -> PyResult<f32> {
+    #[cfg(target_os = "macos")]
+    {
+        use crate::ops::metal::max_f32_metal_dispatch;
+
+        if data_ptr == 0 {
+            return Err(pyo3::exceptions::PyValueError::new_err(
+                "Null pointer passed to metal_max_f32",
+            ));
+        }
+
+        if count == 0 {
+            return Err(pyo3::exceptions::PyValueError::new_err(
+                "Cannot compute max of empty tensor",
+            ));
+        }
+
+        let _scope = crate::profiler::ProfileScope::new(
+            GLOBAL_PROFILER.clone(),
+            "max".to_string(),
+            "Metal".to_string(),
+            count,
+        );
+
+        let result = unsafe { max_f32_metal_dispatch(data_ptr as *const f32, count) };
+        Ok(result)
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = (data_ptr, count);
+        Err(pyo3::exceptions::PyRuntimeError::new_err(
+            "Metal is only available on macOS",
+        ))
+    }
+}
+
+#[pyfunction]
+fn metal_min_f32(data_ptr: usize, count: usize) -> PyResult<f32> {
+    #[cfg(target_os = "macos")]
+    {
+        use crate::ops::metal::min_f32_metal_dispatch;
+
+        if data_ptr == 0 {
+            return Err(pyo3::exceptions::PyValueError::new_err(
+                "Null pointer passed to metal_min_f32",
+            ));
+        }
+
+        if count == 0 {
+            return Err(pyo3::exceptions::PyValueError::new_err(
+                "Cannot compute min of empty tensor",
+            ));
+        }
+
+        let _scope = crate::profiler::ProfileScope::new(
+            GLOBAL_PROFILER.clone(),
+            "min".to_string(),
+            "Metal".to_string(),
+            count,
+        );
+
+        let result = unsafe { min_f32_metal_dispatch(data_ptr as *const f32, count) };
+        Ok(result)
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = (data_ptr, count);
+        Err(pyo3::exceptions::PyRuntimeError::new_err(
+            "Metal is only available on macOS",
+        ))
+    }
+}
+
+// ============================================================================
+// Metal Element-wise Operations (add, sub, mul, div)
+// ============================================================================
+
+#[pyfunction]
+fn metal_add_f32(a_ptr: usize, b_ptr: usize, result_ptr: usize, count: usize) -> PyResult<()> {
+    #[cfg(target_os = "macos")]
+    {
+        use crate::ops::metal::add_f32_metal_dispatch;
+
+        if a_ptr == 0 || b_ptr == 0 || result_ptr == 0 {
+            return Err(pyo3::exceptions::PyValueError::new_err(
+                "Null pointer passed to metal_add_f32",
+            ));
+        }
+
+        let _scope = crate::profiler::ProfileScope::new(
+            GLOBAL_PROFILER.clone(),
+            "add".to_string(),
+            "Metal".to_string(),
+            count,
+        );
+
+        unsafe {
+            add_f32_metal_dispatch(
+                a_ptr as *const f32,
+                b_ptr as *const f32,
+                result_ptr as *mut f32,
+                count,
+            );
+        }
+        Ok(())
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = (a_ptr, b_ptr, result_ptr, count);
+        Err(pyo3::exceptions::PyRuntimeError::new_err(
+            "Metal is only available on macOS",
+        ))
+    }
+}
+
+#[pyfunction]
+fn metal_sub_f32(a_ptr: usize, b_ptr: usize, result_ptr: usize, count: usize) -> PyResult<()> {
+    #[cfg(target_os = "macos")]
+    {
+        use crate::ops::metal::sub_f32_metal_dispatch;
+
+        if a_ptr == 0 || b_ptr == 0 || result_ptr == 0 {
+            return Err(pyo3::exceptions::PyValueError::new_err(
+                "Null pointer passed to metal_sub_f32",
+            ));
+        }
+
+        let _scope = crate::profiler::ProfileScope::new(
+            GLOBAL_PROFILER.clone(),
+            "sub".to_string(),
+            "Metal".to_string(),
+            count,
+        );
+
+        unsafe {
+            sub_f32_metal_dispatch(
+                a_ptr as *const f32,
+                b_ptr as *const f32,
+                result_ptr as *mut f32,
+                count,
+            );
+        }
+        Ok(())
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = (a_ptr, b_ptr, result_ptr, count);
+        Err(pyo3::exceptions::PyRuntimeError::new_err(
+            "Metal is only available on macOS",
+        ))
+    }
+}
+
+#[pyfunction]
+fn metal_mul_f32(a_ptr: usize, b_ptr: usize, result_ptr: usize, count: usize) -> PyResult<()> {
+    #[cfg(target_os = "macos")]
+    {
+        use crate::ops::metal::mul_f32_metal_dispatch;
+
+        if a_ptr == 0 || b_ptr == 0 || result_ptr == 0 {
+            return Err(pyo3::exceptions::PyValueError::new_err(
+                "Null pointer passed to metal_mul_f32",
+            ));
+        }
+
+        let _scope = crate::profiler::ProfileScope::new(
+            GLOBAL_PROFILER.clone(),
+            "mul".to_string(),
+            "Metal".to_string(),
+            count,
+        );
+
+        unsafe {
+            mul_f32_metal_dispatch(
+                a_ptr as *const f32,
+                b_ptr as *const f32,
+                result_ptr as *mut f32,
+                count,
+            );
+        }
+        Ok(())
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = (a_ptr, b_ptr, result_ptr, count);
+        Err(pyo3::exceptions::PyRuntimeError::new_err(
+            "Metal is only available on macOS",
+        ))
+    }
+}
+
+#[pyfunction]
+fn metal_div_f32(a_ptr: usize, b_ptr: usize, result_ptr: usize, count: usize) -> PyResult<()> {
+    #[cfg(target_os = "macos")]
+    {
+        use crate::ops::metal::div_f32_metal_dispatch;
+
+        if a_ptr == 0 || b_ptr == 0 || result_ptr == 0 {
+            return Err(pyo3::exceptions::PyValueError::new_err(
+                "Null pointer passed to metal_div_f32",
+            ));
+        }
+
+        let _scope = crate::profiler::ProfileScope::new(
+            GLOBAL_PROFILER.clone(),
+            "div".to_string(),
+            "Metal".to_string(),
+            count,
+        );
+
+        unsafe {
+            div_f32_metal_dispatch(
+                a_ptr as *const f32,
+                b_ptr as *const f32,
+                result_ptr as *mut f32,
+                count,
+            );
+        }
+        Ok(())
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = (a_ptr, b_ptr, result_ptr, count);
+        Err(pyo3::exceptions::PyRuntimeError::new_err(
+            "Metal is only available on macOS",
+        ))
+    }
+}
+

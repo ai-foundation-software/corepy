@@ -10,13 +10,12 @@ fn main() {
         .parent()
         .unwrap();
 
-    let csrc_path = repo_root.join("csrc");
-    let build_path = csrc_path.join("build");
+    let build_path = repo_root.join("build").join("csrc");
 
     // Check if C++ library is built
     if !build_path.exists() {
         eprintln!("WARNING: C++ kernels not built!");
-        eprintln!("Run: cd csrc && cmake -B build && cmake --build build");
+        eprintln!("Run: ./scripts/build.sh or check 'build' directory");
         return;
     }
 

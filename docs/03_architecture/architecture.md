@@ -14,19 +14,40 @@ Corepy uses a **multi-layered backend architecture** designed for:
 3. **Performance**: Zero-cost abstractions for backend dispatch
 4. **Extensibility**: Plugin system for custom backends
 
-```mermaid
-graph TD
-    A[Python API] --> B[Backend Dispatcher]
-    B --> C[CPU Backend]
-    B --> D[GPU Backend]
-    B --> E[Reference Backend]
-    C --> F[C++ SIMD Kernels]
-    D --> G[CUDA/Metal Kernels]
-    E --> H[Pure Python]
-    style B fill:#e1f5ff
-    style C fill:#d4edda
-    style D fill:#fff3cd
-    style E fill:#f8d7da
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                           Python API (corepy/)                              │
+│                    ┌──────────────────────────────────┐                    │
+│                    │   Tensor / Buffer / Operations   │                    │
+│                    └──────────────┬───────────────────┘                    │
+└───────────────────────────────────┼─────────────────────────────────────────┘
+                                    │
+┌───────────────────────────────────▼─────────────────────────────────────────┐
+│                         Rust Runtime (rust/core/)                           │
+│  ┌─────────────────────────────────────────────────────────────────────┐   │
+│  │                      Backend Dispatcher                              │   │
+│  │   ┌─────────────┐  ┌─────────────┐  ┌─────────────┐                 │   │
+│  │   │ Capabilities│  │   Policy    │  │  Feature    │                 │   │
+│  │   │  Detection  │──│  Selection  │──│  Detection  │                 │   │
+│  │   └─────────────┘  └─────────────┘  └─────────────┘                 │   │
+│  └─────────────────────────────────────────────────────────────────────┘   │
+│                                    │                                        │
+│         ┌──────────────┬───────────┼───────────┬──────────────┐            │
+│         ▼              ▼           ▼           ▼              ▼            │
+│  ┌───────────┐  ┌───────────┐ ┌─────────┐ ┌─────────┐  ┌───────────┐      │
+│  │  Scalar   │  │   SIMD    │ │ OpenBLAS│ │  Metal  │  │  Future   │      │
+│  │ Fallback  │  │AVX2/512   │ │  BLAS   │ │ (macOS) │  │CUDA/ROCm  │      │
+│  │           │  │  /NEON    │ │         │ │         │  │           │      │
+│  └─────┬─────┘  └─────┬─────┘ └────┬────┘ └────┬────┘  └─────┬─────┘      │
+└────────┼──────────────┼────────────┼───────────┼─────────────┼─────────────┘
+         │              │            │           │             │
+┌────────▼──────────────▼────────────▼───────────▼─────────────▼─────────────┐
+│                            Execution Layer                                  │
+│  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────────────┐     │
+│  │   C++ Kernels   │  │   Metal MSL     │  │   Future GPU Backends   │     │
+│  │ (csrc/src/cpu/) │  │ (csrc/src/metal)│  │   (CUDA/ROCm/Vulkan)    │     │
+│  └─────────────────┘  └─────────────────┘  └─────────────────────────┘     │
+└─────────────────────────────────────────────────────────────────────────────┘
 ```
 
 ---
@@ -78,52 +99,77 @@ device = GPUDevice(device_id=0)  # First GPU
 # Located at: corepy/backend/reference.py
 
 # Future API:
-from corepy.backend import ReferenceBackend
-
-result = ReferenceBackend.add([1, 2, 3], [4, 5, 6])
-# Output: [5, 7, 9]
+# from corepy.backend import ReferenceBackend
 ```
 
 ---
 
 ## 🔍 Device Detection System
 
-Corepy automatically detects available hardware at runtime.
+Corepy automatically detects available hardware at runtime via the Rust backend.
 
-### Detecting System Capabilities
+### Detecting System Capabilities (Python API)
 
 ```python
-from corepy.backend import detect_devices
+from corepy._corepy_rust import get_system_capabilities, get_capabilities_summary
 
-# Get comprehensive device information
-info = detect_devices()
+# Quick summary
+print(get_capabilities_summary())
+# Output: CPU: X86_64 (4 cores, SIMD: AVX2+FMA), GPU: None
 
-print(f"CPU Cores: {info.cpu_cores}")
-print(f"Has AVX2: {info.has_avx2}")
-print(f"Has AVX-512: {info.has_avx512}")
-print(f"Has NEON: {info.has_neon}")
-print(f"GPU Count: {info.gpu_count}")
-print(f"Platform: {info.platform_system}")
+# Detailed capabilities
+caps = get_system_capabilities()
+print(f"Architecture: {caps['cpu']['arch']}")
+print(f"Cores: {caps['cpu']['cores']}")
+print(f"AVX2: {caps['cpu']['has_avx2']}")
+print(f"AVX-512: {caps['cpu']['has_avx512']}")
+print(f"NEON: {caps['cpu']['has_neon']}")
+print(f"Metal GPU: {caps['gpu']['metal_available']}")
 ```
 
 **Example Output (Linux x86_64)**:
 ```
-CPU Cores: 4
-Has AVX2: True
-Has AVX-512: False
-Has NEON: False
-GPU Count: 0
-Platform: Linux
+CPU: X86_64 (4 cores, SIMD: AVX2+FMA), GPU: None
+Architecture: X86_64
+Cores: 4
+AVX2: True
+AVX-512: False
+NEON: False
+Metal GPU: False
 ```
 
 **Example Output (Apple M1)**:
 ```
-CPU Cores: 8
-Has AVX2: False
-Has AVX-512: False
-Has NEON: True
-GPU Count: 1
-Platform: Darwin
+CPU: Aarch64 (8 cores, SIMD: NEON), GPU: Metal
+Architecture: Aarch64
+Cores: 8
+AVX2: False
+AVX-512: False
+NEON: True
+Metal GPU: True
+```
+
+### Rust Capabilities API
+
+```rust
+// rust/core/src/backend/capabilities.rs
+
+pub struct CpuCapabilities {
+    pub arch: CpuArch,
+    pub has_avx2: bool,
+    pub has_avx512f: bool,
+    pub has_fma: bool,
+    pub has_neon: bool,
+    pub core_count: usize,
+}
+
+pub struct GpuCapabilities {
+    pub metal_available: bool,
+    pub cuda_available: bool,
+    pub rocm_available: bool,
+}
+
+pub fn get_capabilities() -> &'static SystemCapabilities;
 ```
 
 ### Device Information Structure
@@ -167,8 +213,8 @@ import corepy as cp
 # 3. Data size
 # 4. User preferences
 
-tensor = cp.Tensor([1, 2, 3])
-result = tensor + cp.Tensor([4, 5, 6])
+arr = cp.array([1, 2, 3])
+result = arr + cp.array([4, 5, 6])
 # Automatically uses CPU backend in v1
 ```
 
@@ -181,7 +227,9 @@ from corepy.backend import select_backend, OperationProperties, detect_devices
 op_props = OperationProperties(
     op_type="elementwise_add",
     input_size_bytes=1024,
-    requires_gpu=False
+    requires_gpu=False,
+    element_count=256,
+    shape=(256,)
 )
 
 # Get device info
@@ -258,7 +306,7 @@ pub struct TaskScheduler {
 }
 
 impl TaskScheduler {
-    pub fn execute_graph(&self, graph: &ComputeGraph) -> Result<Tensor> {
+    pub fn execute_graph(&self, graph: &ComputeGraph) -> Result<ndarray> {
         // Work-stealing execution of compute graph
         graph.nodes.par_iter()
             .map(|node| self.execute_node(node))
@@ -593,8 +641,19 @@ large_data.to_device("gpu")  # Transfer cost amortized over compute
 
 - [ARCHITECTURE_VISION.md](file:///home/crazyguy/VSCode/corepy/ARCHITECTURE_VISION.md) - Long-term architecture
 - [COREPY_V1_REVIEW.md](file:///home/crazyguy/VSCode/corepy/COREPY_V1_REVIEW.md) - v1 scope and constraints
+- [NumPy Compatibility Guide](file:///home/crazyguy/VSCode/corepy/docs/02_core_concepts/numpy_compatibility.md) - API mapping
 - [Rust Source](file:///home/crazyguy/VSCode/corepy/rust/core/src/lib.rs) - Current Rust implementation
 - [Backend Source](file:///home/crazyguy/VSCode/corepy/corepy/backend/) - Python backend code
+
+---
+
+## 📝 Design Decisions
+
+### Renaming `Tensor` to `ndarray` (v0.2.3)
+**Rationale**:
+- **NumPy Alignment**: Adoption is easier for users familiar with the standard scientific Python ecosystem (NumPy, SciPy).
+- **Semantics**: `Tensor` often implies deep learning features (autograd, computation graphs), while `ndarray` correctly implies a general-purpose n-dimensional array. CorePy provides the foundational array container.
+- **Future Proofing**: Reserves `Tensor` as a potential high-level wrapper for future autograd capabilities, distinct from the raw memory container `ndarray`.
 
 ---
 

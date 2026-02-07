@@ -12,7 +12,7 @@ Identified and resolved a **critical data corruption vulnerability** in the zero
 
 **Impact**: 
 - **Bug Severity**: Critical (silent data corruption)
-- **Affected Code**: `corepy/tensor.py` - `_get_buffer_pointer()`
+- **Affected Code**: `corepy/array.py` - `_get_buffer_pointer()`
 - **Fix**: Added `C_CONTIGUOUS` validation with safe copy fallback
 - **Test Coverage**: 14/14 tests passing (including new stride safety test)
 

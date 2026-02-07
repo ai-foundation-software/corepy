@@ -24,10 +24,12 @@ Unlike untyped array libraries, Corepy is built on a **strict runtime** that ens
 It is designed for developers building **AI foundations**, **scientific simulations**, and **high-performance systems**.
 
 ### Key Features
+- **NumPy-Compatible API**: Familiar `cp.array`, `cp.zeros`, `cp.add` interface.
 - **🚀 Metal GPU**: Native acceleration on macOS (Apple Silicon) with `device="metal"`.
 - **📊 Profiler Export**: Visualise traces in Chrome/Perfetto with `cp.profiler.export_chrome_trace()`.
 - **⚡ Hybrid Runtime**: Rust dispatcher + C++ kernels + Objective-C++ (Metal).
 - **🛡️ Cross-Platform Build**: CMake-based build system that works on Linux, macOS, and Windows.
+- **📈 Efficient Stats**: Compute multiple statistics in one pass with `cp.compute_stats`.
 
 ---
 
@@ -80,7 +82,7 @@ pip install .
 import corepy as cp
 
 # Automatically uses Metal if available on macOS
-t = cp.Tensor([1.0, 2.0, 3.0], device="metal")
+t = cp.array([1.0, 2.0, 3.0], device="metal")
 result = t.sum()
 print(f"Result (GPU): {result}")
 ```
@@ -95,7 +97,7 @@ import corepy as cp
 cp.enable_profiling()
 
 # 2. Run your heavy workload
-x = cp.Tensor([1.0] * 1_000_000)
+x = cp.ones(1_000_000)
 y = x * 3.14159
 result = y.mean()
 

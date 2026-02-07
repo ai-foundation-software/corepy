@@ -93,11 +93,14 @@ uv run pytest tests/test_specific.py
 ### Building the Project
 
 ```bash
-# Quick rebuild (uses ./build.sh)
-./build.sh
+# Build
+make build
 
-# Clean rebuild (uses ./rebuild.sh)
-./rebuild.sh
+# Clean and Build
+make rebuild
+
+# Verify
+make verify
 ```
 
 ### Running Benchmarks
@@ -126,12 +129,8 @@ corepy/
 ├── corepy/              # Python package
 ├── csrc/                # C++ source files
 ├── rust/                # Rust runtime
-│   └── corepy-runtime/  # Core Rust runtime library
+│   └── core/            # Core Rust runtime library
 ├── tests/               # Test suite
-├── benchmarks/          # Performance benchmarks
-├── docs/                # Documentation
-├── examples/            # Example scripts
-└── pyproject.toml       # Project configuration
 ```
 
 ## Dependencies Overview
@@ -139,7 +138,6 @@ corepy/
 ### Runtime Dependencies
 - `typing-extensions>=4.6.0` - Type hints
 - `pydantic>=2.0.0` - Data validation
-- `corepy-runtime==0.2.0` - Rust runtime (local path)
 - `numpy>=2.0.2` - Numerical computing
 
 ### Development Dependencies
@@ -216,14 +214,13 @@ That's why maturin is in the **development dependencies** but not in runtime dep
 
 ### Modifying C++ Code
 1. Edit files in the `csrc/` directory
-2. Rebuild: `./build.sh`
-3. Run tests: `uv run pytest`
+2. Rebuild: `make build`
+3. Verify: `make verify`
 
 ### Modifying Rust Code
-1. Edit files in the `rust/corepy-runtime/` directory
-2. Rebuild: `cd rust/corepy-runtime && cargo build --release`
-3. Reinstall: `uv run python -m pip install -e . --no-build-isolation`
-4. Run tests: `uv run pytest`
+1. Edit files in the `rust/core/` directory
+2. Rebuild: `make build`
+3. Verify: `make verify`
 
 ## Contributing
 

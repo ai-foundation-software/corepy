@@ -42,7 +42,7 @@ import corepy as cp
 def main():
     # 1. Create Data
     # Allocates memory aligned for SIMD operations
-    prices = cp.Tensor([10.5, 20.0, 15.5, 30.0])
+    prices = cp.array([10.5, 20.0, 15.5, 30.0])
     
     # 2. Perform Usage
     # This happens at C++ speed (AVX2 optimized)
@@ -88,7 +88,7 @@ Corepy enforces data types more strictly to prevent silent overflows or precisio
 ```python
 import corepy as cp
 # Defaults to Float32 for performance, not Float64!
-t = cp.Tensor([1, 2, 3]) 
+t = cp.array([1, 2, 3]) 
 ```
 
 ### Immutable by Default (mostly)

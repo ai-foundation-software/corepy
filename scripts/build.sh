@@ -27,28 +27,52 @@ else
 fi
 echo "Using $JOBS parallel jobs"
 
+# Step 0: Install dependencies
+echo "Step 0/3: Installing dependencies..."
+if command -v uv >/dev/null 2>&1; then
+    echo "Using uv to sync..."
+    uv sync
+else
+    echo "⚠️ uv not found, skipping sync"
+fi
+
 # Step 1: Build C++ kernels
 echo ""
-echo "Step 1/2: Building C++ kernels..."
-mkdir -p csrc/build
-cd csrc/build
+echo "Step 1/3: Building C++ kernels..."
+mkdir -p build
+cd build
+
+if command -v uv >/dev/null 2>&1; then
+    CMAKE_CMD="uv run cmake"
+    PYBIND11_CMAKE_DIR=$(uv run python -c "import pybind11; print(pybind11.get_cmake_dir())" 2>/dev/null)
+    echo "Using pybind11 at: $PYBIND11_CMAKE_DIR"
+    CMAKE_ARGS="-Dpybind11_DIR=$PYBIND11_CMAKE_DIR"
+else
+    CMAKE_CMD="cmake"
+    # Fallback: hope it's in system path or user handles it
+    CMAKE_ARGS=""
+fi
 
 if command -v ninja >/dev/null 2>&1; then
-    cmake .. -G Ninja -DCMAKE_BUILD_TYPE=Release
-    cmake --build . --config Release
+    $CMAKE_CMD .. -G Ninja -DCMAKE_BUILD_TYPE=Release $CMAKE_ARGS
+    $CMAKE_CMD --build . --config Release
 else
-    cmake .. -DCMAKE_BUILD_TYPE=Release
-    cmake --build . --config Release -j $JOBS
+    $CMAKE_CMD .. -DCMAKE_BUILD_TYPE=Release $CMAKE_ARGS
+    $CMAKE_CMD --build . --config Release -j $JOBS
 fi
+
+# Install artifacts locally (to corepy/ directory)
+$CMAKE_CMD --install . --prefix ..
+
 cd "$REPO_ROOT"
 echo "✅ C++ kernels built"
 
 # Step 2: Build Rust runtime
 echo ""
-echo "Step 2/2: Building Rust runtime..."
+echo "Step 2/3: Building Rust runtime..."
 if command -v uv >/dev/null 2>&1; then
-    echo "Using uv to sync and build..."
-    uv sync
+    echo "Using maturin to build (via uv)..."
+    uv run maturin develop --release
 else
     echo "Using maturin to build..."
     maturin develop --release
@@ -59,19 +83,9 @@ echo "✅ Rust runtime built"
 echo ""
 echo "=== Verification ==="
 if command -v uv >/dev/null 2>&1; then
-    uv run python -c "
-import corepy as cp
-print(f'✅ corepy {cp.__version__} loaded')
-print(f'✅ Backend: {cp.get_backend_policy()}')
-print(f'✅ Tensor test: {cp.Tensor([1.0, 2.0, 3.0])}')
-"
+    uv run python scripts/verify_install.py
 else
-    python3 -c "
-import corepy as cp
-print(f'✅ corepy {cp.__version__} loaded')
-print(f'✅ Backend: {cp.get_backend_policy()}')
-print(f'✅ Tensor test: {cp.Tensor([1.0, 2.0, 3.0])}')
-"
+    python3 scripts/verify_install.py
 fi
 
 echo ""

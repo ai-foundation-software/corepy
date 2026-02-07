@@ -3,6 +3,9 @@
 // ============================================================================
 // This module provides Metal GPU acceleration for macOS/Apple Silicon.
 // All functions are conditionally compiled only on macOS.
+//
+// Note: Some functions are reserved for future API exposure and may appear unused.
+#![allow(dead_code)]
 
 /// Metal FFI declarations - only available on macOS
 #[cfg(target_os = "macos")]

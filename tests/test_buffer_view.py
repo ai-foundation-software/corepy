@@ -3,16 +3,16 @@
 import numpy as np
 import pytest
 
+from corepy.backend.types import DataType
 from corepy.buffer import (
-    BufferView,
     CPU,
+    BufferView,
     Device,
     DeviceType,
     MemoryType,
     from_buffer,
     from_numpy,
 )
-from corepy.backend.types import DataType
 
 
 class TestDeviceType:

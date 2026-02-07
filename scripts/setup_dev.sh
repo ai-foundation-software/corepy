@@ -49,15 +49,22 @@ fi
 # Step 2: Build C++ kernels
 echo ""
 echo "Step 2/4: Building C++ kernels..."
-mkdir -p csrc/build
-cd csrc/build
+mkdir -p build
+cd build
+
+if command -v uv >/dev/null 2>&1; then
+    PYBIND11_CMAKE_DIR=$(uv run python -c "import pybind11; print(pybind11.get_cmake_dir())" 2>/dev/null)
+    CMAKE_ARGS="-Dpybind11_DIR=$PYBIND11_CMAKE_DIR"
+else
+    CMAKE_ARGS=""
+fi
 
 # Use Ninja if available, otherwise default generator
 if command -v ninja >/dev/null 2>&1; then
-    cmake .. -G Ninja -DCMAKE_BUILD_TYPE=Release
+    cmake .. -G Ninja -DCMAKE_BUILD_TYPE=Release $CMAKE_ARGS
     cmake --build . --config Release
 else
-    cmake .. -DCMAKE_BUILD_TYPE=Release
+    cmake .. -DCMAKE_BUILD_TYPE=Release $CMAKE_ARGS
     cmake --build . --config Release
 fi
 cd "$REPO_ROOT"
@@ -77,22 +84,10 @@ echo "✅ Rust runtime built"
 # Step 4: Verify installation
 echo ""
 echo "Step 4/4: Verifying installation..."
-if [ "$PKG_MGR" = "uv" ]; then
-    uv run python -c "
-import corepy
-print(f'✅ corepy {corepy.__version__} loaded')
-print(f'✅ Backend: {corepy.get_backend_policy()}')
-t = corepy.Tensor([1.0, 2.0, 3.0])
-print(f'✅ Tensor: {t}')
-"
+if command -v uv >/dev/null 2>&1; then
+    uv run python scripts/verify_install.py
 else
-    python -c "
-import corepy
-print(f'✅ corepy {corepy.__version__} loaded')
-print(f'✅ Backend: {corepy.get_backend_policy()}')
-t = corepy.Tensor([1.0, 2.0, 3.0])
-print(f'✅ Tensor: {t}')
-"
+    python3 scripts/verify_install.py
 fi
 
 echo ""

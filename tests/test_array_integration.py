@@ -1,9 +1,9 @@
+from corepy import array, ndarray
 from corepy.backend import BackendType
-from corepy.tensor import Tensor
 
 
 def test_tensor_creation_defaults():
-    t = Tensor([1.0, 2.0, 3.0])
+    t = array([1.0, 2.0, 3.0])
     assert t.backend == BackendType.CPU
     assert t.shape == (3,)
 
@@ -37,12 +37,12 @@ def test_tensor_auto_gpu_threshold_mock(monkeypatch):
             session._session = s
 
             # 1. Small Tensor -> CPU
-            t_small = Tensor([1.0] * 1000)
+            t_small = array([1.0] * 1000)
             assert t_small.backend == BackendType.CPU
 
             # 2. Large Tensor -> GPU
             # THRESHOLD is 100,000
-            t_large = Tensor([1.0] * 100_001)
+            t_large = array([1.0] * 100_001)
             assert t_large.backend == BackendType.GPU
     finally:
         # Restore session
@@ -52,20 +52,22 @@ def test_tensor_auto_gpu_threshold_mock(monkeypatch):
 def test_tensor_explicit_override_api(monkeypatch):
     # Mock GPU presence
     from corepy.backend.device import DeviceInfo
+
     gpu_info = DeviceInfo(cpu_cores=4, gpu_count=1)
-    
+
     from corepy.backend import session
+
     with monkeypatch.context() as m:
         m.setattr("corepy.backend.session.detect_devices", lambda: gpu_info)
         m.setattr("corepy.backend.device.detect_devices", lambda: gpu_info)
-        
+
         # Reset session
         old_session_var = session._session
         old_session_instance = session.Session._instance
         session._session = None
         session.Session._instance = None
         try:
-            t = Tensor([1, 2, 3], backend="gpu")
+            t = ndarray([1, 2, 3], backend="gpu")
             assert t.backend == BackendType.GPU
         finally:
             session._session = old_session_var
@@ -75,19 +77,21 @@ def test_tensor_explicit_override_api(monkeypatch):
 def test_tensor_explicit_device_api(monkeypatch):
     # Mock GPU presence for "cuda:0" request
     from corepy.backend.device import DeviceInfo
+
     gpu_info = DeviceInfo(cpu_cores=4, gpu_count=1)
-    
+
     from corepy.backend import session
+
     with monkeypatch.context() as m:
         m.setattr("corepy.backend.session.detect_devices", lambda: gpu_info)
         m.setattr("corepy.backend.device.detect_devices", lambda: gpu_info)
-        
+
         old_session_var = session._session
         old_session_instance = session.Session._instance
         session._session = None
         session.Session._instance = None
         try:
-            t = Tensor([1, 2, 3], device="cuda:0")
+            t = array([1, 2, 3], device="cuda:0")
             assert t.backend == BackendType.GPU
         finally:
             session._session = old_session_var

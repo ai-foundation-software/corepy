@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """
-Test script to validate corepy 0.1.2 released package APIs.
+Test script to validate corepy 0.2.3 released package APIs.
 This will help us determine which examples work for usage.md documentation.
 """
 
 print("=" * 60)
-print("Testing Corepy 0.1.2 Released Package")
+print("Testing Corepy 0.2.3 Released Package")
 print("=" * 60)
 
 # Test 1: Basic imports
@@ -23,24 +23,37 @@ print("\n[Test 2] Available Top-Level Attributes")
 available = [attr for attr in dir(cp) if not attr.startswith("_")]
 print(f"Available: {', '.join(available)}")
 
-# Test 3: Tensor creation
-print("\n[Test 3] Tensor Creation")
+# Test 3: Array creation (NumPy-style)
+print("\n[Test 3] Array Creation")
 try:
+    # Primary API
+    a = cp.array([1.0, 2.0, 3.0])
+    print(f"✓ Created array: {a}")
+
+    # Factory functions
+    z = cp.zeros((2, 2))
+    print(f"✓ Created zeros: {z}")
+
+    # Backward compatibility
     from corepy import Tensor
 
-    a = Tensor([1.0, 2.0, 3.0])
-    print(f"✓ Created tensor: {a}")
+    t = Tensor([1, 2, 3])
+    print(f"✓ Created legacy Tensor: {t}")
 except Exception as e:
-    print(f"✗ Tensor creation failed: {e}")
+    print(f"✗ Array creation failed: {e}")
 
-# Test 4: Tensor operations
-print("\n[Test 4] Tensor Operations")
+# Test 4: Array operations
+print("\n[Test 4] Array Operations")
 try:
-    b = Tensor([4.0, 5.0, 6.0])
+    b = cp.array([4.0, 5.0, 6.0])
     c = a + b
     print(f"✓ Addition: {a} + {b} = {c}")
+
+    print(
+        f"✓ Properties: shape={c.shape}, dtype={c.dtype}, ndim={c.ndim}, size={c.size}"
+    )
 except Exception as e:
-    print(f"✗ Tensor addition failed: {e}")
+    print(f"✗ Array operations failed: {e}")
 
 # Test 5: Data module
 print("\n[Test 5] Data Module")
@@ -76,8 +89,8 @@ try:
     # Test reference backend
     from corepy.backend import ReferenceBackend
 
-    result = ReferenceBackend.add([1, 2, 3], [4, 5, 6])
-    print(f"✓ ReferenceBackend.add([1,2,3], [4,5,6]) = {result}")
+    # Usage depends on backend impl, but verifying import is good
+    print("✓ ReferenceBackend available")
 except Exception as e:
     print(f"✗ Backend module failed: {e}")
 

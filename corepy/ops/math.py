@@ -13,7 +13,7 @@ from ..backend.types import BackendType
 # - Rust Layer: Validation, scheduling, memory management
 # - C++ Layer: Pure execution (SIMD kernels)
 #
-# When Rust/C++ FFI is available, the Tensor class uses FFI directly.
+# When Rust/C++ FFI is available, the ndarray class uses FFI directly.
 # These Python fallbacks are used ONLY when the Rust extension is not
 # compiled, providing cross-platform compatibility (ARM/x86).
 #

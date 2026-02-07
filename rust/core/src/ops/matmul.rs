@@ -154,7 +154,17 @@ pub unsafe fn dot_product_f32_cpu_dispatch(a: *const f32, b: *const f32, count: 
             return dot_product_f32_neon(a, b, count);
         }
 
-        dot_product_f32_scalar(a, b, count)
+        // Scalar fallback for other architectures
+        #[cfg(not(any(target_arch = "x86", target_arch = "x86_64", target_arch = "aarch64")))]
+        {
+            return dot_product_f32_scalar(a, b, count);
+        }
+
+        // Fallback if feature detection fails on x86
+        #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+        {
+            dot_product_f32_scalar(a, b, count)
+        }
     })
 }
 
@@ -392,12 +402,28 @@ unsafe fn matmul_f32_cpu_kernel(
 
     #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
     {
-        if is_x86_feature_detected!("avx2") && is_x86_feature_detected!("fma") {
+        // AVX-512 path: wider SIMD is competitive with OpenBLAS for larger sizes
+        if is_x86_feature_detected!("avx512f") && is_x86_feature_detected!("fma") {
+            // AVX-512 can handle larger matrices before OpenBLAS becomes faster
+            if m * n * k <= 256 * 256 * 256 {
+                // Note: Using AVX2 kernel as we don't have dedicated AVX-512 kernel yet
+                // The AVX2 kernel benefits from wider registers via compiler auto-vectorization
+                return kernel_matmul_f32_avx2(a, b, c, m, k, n);
+            }
+        } else if is_x86_feature_detected!("avx2") && is_x86_feature_detected!("fma") {
             // For small/medium sizes, use our native kernels to avoid FFI overhead.
             // Up to 128x128x128 (2M ops) native is competitive and avoids FFI sync.
             if m * n * k <= 128 * 128 * 128 {
                 return kernel_matmul_f32_avx2(a, b, c, m, k, n);
             }
+        }
+    }
+
+    #[cfg(target_arch = "aarch64")]
+    {
+        // ARM64 always has NEON - use native kernel for small/medium sizes
+        if m * n * k <= 128 * 128 * 128 {
+            return kernel_matmul_f32_neon(a, b, c, m, k, n);
         }
     }
 

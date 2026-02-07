@@ -9,7 +9,7 @@ This document outlines the development milestones for Corepy.
   - ✅ Zero-config Profiling System (`corepy.profiler`)
   - ✅ Basic Tensor Operations (add, sub, mul, matmul)
   - ✅ Rust FFI Integration (`corepy-runtime`) - **Active**
-  - ✅ Python API (`corepy.tensor`, explicit Backend selection)
+  - ✅ Python API (`corepy.array`, explicit Backend selection)
 
 ---
 
@@ -29,7 +29,7 @@ This document outlines the development milestones for Corepy.
 **Goal**: First working GPU acceleration on consumer hardware.
 - **Features**:
   - [ ] CUDA Backend integration
-  - [ ] `tensor.to("cuda")` implementation
+  - [ ] `array.to("cuda")` implementation
   - [ ] Basic memory management for GPU
 - **Tech Stack**:
   - CUDA kernels via C++ layer

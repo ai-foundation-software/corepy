@@ -59,7 +59,7 @@ def test_select_backend_explicit_request():
     # We must mock a GPU device for the request to be honored now
     gpu_info = DeviceInfo(cpu_cores=4, gpu_count=1)
     op_props = OperationProperties(element_count=100, shape=(100,))
-    
+
     backend = select_backend(
         OperationType.COMPUTE_VECTOR,
         op_props,

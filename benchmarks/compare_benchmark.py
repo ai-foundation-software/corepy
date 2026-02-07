@@ -28,8 +28,8 @@ def benchmark_compare():
             np_a = np.random.randn(m, n).astype(np.float32)
             np_b = np.random.randn(n, m).astype(np.float32)
 
-            cp_a = corepy.Tensor(np_a)
-            cp_b = corepy.Tensor(np_b)
+            cp_a = corepy.array(np_a)
+            cp_b = corepy.array(np_b)
 
             # --- NumPy Benchmark ---
             # Warmup

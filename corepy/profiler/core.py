@@ -276,35 +276,41 @@ def export_profile(filename: str, format: str = "json", context: Optional[str] =
         # Since we only have aggregated stats, we visualize them as a sequential timeline
         # to represent relative costs.
         trace_events = []
-        
+
         # Metadata
-        trace_events.append({
-            "name": "process_name", "ph": "M", "pid": 1, 
-            "args": {"name": "Corepy Profile"}
-        })
-        
+        trace_events.append(
+            {
+                "name": "process_name",
+                "ph": "M",
+                "pid": 1,
+                "args": {"name": "Corepy Profile"},
+            }
+        )
+
         current_ts = 0.0
-        
+
         ops = report.get("operations", {}).values()
         # Sort by total time for better visibility
         sorted_ops = sorted(ops, key=lambda x: x["total_time_ms"], reverse=True)
-        
+
         for op in sorted_ops:
             duration_us = op["total_time_ms"] * 1000.0
-            trace_events.append({
-                "name": op["operation"],
-                "cat": "op",
-                "ph": "X", # Complete event
-                "ts": current_ts,
-                "dur": duration_us,
-                "pid": 1,
-                "tid": 1,
-                "args": {
-                    "count": op["count"],
-                    "avg_ms": op["avg_time_ms"],
-                    "backend": op.get("primary_backend", "unknown")
+            trace_events.append(
+                {
+                    "name": op["operation"],
+                    "cat": "op",
+                    "ph": "X",  # Complete event
+                    "ts": current_ts,
+                    "dur": duration_us,
+                    "pid": 1,
+                    "tid": 1,
+                    "args": {
+                        "count": op["count"],
+                        "avg_ms": op["avg_time_ms"],
+                        "backend": op.get("primary_backend", "unknown"),
+                    },
                 }
-            })
+            )
             current_ts += duration_us
 
         with open(filename, "w") as f:
@@ -314,15 +320,16 @@ def export_profile(filename: str, format: str = "json", context: Optional[str] =
 def export_chrome_trace(filename: str) -> str:
     """
     Export the current profile to a Chrome Tracing JSON configuration.
-    
+
     Args:
         filename: Output path (e.g. 'trace.json')
-        
+
     Returns:
         The absolute path to the file.
     """
     export_profile(filename, format="chrome_tracing")
     import os
+
     return os.path.abspath(filename)
 
 
@@ -333,7 +340,7 @@ def _convert_to_speedscope(report):
 
     start_time = 0.0
     # ... (rest of speedscope implementation)
-    return report # Placeholder implementation consistent with previous state
+    return report  # Placeholder implementation consistent with previous state
 
 
 class ProfileContext:

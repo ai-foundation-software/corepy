@@ -27,7 +27,7 @@ jobs:
         with:
           manylinux: auto
           command: build
-          args: --release --out dist --find-interpreter
+          args: --release --out dist --find-interpreter --interpreter 3.9 3.10 3.11 3.12 3.13
           target: ${{ matrix.target }}
           before-script-linux: |
             if command -v apt-get &> /dev/null; then
@@ -110,7 +110,7 @@ jobs:
       - name: Build Wheels with uv
         shell: bash
         run: |
-          uv run maturin build --release --out dist --interpreter ${{ matrix.python-version }}
+          uv run --python ${{ matrix.python-version }} maturin build --release --out dist --interpreter ${{ matrix.python-version }}
 
       - uses: actions/upload-artifact@v4
         with:

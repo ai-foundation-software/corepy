@@ -40,7 +40,7 @@ mod tensor; // Future: Shape, dtype, buffer management // Performance profiling 
 /// This exports Rust functions to Python via PyO3.
 /// All function signatures use raw pointers for zero-copy performance.
 #[pymodule]
-fn _corepy_rust(_py: Python, m: &PyModule) -> PyResult<()> {
+fn _corepy_rust(m: &Bound<'_, PyModule>) -> PyResult<()> {
     // Register all FFI functions from ffi/python.rs
     ffi::python::register_functions(m)?;
 

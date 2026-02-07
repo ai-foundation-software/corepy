@@ -11,7 +11,7 @@ lazy_static::lazy_static! {
 }
 
 /// Export all FFI functions to Python
-pub fn register_functions(m: &PyModule) -> PyResult<()> {
+pub fn register_functions(m: &Bound<'_, PyModule>) -> PyResult<()> {
     // Reduction operations (contiguous)
     m.add_function(wrap_pyfunction!(tensor_all, m)?)?;
     m.add_function(wrap_pyfunction!(tensor_any, m)?)?;
@@ -81,6 +81,7 @@ fn clear_profile() -> PyResult<()> {
 }
 
 #[pyfunction]
+#[pyo3(signature = (context=None))]
 fn get_profile_report(context: Option<String>) -> PyResult<String> {
     GLOBAL_PROFILER
         .export_json(context.as_deref())
@@ -88,6 +89,7 @@ fn get_profile_report(context: Option<String>) -> PyResult<String> {
 }
 
 #[pyfunction]
+#[pyo3(signature = (context=None))]
 fn set_profile_context(context: Option<String>) -> PyResult<()> {
     crate::profiler::set_context(context);
     Ok(())

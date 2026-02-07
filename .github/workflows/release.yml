@@ -110,7 +110,8 @@ jobs:
       - name: Build Wheels with uv
         shell: bash
         run: |
-          uv run --python ${{ matrix.python-version }} maturin build --release --out dist --interpreter ${{ matrix.python-version }}
+          uv sync --all-extras --group dev
+          uv run maturin build --release --out dist --manifest-path rust/core/Cargo.toml --interpreter python${{ matrix.python-version }}
 
       - uses: actions/upload-artifact@v4
         with:
@@ -125,7 +126,7 @@ jobs:
       - uses: PyO3/maturin-action@v1
         with:
           command: sdist
-          args: --out dist --manifest-path rust/core/Cargo.toml
+          args: --out dist
       - uses: actions/upload-artifact@v4
         with:
           name: sdist

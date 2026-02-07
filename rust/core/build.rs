@@ -18,7 +18,7 @@ fn main() {
         let cwd = std::env::current_dir()
             .map(|p| p.display().to_string())
             .unwrap_or_else(|_| "<unable to determine>".to_string());
-        
+
         let msg = format!(
             "C++ kernels not found at '{}'.\\n\
              Please run `./scripts/build.sh` or ensure `cmake` build has completed before compiling Rust.\\n\

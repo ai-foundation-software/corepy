@@ -15,25 +15,78 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  build_wheels:
-    name: Build wheels on ${{ matrix.os }}
+  linux_build:
+    name: Linux / ${{ matrix.target }}
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        target: [x86_64, aarch64]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: PyO3/maturin-action@v1
+        with:
+          manylinux: auto
+          command: build
+          args: --release --out dist --find-interpreter
+          target: ${{ matrix.target }}
+          before-script-linux: |
+            if command -v apt-get &> /dev/null; then
+              apt-get update && apt-get install -y libopenblas-dev cmake ninja-build
+            elif command -v yum &> /dev/null; then
+              yum install -y openblas-devel cmake ninja-build
+            fi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wheels-linux-${{ matrix.target }}
+          path: dist/*.whl
+
+  host_build:
+    name: ${{ matrix.os }} / ${{ matrix.python-version }}
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
-
+        os: [windows-latest, macos-latest]
+        python-version: ["3.9", "3.10", "3.11", "3.12", "3.13"]
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install OpenBLAS (macOS)
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          cache-suffix: "py${{ matrix.python-version }}"
+
+      - name: Set up Python ${{ matrix.python-version }}
+        run: uv python install ${{ matrix.python-version }}
+
+      - name: Install Rust Toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.os == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
+
+      # --- Dependencies & C++ Build ---
+
+      - name: Install OpenBLAS & Build C++ (macOS)
         if: runner.os == 'macOS'
         run: |
           brew install openblas cmake ninja
           echo "CMAKE_PREFIX_PATH=$(brew --prefix openblas)" >> $GITHUB_ENV
           echo "LIBRARY_PATH=$(brew --prefix openblas)/lib:$LIBRARY_PATH" >> $GITHUB_ENV
+          
+          # Build C++ Kernels matching ci.yml
+          echo "Building C++ Kernels..."
+          cmake -S csrc -B csrc/build -G Ninja -DCMAKE_BUILD_TYPE=Release
+          cmake --build csrc/build --config Release
 
-      - name: Install OpenBLAS (Windows)
+          # Build Metal Kernels
+          echo "Compiling Metal Kernels..."
+          xcrun -sdk macosx metal -v -c csrc/src/metal/kernels.metal -o csrc/build/kernels.air
+          xcrun -sdk macosx metallib csrc/build/kernels.air -o csrc/build/default.metallib
+          # Place metallib where package can find it (e.g. inside corepy package root)
+          cp csrc/build/default.metallib corepy/default.metallib
+
+      - name: Install OpenBLAS & Build C++ (Windows)
         if: runner.os == 'Windows'
         shell: bash
         run: |
@@ -41,18 +94,27 @@ jobs:
           unzip -q openblas.zip -d openblas
           echo "OPENBLAS_DIR=${{ github.workspace }}/openblas" >> $GITHUB_ENV
           echo "CMAKE_PREFIX_PATH=${{ github.workspace }}/openblas" >> $GITHUB_ENV
+          # Add to PATH for runtime (tests)
+          echo "${{ github.workspace }}/openblas/bin" >> $GITHUB_PATH
 
-      - uses: PyO3/maturin-action@v1
-        with:
-          command: build
-          args: --release --out dist
-          manylinux: auto
-          before-script-linux: |
-            yum install -y openblas-devel cmake ninja-build
+          # Build C++ Kernels
+          echo "Building C++ Kernels..."
+          cmake -S csrc -B csrc/build -DCMAKE_BUILD_TYPE=Release
+          cmake --build csrc/build --config Release
+
+      - name: Set RUSTFLAGS
+        shell: bash
+        run: |
+           echo "RUSTFLAGS=-C target-cpu=native" >> $GITHUB_ENV
+
+      - name: Build Wheels with uv
+        shell: bash
+        run: |
+          uv run maturin build --release --out dist --interpreter ${{ matrix.python-version }}
 
       - uses: actions/upload-artifact@v4
         with:
-          name: wheels-${{ matrix.os }}-${{ strategy.job-index }}
+          name: wheels-${{ matrix.os }}-${{ matrix.python-version }}
           path: dist/*.whl
 
   build_sdist:
@@ -63,7 +125,7 @@ jobs:
       - uses: PyO3/maturin-action@v1
         with:
           command: sdist
-          args: --out dist
+          args: --out dist --manifest-path rust/core/Cargo.toml
       - uses: actions/upload-artifact@v4
         with:
           name: sdist
@@ -71,7 +133,7 @@ jobs:
 
   publish:
     name: Publish to PyPI
-    needs: [build_wheels, build_sdist]
+    needs: [linux_build, host_build, build_sdist]
     runs-on: ubuntu-latest
     environment:
       name: pypi

@@ -5,6 +5,13 @@ Corepy: A unified, high-performance core runtime.
 import os
 import platform
 
+# MacOS Metal Library detection
+if platform.system() == "Darwin":
+    # If the wheel bundled the metallib, it should be here
+    bundled_lib = os.path.join(os.path.dirname(__file__), "default.metallib")
+    if os.path.exists(bundled_lib):
+        os.environ["COREPY_METAL_LIB_PATH"] = bundled_lib
+
 # Windows DLL Handling for OpenBLAS
 if platform.system() == "Windows":
     openblas_dir = os.environ.get("OPENBLAS_DIR")

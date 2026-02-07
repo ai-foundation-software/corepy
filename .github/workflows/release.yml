@@ -36,8 +36,12 @@ jobs:
               yum install -y openblas-devel cmake ninja-build
             fi
             
+            # Install pybind11 to get CMake config
+            python3 -m pip install pybind11
+            PYBIND11_CMAKE_DIR=$(python3 -c "import pybind11; print(pybind11.get_cmake_dir())")
+            
             # Build C++ Kernels (Required for linking)
-            cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+            cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -Dpybind11_DIR="$PYBIND11_CMAKE_DIR"
             cmake --build build --config Release
       - uses: actions/upload-artifact@v4
         with:
@@ -126,9 +130,13 @@ jobs:
           echo "CMAKE_PREFIX_PATH=$(brew --prefix openblas)" >> $GITHUB_ENV
           echo "LIBRARY_PATH=$(brew --prefix openblas)/lib:$LIBRARY_PATH" >> $GITHUB_ENV
           
+          # Detect pybind11
+          PYBIND11_CMAKE_DIR=$(uv run python -c "import pybind11; print(pybind11.get_cmake_dir())")
+          echo "pybind11 found at: $PYBIND11_CMAKE_DIR"
+
           # Build C++ Kernels matching ci.yml
           echo "Building C++ Kernels..."
-          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -Dpybind11_DIR="$PYBIND11_CMAKE_DIR"
           cmake --build build --config Release
 
           # Build Metal Kernels
@@ -148,6 +156,10 @@ jobs:
           echo "CMAKE_PREFIX_PATH=${{ github.workspace }}/openblas" >> $GITHUB_ENV
           echo "${{ github.workspace }}/openblas/bin" >> $GITHUB_PATH
 
+          # Detect pybind11
+          PYBIND11_CMAKE_DIR=$(uv run python -c "import pybind11; print(pybind11.get_cmake_dir())")
+          echo "pybind11 found at: $PYBIND11_CMAKE_DIR"
+
           # Build C++ Kernels
           # Note: CMake determines target arch from generator or environment.
           # For cross-compiling to ARM64 on x64 host, we might need specific flags.
@@ -155,9 +167,9 @@ jobs:
           if [[ "${{ matrix.target }}" == "aarch64-pc-windows-msvc" ]]; then
             # Attempt to configure for ARM64. 
             # This is optimistic; usually requires -A ARM64 with Visual Studio generator
-            cmake -S . -B build -A ARM64 -DCMAKE_BUILD_TYPE=Release
+            cmake -S . -B build -A ARM64 -DCMAKE_BUILD_TYPE=Release -Dpybind11_DIR="$PYBIND11_CMAKE_DIR"
           else
-            cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+            cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -Dpybind11_DIR="$PYBIND11_CMAKE_DIR"
           fi
           cmake --build build --config Release
 

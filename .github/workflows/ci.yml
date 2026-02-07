@@ -109,13 +109,17 @@ jobs:
       # STEP 4: Install Python deps & Build Rust
       # ========================================
 
-
-      - name: Install dependencies and build Rust extension
+      - name: Install Python dependencies
         shell: bash
         run: |
-          # Install all dev dependencies (includes maturin)
-          uv sync --all-extras --group dev
-          # Build Rust extension using maturin from the dev environment
+          # Install dependencies WITHOUT triggering editable install yet
+          # This prevents maturin from building before C++ kernels are ready
+          uv sync --no-install-workspace --all-extras --group dev
+
+      - name: Build Rust extension
+        shell: bash
+        run: |
+          # Now build Rust extension with CMake artifacts present
           uv run maturin develop --release --manifest-path rust/core/Cargo.toml
 
       # ========================================

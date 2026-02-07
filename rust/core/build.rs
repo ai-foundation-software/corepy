@@ -14,20 +14,31 @@ fn main() {
 
     // Check if C++ library is built
     if !build_path.exists() {
-        // Prepare a detailed error message
+        // Prepare a detailed error message with diagnostic paths
+        let cwd = std::env::current_dir()
+            .map(|p| p.display().to_string())
+            .unwrap_or_else(|_| "<unable to determine>".to_string());
+        
         let msg = format!(
-            "C++ kernels not found at '{}'.\n\
-             Please run `./scripts/build.sh` or ensure `cmake` build has completed before compiling Rust.\n\
-             The build script expects the C++ library in `build/csrc` relative to the repository root.",
+            "C++ kernels not found at '{}'.\\n\
+             Please run `./scripts/build.sh` or ensure `cmake` build has completed before compiling Rust.\\n\
+             The build script expects the C++ library in `build/csrc` relative to the repository root.\\n\
+             \\n\
+             Diagnostic info:\\n\
+             - Repository root: {}\\n\
+             - Current working directory: {}\\n\
+             - Expected C++ library path: {}",
+            build_path.display(),
+            repo_root.display(),
+            cwd,
             build_path.display()
         );
 
         // Emit a cargo warning so it's visible even if we panic convention changes
         println!("cargo:warning={}", msg);
 
-        // Check if we are in a CI/Release environment where this SHOULD exist
-        if std::env::var("CI").is_ok() || std::env::var("PROFILE").unwrap_or_default() == "release"
-        {
+        // Always panic in CI to catch build ordering issues
+        if std::env::var("CI").is_ok() {
             panic!("{}", msg);
         } else {
             println!("cargo:warning=Continuing without C++ kernels (symbols will be missing at runtime).");

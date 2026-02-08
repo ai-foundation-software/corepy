@@ -87,8 +87,12 @@ jobs:
       - name: Build C++ kernels
         shell: bash
         run: |
-          # Detect pybind11 CMake directory
-          PYBIND11_CMAKE_DIR=$(uv run python -c "import pybind11; print(pybind11.get_cmake_dir())")
+          if [ "$RUNNER_OS" == "Windows" ]; then
+            PYTHON_EXE="./.venv/Scripts/python"
+          else
+            PYTHON_EXE="./.venv/bin/python"
+          fi
+          PYBIND11_CMAKE_DIR=$($PYTHON_EXE -c "import pybind11; print(pybind11.get_cmake_dir())")
           echo "pybind11 found at: $PYBIND11_CMAKE_DIR"
           
           if [ "$RUNNER_OS" == "Windows" ]; then

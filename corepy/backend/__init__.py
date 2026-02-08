@@ -51,6 +51,19 @@ def explain_last_dispatch() -> str:
         return f"Method dispatched via Python Fallback (Backend: {_GLOBAL_POLICY.name})"
 
 
+def get_system_capabilities():
+    """Get system hardware capabilities (CPU features, GPU availability)."""
+    try:
+        from corepy import _corepy_rust
+
+        return _corepy_rust.get_system_capabilities()
+    except ImportError:
+        return {
+            "cpu": {"arch": "unknown", "cores": 1},
+            "gpu": {"metal_available": False, "cuda_available": False},
+        }
+
+
 __all__ = [
     "BackendType",
     "OperationType",
@@ -60,6 +73,9 @@ __all__ = [
     "BackendPolicy",
     "set_backend_policy",
     "get_backend_policy",
+    "set_backend_policy",
+    "get_backend_policy",
+    "get_system_capabilities",
     "explain_last_dispatch",
     "BackendError",
     "DeviceNotFoundError",

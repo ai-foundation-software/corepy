@@ -1,5 +1,8 @@
 // Build script to link C++ kernels
 fn main() {
+    // Declare custom cfg for conditional compilation
+    println!("cargo::rustc-check-cfg=cfg(use_accelerate)");
+
     // Tell cargo to link against the C++ kernel library
     // The library is built by CMake in csrc/
 
@@ -13,7 +16,9 @@ fn main() {
     let build_path = repo_root.join("build").join("csrc");
 
     // Check if C++ library is built
-    if !build_path.exists() {
+    let cpp_lib_exists = build_path.exists();
+
+    if !cpp_lib_exists {
         // Prepare a detailed error message with diagnostic paths
         let cwd = std::env::current_dir()
             .map(|p| p.display().to_string())
@@ -45,23 +50,26 @@ fn main() {
         }
     }
 
-    // On Windows with MSVC, the library is in a Release subdirectory
-    #[cfg(target_os = "windows")]
-    {
-        let release_path = build_path.join("Release");
-        if release_path.exists() {
-            println!("cargo:rustc-link-search=native={}", release_path.display());
-        } else {
+    // Only link C++ kernels if they exist
+    if cpp_lib_exists {
+        // On Windows with MSVC, the library is in a Release subdirectory
+        #[cfg(target_os = "windows")]
+        {
+            let release_path = build_path.join("Release");
+            if release_path.exists() {
+                println!("cargo:rustc-link-search=native={}", release_path.display());
+            } else {
+                println!("cargo:rustc-link-search=native={}", build_path.display());
+            }
+        }
+
+        #[cfg(not(target_os = "windows"))]
+        {
             println!("cargo:rustc-link-search=native={}", build_path.display());
         }
-    }
 
-    #[cfg(not(target_os = "windows"))]
-    {
-        println!("cargo:rustc-link-search=native={}", build_path.display());
+        println!("cargo:rustc-link-lib=static=corepy_kernels");
     }
-
-    println!("cargo:rustc-link-lib=static=corepy_kernels");
 
     // Link OpenBLAS (required by corepy_kernels)
     #[cfg(target_os = "linux")]
@@ -73,15 +81,32 @@ fn main() {
 
     #[cfg(target_os = "macos")]
     {
-        // Try common Homebrew paths
-        if let Ok(prefix) = std::env::var("LIBRARY_PATH") {
-            for path in prefix.split(':') {
-                if !path.is_empty() {
-                    println!("cargo:rustc-link-search=native={}", path);
+        // On Apple Silicon (aarch64), link Accelerate framework for AMX support
+        #[cfg(target_arch = "aarch64")]
+        {
+            println!("cargo:rustc-link-lib=framework=Accelerate");
+            println!("cargo:rustc-link-lib=framework=Metal");
+            println!("cargo:rustc-link-lib=framework=Foundation");
+            println!("cargo:rustc-cfg=use_accelerate");
+            println!(
+                "cargo:warning=Using Apple Accelerate framework (AMX coprocessor enabled) & Metal"
+            );
+        }
+
+        // On Intel Macs, still use OpenBLAS
+        #[cfg(not(target_arch = "aarch64"))]
+        {
+            // Try common Homebrew paths
+            if let Ok(prefix) = std::env::var("LIBRARY_PATH") {
+                for path in prefix.split(':') {
+                    if !path.is_empty() {
+                        println!("cargo:rustc-link-search=native={}", path);
+                    }
                 }
             }
+            println!("cargo:rustc-link-lib=dylib=openblas");
         }
-        println!("cargo:rustc-link-lib=dylib=openblas");
+
         println!("cargo:rustc-link-lib=dylib=c++");
     }
 

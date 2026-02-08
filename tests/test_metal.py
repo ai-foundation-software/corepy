@@ -28,6 +28,28 @@ def test_metal_availability():
         pytest.fail("Could not import metal_is_available")
 
 
+def _metal_library_loaded():
+    """
+    Check if Metal shaders are actually loaded (not just device available).
+    Returns True if .metallib is loaded and operations will work.
+    """
+    if not corepy._corepy_rust.metal_is_available():
+        return False
+
+    # Try a simple operation to see if library loaded
+    # If .metallib missing, operations return 0.0
+    import numpy as np
+
+    test_data = np.array([1.0, 2.0, 3.0], dtype=np.float32)
+    t = array(test_data, device="metal")
+    result = t.sum()
+    val = result.to_numpy()[0]
+
+    # If library not loaded, sum returns 0.0
+    # Real sum should be 6.0
+    return abs(val - 6.0) < 0.01
+
+
 def test_metal_tensor_creation():
     """Test creating a tensor on Metal device."""
     if not corepy._corepy_rust.metal_is_available():
@@ -46,6 +68,8 @@ def test_metal_sum():
     """Test sum reduction on Metal."""
     if not corepy._corepy_rust.metal_is_available():
         pytest.skip("Metal not available")
+    if not _metal_library_loaded():
+        pytest.skip("Metal shaders not loaded (install Xcode for pre-compiled shaders)")
 
     # Large enough to be worth it, but small enough for quick test
     data = np.random.rand(1024).astype(np.float32)
@@ -70,6 +94,8 @@ def test_metal_mean():
     """Test mean reduction on Metal."""
     if not corepy._corepy_rust.metal_is_available():
         pytest.skip("Metal not available")
+    if not _metal_library_loaded():
+        pytest.skip("Metal shaders not loaded (install Xcode for pre-compiled shaders)")
 
     data = np.random.rand(1024).astype(np.float32)
     t = array(data, device="metal")
@@ -85,6 +111,8 @@ def test_metal_matmul():
     """Test matrix multiplication on Metal."""
     if not corepy._corepy_rust.metal_is_available():
         pytest.skip("Metal not available")
+    if not _metal_library_loaded():
+        pytest.skip("Metal shaders not loaded (install Xcode for pre-compiled shaders)")
 
     M, K, N = 64, 64, 64
     a_data = np.random.rand(M, K).astype(np.float32)

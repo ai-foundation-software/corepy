@@ -649,7 +649,7 @@ large_data.to_device("gpu")  # Transfer cost amortized over compute
 
 ## 📝 Design Decisions
 
-### Renaming `Tensor` to `ndarray` (v0.2.3)
+### Renaming `Tensor` to `ndarray` (v0.2.4)
 **Rationale**:
 - **NumPy Alignment**: Adoption is easier for users familiar with the standard scientific Python ecosystem (NumPy, SciPy).
 - **Semantics**: `Tensor` often implies deep learning features (autograd, computation graphs), while `ndarray` correctly implies a general-purpose n-dimensional array. CorePy provides the foundational array container.

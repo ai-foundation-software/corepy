@@ -1,7 +1,7 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # =============================================================================
 # CorePy Clean Rebuild Script
-# Supports: Linux, macOS, Windows (Git Bash/WSL)
+# Usage: ./scripts/rebuild.sh (or via `make rebuild`)
 # =============================================================================
 set -e
 
@@ -13,6 +13,9 @@ cd "$REPO_ROOT"
 echo "=== CorePy Clean Rebuild ==="
 echo ""
 
+# Check uv
+command -v uv >/dev/null 2>&1 || { echo "❌ uv required"; exit 1; }
+
 # Step 1: Clean
 echo "Step 1/3: Cleaning artifacts..."
 rm -rf build
@@ -23,11 +26,11 @@ rm -rf dist
 rm -rf .pytest_cache
 rm -rf .coverage
 rm -rf htmlcov
-find . -name "*.so" -type f -delete
-find . -name "*.dylib" -type f -delete
-find . -name "*.pyd" -type f -delete
-find . -name "*.metallib" -type f -delete
-find . -name "__pycache__" -type d -exec rm -rf {} + 2>/dev/null || true
+find . -type d -name ".venv" -prune -o -name "*.so" -type f -print0 | xargs -0 rm -f
+find . -type d -name ".venv" -prune -o -name "*.dylib" -type f -print0 | xargs -0 rm -f
+find . -type d -name ".venv" -prune -o -name "*.pyd" -type f -print0 | xargs -0 rm -f
+find . -type d -name ".venv" -prune -o -name "*.metallib" -type f -print0 | xargs -0 rm -f
+find . -type d -name ".venv" -prune -o -name "__pycache__" -type d -exec rm -rf {} + 2>/dev/null || true
 echo "✅ Cleaned"
 
 
@@ -39,11 +42,7 @@ echo "Step 2/3: Building project..."
 # Step 3: Verify
 echo ""
 echo "Step 3/3: Verifying installation..."
-if command -v uv >/dev/null 2>&1; then
-    uv run python scripts/verify_install.py
-else
-    python3 scripts/verify_install.py
-fi
+uv run python scripts/verify_install.py
 
 echo ""
 echo "=== Rebuild Complete! ==="

@@ -17,6 +17,8 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger("corepy.array")
 
+from .broadcasting import get_c_strides
+
 
 class ndarray:
     """
@@ -66,13 +68,18 @@ class ndarray:
         # Determine shape and element count
         if isinstance(data, (list, tuple)):
             # Recursive shape detection
-            shape = []
-            curr = data
-            while isinstance(curr, (list, tuple)) and len(curr) > 0:
-                shape.append(len(curr))
-                curr = curr[0]
+            if len(data) == 0:
+                self._shape = (0,)
+                self._element_count = 0
+                self._backing_data = data
+            else:
+                shape = []
+                curr = data
+                while isinstance(curr, (list, tuple)) and len(curr) > 0:
+                    shape.append(len(curr))
+                    curr = curr[0]
 
-            self._shape = tuple(shape)
+                self._shape = tuple(shape)
             # Calculate element count
             count = 1
             for dim in self._shape:
@@ -82,7 +89,7 @@ class ndarray:
         elif isinstance(data, (bytes, bytearray)):
             self._shape = (len(data),)
             self._element_count = len(data)
-            self._backing_data = data
+            self._backing_data = data  # type: ignore[assignment]
         elif isinstance(data, memoryview):
             self._shape = data.shape if data.shape else (len(data),)
             # Calculate size for ND memoryview
@@ -90,11 +97,11 @@ class ndarray:
             for dim in self._shape:
                 size *= dim
             self._element_count = size
-            self._backing_data = data
+            self._backing_data = data  # type: ignore[assignment]
         elif isinstance(data, np.ndarray):  # numpy array
             self._shape = tuple(int(d) for d in data.shape)
             self._element_count = int(data.size)
-            self._backing_data = data
+            self._backing_data = data  # type: ignore[assignment]
         else:
             # scalar or error
             self._shape = (1,)
@@ -118,35 +125,56 @@ class ndarray:
         # We classify Creation as MEMORY_BOUND or SCALAR usually,
         # but the meaningful decision happens for subsequent ops.
         # However, we must decide where to allocations *now*.
-        # Let's assume creation is MEMORY_BOUND.
-        op_props = OperationProperties(
+        # Determine where the data should live initially
+        if device is not None:
+            if "cuda" in device or "gpu" in device or "metal" in device:
+                self._device = "metal"  # Normalize to metal for now
+            else:
+                self._device = "cpu"
+        elif requested_backend == BackendType.GPU:
+            self._device = "metal"
+        else:
+            self._device = "cpu"
+
+        # Phase 2: GPU Persistent Buffer Tracking
+        # Track where data currently resides to minimize transfers
+        self._cpu_data: Optional[np.ndarray] = None
+        self._gpu_data = None  # Metal buffer handle (if GPU-resident)
+        self._data_location = "cpu"  # "cpu", "gpu", or "both"
+
+        # Initialize CPU data from backing_data
+        if self._device == "cpu":
+            self._cpu_data = self._to_numpy_internal()
+            self._data_location = "cpu"
+        else:
+            # GPU device - prepare for lazy transfer
+            self._cpu_data = self._to_numpy_internal()
+            self._data_location = "cpu"  # Start on CPU, transfer on first use
+
+        # Select backend through policy
+        context = OperationProperties(
             element_count=self._element_count,
             shape=self._shape,
             # Approximating bytes: len * 4 bytes for float32
             dtype_bytes=4,
         )
-
         # We treat 'allocation' as a memory operation.
         # However, for 'Correctness-First', we usually default to CPU for storage
         # unless explicitly told otherwise or if we are consuming GPU data.
-        # BUT, the goal is "ndarray(data) # auto".
+        # BUT, the goal is "ndarray(data)" usually implies "Ready for compute".
         # So we should check if this data is "large enough" to justify GPU storage?
         # Usually, just storing is not compute. So auto-placement should default CPU
         # unless immediate heavy compute is expected?
-        # Actually, "ndarray(data)" usually implies "Ready for compute".
-        # Let's use COMPUTE_VECTOR as a proxy for "Will I use this for compute?"
-        # to see if it qualifies for GPU memory residence.
-        # This is a heuristic. Stronger approach: Default CPU, move on demand.
-        # But per requirements: "Core Principles: Small data -> CPU always wins".
 
+        # For now, let's just classify it as MEMORY_BOUND. Backend selection defaults to CPU for construction.
+        # This can be revised.
         session = get_session()
         self._backend_type = select_backend(
-            OperationType.COMPUTE_VECTOR,  # Probe: "If I treated this as a compute vector, where would it go?"
-            op_props,
-            session.device_info,
-            requested_backend=requested_backend,
+            OperationType.MEMORY_BOUND, context, session.device_info, requested_backend
         )
-        self._device = device
+
+        # Store original device intent
+        self._device_intent = self._device
 
         logger.debug(f"Array created on {self._backend_type}. Shape={self._shape}")
 
@@ -173,6 +201,18 @@ class ndarray:
         """Total number of elements in the array (NumPy-compatible)."""
         return self._element_count
 
+    def _should_use_fast_path(self) -> bool:
+        """
+        Determine if numpy fast path should be used to avoid FFI overhead.
+
+        Returns True for small CPU arrays where NumPy is faster than FFI call.
+
+
+        """
+        from .config import SMALL_ARRAY_THRESHOLD
+
+        return self.size < SMALL_ARRAY_THRESHOLD and self._device == "cpu"
+
     @property
     def T(self) -> "ndarray":
         """Transpose of the array (NumPy-compatible). For 2D arrays only."""
@@ -195,30 +235,121 @@ class ndarray:
 
     def transpose(self, *axes) -> "ndarray":
         """
-        Return transposed array (NumPy-compatible).
+        Return transposed array.
 
-        Args:
-            axes: Optional permutation of dimensions.
-
-        Returns:
-            Transposed array.
+        Optimized for 2D Metal matrices. Falls back to NumPy for others.
         """
+        import time
+
+        from .profiler.core import record_op
+
+        start_time = time.perf_counter()
+
+        # Check for simple 2D transpose (0,1) -> (1,0)
+        is_simple_transpose = False
+        if len(self.shape) == 2:
+            if not axes or axes == (1, 0) or axes == [1, 0]:
+                is_simple_transpose = True
+
+        # Priority 1: Metal GPU
+        if is_simple_transpose and self.backend == BackendType.GPU:
+            view = self._get_buffer_view()
+            if view.device.is_metal() and self._element_count >= 1024:
+                try:
+                    import numpy as np
+
+                    from . import _corepy_rust as ffi  # type: ignore[import-untyped]
+
+                    m, n = self.shape
+                    # Allocate output buffer (N x M)
+                    final_np = np.empty((n, m), dtype=np.float32)
+                    ptr_out = final_np.__array_interface__["data"][0]
+
+                    ffi.metal_transpose_f32(view.data_ptr, ptr_out, m, n)
+
+                    elapsed_ms = (time.perf_counter() - start_time) * 1000
+                    record_op("transpose", elapsed_ms, "Metal")
+                    return ndarray(final_np, dtype=self._dtype, backend=self.backend)
+
+                except ImportError:
+                    pass
+
+        # Fallback to NumPy
         np_arr = self.to_numpy()
         if axes:
             np_arr = np_arr.transpose(*axes)
         else:
             np_arr = np_arr.T
+
+        elapsed_ms = (time.perf_counter() - start_time) * 1000
+        record_op("transpose", elapsed_ms, "NumPy")
         return ndarray(np_arr, dtype=self._dtype, backend=self.backend)
 
     def to(self, device: str) -> "ndarray":
         """
-        Explicitly move tensor to a device.
+        Explicitly move tensor to a device (deprecated - use to_device).
+
         Arguments:
             device: 'cpu' or 'gpu'
         """
-        # Create a new array with explicit backend
-        # In real impl, we would copy data buffer
-        return ndarray(self._backing_data, dtype=self._dtype, device=device)
+        return self.to_device(device)
+
+    def to_device(self, device: str) -> "ndarray":
+        """
+        Move array to specified device with persistent buffer tracking.
+
+        Phase 2: Lazy transfer - only moves data when needed, caches on both sides.
+
+        Args:
+            device: Target device ('cpu', 'metal', 'gpu')
+
+        Returns:
+            Self (modified in-place for efficiency)
+        """
+        # Normalize device name
+        if device in ("gpu", "metal"):
+            device = "metal"  # Metal is macOS GPU
+
+        # Already on target device?
+        if device == "cpu" and self._data_location in ("cpu", "both"):
+            self._device = "cpu"
+            return self
+        elif device == "metal" and self._data_location in ("gpu", "both"):
+            self._device = "metal"
+            return self
+
+        # Need to transfer
+        if device == "metal":
+            # TODO: Implement actual GPU transfer when Metal backend ready
+            # For now, mark intention but keep data on CPU
+            self._device = "metal"
+            # In production: self._gpu_data = transfer_to_metal(self._cpu_data)
+            # self._data_location = "both"
+        elif device == "cpu":
+            # GPU → CPU transfer
+            if self._gpu_data is not None:
+                # TODO: Transfer from GPU
+                # self._cpu_data = transfer_from_metal(self._gpu_data)
+                pass
+            self._device = "cpu"
+            self._data_location = "cpu" if self._cpu_data is not None else "cpu"
+
+        return self
+
+    def _ensure_on_device(self, device: str):
+        """
+        Internal method: Ensure data is available on specified device.
+
+        Lazy transfer - only transfers if not already present.
+        """
+        if device == "metal":
+            if self._data_location not in ("gpu", "both"):
+                # Need to transfer to GPU
+                self.to_device("metal")
+        elif device == "cpu":
+            if self._data_location not in ("cpu", "both"):
+                # Need to transfer to CPU
+                self.to_device("cpu")
 
     def __getitem__(self, item) -> Union["ndarray", float, int, bool]:
         """
@@ -280,6 +411,65 @@ class ndarray:
         """Element-wise division."""
         return self._binary_op("div", other)
 
+    def matmul(self, other: Any) -> "ndarray":
+        """Matrix multiplication (@ operator)."""
+        # Ensure other is ndarray
+        if not isinstance(other, ndarray):
+            other = ndarray(other, backend=self.backend)
+
+        # Phase 1: GPU fallback - if we're on GPU but operation not supported, use CPU
+        if self.backend == BackendType.GPU:
+            from .backend.dispatch import Dispatcher
+            from .backend.errors import OperationNotSupportedError
+
+            # Check if GPU kernel exists
+            try:
+                Dispatcher.get_kernel("matmul", BackendType.GPU)
+            except OperationNotSupportedError:
+                # GPU doesn't support matmul, fall back to CPU
+                logger.info("GPU matmul not supported, falling back to CPU")
+                cpu_self = ndarray(self.to_numpy(), backend=BackendType.CPU)
+                cpu_other = ndarray(other.to_numpy(), backend=BackendType.CPU)
+                return cpu_self.matmul(cpu_other)
+
+        # Phase 2: Automatic GPU Switching for large operations
+        # If operation is large enough, promoting to GPU might be faster
+        if self.backend == BackendType.CPU:
+            # Basic heuristic: if both dims >= 2048
+            if (
+                len(self.shape) >= 2
+                and self.shape[-1] >= 2048
+                and self.shape[-2] >= 2048
+            ):
+                # Check if Metal is available
+                from .backend import get_system_capabilities
+
+                caps = get_system_capabilities()
+                if caps.get("gpu", {}).get("metal_available", False):
+                    # Promote to GPU for large matmul
+                    logger.info("Auto-switching large matmul to GPU based on size")
+                    gpu_self = ndarray(self.to_numpy(), device="metal")
+                    gpu_other = ndarray(other.to_numpy(), device="metal")
+                    return gpu_self.matmul(gpu_other)
+
+        # Delegate to backend implementation
+        # Start timing
+        import time
+
+        from .backend.dispatch import dispatch_kernel
+        from .profiler.core import record_op
+
+        start_time = time.perf_counter()
+
+        result = dispatch_kernel(
+            "matmul", self.backend, self, other, shape_a=self.shape, shape_b=other.shape
+        )
+
+        elapsed_ms = (time.perf_counter() - start_time) * 1000
+        record_op("matmul", elapsed_ms, self.backend.name)
+
+        return ndarray(result, dtype=self._dtype, backend=self.backend)
+
     def __matmul__(self, other: Any) -> "ndarray":
         """Matrix multiplication (@ operator)."""
         return self.matmul(other)
@@ -290,7 +480,7 @@ class ndarray:
             raise ValueError("Cannot compare non-scalar tensor")
         if isinstance(self._backing_data, list):
             return float(self._backing_data[0])
-        return float(self._backing_data)
+        return float(self._backing_data)  # type: ignore[arg-type]
 
     def __lt__(self, other: Any) -> bool:
         """Less than comparison (for scalar tensors)."""
@@ -561,6 +751,14 @@ class ndarray:
         from .profiler.core import record_op
 
         start_time = time.perf_counter()
+
+        # Fast path: Use NumPy for small arrays to avoid FFI overhead
+        if self._should_use_fast_path():
+            result = float(np.sum(self.to_numpy()))
+            elapsed_ms = (time.perf_counter() - start_time) * 1000
+            record_op("sum", elapsed_ms, "NumPy-Fast")
+            return ndarray([result], dtype=self._dtype, backend=self.backend)
+
         try:
             from ._corepy_rust import (  # type: ignore[import-untyped]
                 metal_sum_f32,
@@ -587,7 +785,10 @@ class ndarray:
                 result = tensor_sum_f32_strided(
                     view.data_ptr,
                     list(view.shape),
-                    list(view.strides),
+                    list(view.shape),  # type: ignore[arg-type]
+                    list(view.strides)
+                    if view.strides is not None
+                    else [s * view.dtype.itemsize for s in get_c_strides(view.shape)],  # type: ignore[arg-type]
                 )
 
             elapsed_ms = (time.perf_counter() - start_time) * 1000
@@ -610,6 +811,14 @@ class ndarray:
         from .profiler.core import record_op
 
         start_time = time.perf_counter()
+
+        # Fast path: Use NumPy for small arrays to avoid FFI overhead
+        if self._should_use_fast_path():
+            result = float(np.mean(self.to_numpy()))
+            elapsed_ms = (time.perf_counter() - start_time) * 1000
+            record_op("mean", elapsed_ms, "NumPy-Fast")
+            return ndarray([result], dtype=DataType.FLOAT32, backend=self.backend)
+
         try:
             from ._corepy_rust import (  # type: ignore[import-untyped]
                 metal_mean_f32,
@@ -631,7 +840,10 @@ class ndarray:
                 result = tensor_mean_f32_strided(
                     view.data_ptr,
                     list(view.shape),
-                    list(view.strides),
+                    list(view.shape),  # type: ignore[arg-type]
+                    list(view.strides)
+                    if view.strides is not None
+                    else [s * view.dtype.itemsize for s in get_c_strides(view.shape)],  # type: ignore[arg-type]
                 )
 
             elapsed_ms = (time.perf_counter() - start_time) * 1000
@@ -654,16 +866,104 @@ class ndarray:
 
     def max(self) -> "ndarray":
         """Returns maximum value of all elements."""
+        import time
+
+        from .profiler.core import record_op
+
+        start_time = time.perf_counter()
+
+        # Priority 1: Metal GPU
+        target_view = self._get_buffer_view()
+        if (
+            self.backend == BackendType.GPU
+            and target_view.device.is_metal()
+            and self._element_count >= 1024
+        ):
+            try:
+                from . import _corepy_rust as ffi
+
+                result = ffi.metal_max_f32(target_view.data_ptr, self._element_count)
+                elapsed_ms = (time.perf_counter() - start_time) * 1000
+                record_op("max", elapsed_ms, "Metal")
+                return ndarray([result], dtype=self._dtype, backend=self.backend)
+            except ImportError:
+                pass
+
+        # Priority 2: CPU Rust (Strided) - Fallback for now because contiguous not exposed?
+        # Actually strided optimization works for contiguous too if strides are correct.
+        try:
+            from . import _corepy_rust as ffi
+
+            # Use strided version for generality
+            view = self._get_buffer_view()
+            result = ffi.tensor_max_f32_strided(
+                view.data_ptr,
+                list(view.shape),
+                list(view.strides)
+                if view.strides is not None
+                else [s * view.dtype.itemsize for s in get_c_strides(view.shape)],  # type: ignore[arg-type]
+            )
+            elapsed_ms = (time.perf_counter() - start_time) * 1000
+            record_op("max", elapsed_ms, "Rust-CPU")
+            return ndarray([result], dtype=self._dtype, backend=self.backend)
+        except ImportError:
+            pass
+
         from .backend.dispatch import dispatch_kernel
 
         result = dispatch_kernel("max", self.backend, self._backing_data)
+        elapsed_ms = (time.perf_counter() - start_time) * 1000
+        record_op("max", elapsed_ms, self.backend.name)
         return ndarray(result, dtype=self._dtype, backend=self.backend)
 
     def min(self) -> "ndarray":
         """Returns minimum value of all elements."""
+        import time
+
+        from .profiler.core import record_op
+
+        start_time = time.perf_counter()
+
+        # Priority 1: Metal GPU
+        target_view = self._get_buffer_view()
+        if (
+            self.backend == BackendType.GPU
+            and target_view.device.is_metal()
+            and self._element_count >= 1024
+        ):
+            try:
+                from . import _corepy_rust as ffi
+
+                result = ffi.metal_min_f32(target_view.data_ptr, self._element_count)
+                elapsed_ms = (time.perf_counter() - start_time) * 1000
+                record_op("min", elapsed_ms, "Metal")
+                return ndarray([result], dtype=self._dtype, backend=self.backend)
+            except ImportError:
+                pass
+
+        # Priority 2: CPU Rust (Strided)
+        try:
+            from . import _corepy_rust as ffi
+
+            view = self._get_buffer_view()
+            result = ffi.tensor_min_f32_strided(
+                view.data_ptr,
+                list(view.shape),
+                list(view.strides)
+                if view.strides is not None
+                else [s * view.dtype.itemsize for s in get_c_strides(view.shape)],  # type: ignore[arg-type]
+            )
+            elapsed_ms = (time.perf_counter() - start_time) * 1000
+            record_op("min", elapsed_ms, "Rust-CPU")
+            return ndarray([result], dtype=self._dtype, backend=self.backend)
+        except ImportError:
+            pass
+
         from .backend.dispatch import dispatch_kernel
 
         result = dispatch_kernel("min", self.backend, self._backing_data)
+        elapsed_ms = (time.perf_counter() - start_time) * 1000
+        record_op("min", elapsed_ms, self.backend.name)
         return ndarray(result, dtype=self._dtype, backend=self.backend)
 
     def copy(self) -> "ndarray":
@@ -671,8 +971,36 @@ class ndarray:
         if isinstance(self._backing_data, list):
             new_data = list(self._backing_data)
         else:
-            new_data = self._backing_data
+            new_data = self._backing_data  # type: ignore[assignment]
         return ndarray(new_data, dtype=self._dtype, backend=self.backend)
+
+    def _to_numpy_internal(self) -> "NDArray[Any]":
+        """Internal helper to convert backing_data to NumPy (used during init)."""
+        if isinstance(self._backing_data, np.ndarray):
+            return self._backing_data
+        elif isinstance(self._backing_data, list):
+            import struct
+
+            def flatten(items):
+                for x in items:
+                    if isinstance(x, (list, tuple)):
+                        yield from flatten(x)
+                    else:
+                        yield x
+
+            dtype_map = {
+                DataType.FLOAT32: np.float32,
+                DataType.FLOAT64: np.float64,
+                DataType.INT32: np.int32,
+                DataType.INT64: np.int64,
+                DataType.BOOL: bool,
+            }
+            np_dtype = dtype_map.get(self._dtype, np.float32)
+            return np.array(list(flatten(self._backing_data)), dtype=np_dtype).reshape(
+                self.shape
+            )
+        else:
+            return np.array(self._backing_data).reshape(self.shape)
 
     def to_numpy(self) -> "NDArray[Any]":
         """
@@ -680,6 +1008,11 @@ class ndarray:
         Returns:
             NDArray: NumPy array containing the data.
         """
+        # Phase 2: Check if we already have CPU data cached
+        if self._cpu_data is not None:
+            return self._cpu_data
+
+        # Original logic for backward compatibility
         if isinstance(self._backing_data, np.ndarray):
             return self._backing_data
         elif isinstance(self._backing_data, list):
@@ -726,11 +1059,11 @@ class ndarray:
             scalar_val = (
                 other._backing_data[0]
                 if isinstance(other._backing_data, list)
-                else float(other._backing_data)
+                else float(other._backing_data)  # type: ignore[arg-type]
             )
             other = ndarray(
                 [float(scalar_val)] * self._element_count, device=self._device
-            )
+            )  # type: ignore[arg-type]
 
         if not isinstance(other, ndarray):
             raise ValueError("Binary ops require array or scalar")
@@ -738,8 +1071,154 @@ class ndarray:
         if other.backend != self.backend:
             raise BackendError(f"Backend mismatch: {self.backend} vs {other.backend}")
 
-        # Check if we can use optimized CPU Runtime
-        if self.backend == BackendType.CPU:
+        # Fast path: Use NumPy for small arrays to avoid FFI overhead
+        # print(f"DEBUG: op={op} device={self._device} backend={self.backend} fast={self._should_use_fast_path()}")
+        if self._should_use_fast_path() and other._should_use_fast_path():
+            # print("DEBUG: Using Fast Path")
+            np_a = self.to_numpy()
+            np_b = other.to_numpy()
+            # ... (rest of fast path)
+
+            if op == "add":
+                result = np_a + np_b
+            elif op == "sub":
+                result = np_a - np_b
+            elif op == "mul":
+                result = np_a * np_b
+            elif op == "div":
+                result = np_a / np_b
+            else:
+                raise ValueError(f"Unknown operation: {op}")
+
+            elapsed_ms = (time.perf_counter() - start_time) * 1000
+            record_op(op, elapsed_ms, "NumPy-Fast")
+            return ndarray(result, dtype=self._dtype, backend=self.backend)
+
+        # Priority 1: Metal GPU (if available and large enough OR if broadcasting needed)
+        # We generally avoid GPU overhead for very small arrays (< 1024 elements)
+        # but allow it for broadcasting since CPU fallback doesn't support it yet
+        view = self._get_buffer_view()
+        is_metal = view.device.is_metal()
+        use_metal = (
+            self.backend == BackendType.GPU
+            and is_metal
+            and (self._element_count >= 1024 or self.shape != other.shape)
+        )
+        # print(f"DEBUG: use_metal={use_metal} is_metal={is_metal} count={self._element_count}")
+
+        if use_metal:
+            # ...
+            try:
+                # Get input buffers (f32 hardcoded for now)
+                # Note: buffer pointers on Metal are actually encoded offsets/handles
+                # handled by the Rust/Metal bridge.
+                # Allocate output buffer (Metal-compatible via NumPy empty for now)
+                # In a real implementation, we'd allocate a MetalBuffer directly.
+                import numpy as np
+
+                from . import _corepy_rust as ffi  # type: ignore[import-untyped]
+
+                final_np = np.empty(self.shape, dtype=np.float32)
+                ptr_out = final_np.__array_interface__["data"][0]
+
+                # Dispatch
+                # Dispatch
+                success = False
+
+                # Check for broadcasting scenarios
+                if self.shape != other.shape:
+                    try:
+                        from .broadcasting import (
+                            broadcast_shapes,
+                            compute_broadcast_strides,
+                            get_c_strides,
+                        )
+
+                        target_shape = broadcast_shapes(self.shape, other.shape)
+                        size = 1
+                        for d in target_shape:
+                            size *= d
+
+                        # Allocate output
+                        final_np = np.empty(target_shape, dtype=np.float32)
+                        ptr_out = final_np.__array_interface__["data"][0]
+
+                        # Compute strides
+                        strides_a = compute_broadcast_strides(
+                            self.shape, target_shape, get_c_strides(self.shape)
+                        )
+                        strides_b = compute_broadcast_strides(
+                            other.shape, target_shape, get_c_strides(other.shape)
+                        )
+
+                        op_map = {"add": 0, "sub": 1, "mul": 2, "div": 3}
+                        op_code = op_map.get(op)
+
+                        if op_code is not None:
+                            ffi.metal_broadcast_op(
+                                op_code,
+                                view.data_ptr,
+                                other._get_buffer_view().data_ptr,
+                                ptr_out,
+                                list(target_shape),
+                                strides_a,
+                                strides_b,
+                                size,
+                                self._element_count,
+                                other._element_count,
+                            )
+                            success = True
+                    except (ValueError, AttributeError, ImportError):
+                        # Fallback to Rust/CPU if broadcasting fails or not implemented
+                        pass
+
+                if not success and self.shape == other.shape:
+                    if op == "add":
+                        ffi.metal_add_f32(
+                            view.data_ptr,
+                            other._get_buffer_view().data_ptr,
+                            ptr_out,
+                            self._element_count,
+                        )
+                        success = True
+                    elif op == "sub":
+                        ffi.metal_sub_f32(
+                            view.data_ptr,
+                            other._get_buffer_view().data_ptr,
+                            ptr_out,
+                            self._element_count,
+                        )
+                        success = True
+                    elif op == "mul":
+                        ffi.metal_mul_f32(
+                            view.data_ptr,
+                            other._get_buffer_view().data_ptr,
+                            ptr_out,
+                            self._element_count,
+                        )
+                        success = True
+                    elif op == "div":
+                        ffi.metal_div_f32(
+                            view.data_ptr,
+                            other._get_buffer_view().data_ptr,
+                            ptr_out,
+                            self._element_count,
+                        )
+                        success = True
+
+                if success:
+                    elapsed_ms = (time.perf_counter() - start_time) * 1000
+                    record_op(op, elapsed_ms, "Metal")
+                    # Result is currently on CPU (transferred back by metal_backend implementation logic
+                    # which copies to output buffer).
+                    # Future optimization: Keep on GPU.
+                    return ndarray(final_np, dtype=self._dtype, backend=self.backend)
+
+            except ImportError:
+                pass  # Fallback to Rust/CPU
+
+        # Priority 2: Try Rust CPU kernels (fastest for medium/large arrays)
+        if self.backend == BackendType.CPU:  # Priority 2: Rust CPU kernels
             try:
                 from . import _corepy_rust as ffi  # type: ignore[import-untyped]
 
@@ -762,7 +1241,7 @@ class ndarray:
                 c_out = (ctypes.c_char * out_size).from_buffer(buf_out)
                 ptr_out = ctypes.addressof(c_out)
 
-                # Dispatch
+                # Dispatch to Rust kernels
                 if op == "add":
                     ffi.tensor_add_f32(ptr_a, ptr_b, ptr_out, count_a)
                 elif op == "sub":
@@ -777,13 +1256,13 @@ class ndarray:
                     for i in range(0, len(buf_out), 4)
                 ]
                 elapsed_ms = (time.perf_counter() - start_time) * 1000
-                record_op(op, elapsed_ms, "CPU")
+                record_op(op, elapsed_ms, "Rust-CPU")
                 return ndarray(out_floats, dtype=self._dtype, backend=self.backend)
 
             except ImportError:
-                pass  # Fallback to dispatch
+                pass  # Fall through to C++ backend
 
-        # Fallback to general dispatch (GPU, Custom, or if Rust missing)
+        # Priority 3: Fallback to C++ dispatch (via backend system)
         from .backend.dispatch import dispatch_kernel
 
         result = dispatch_kernel(
@@ -793,120 +1272,132 @@ class ndarray:
         record_op(op, elapsed_ms, self.backend.name)
         return ndarray(result, dtype=self._dtype, backend=self.backend)
 
-    def matmul(self, other: "ndarray") -> "ndarray":
-        """Matrix multiplication (handles 1D dot product and 2D matmul)."""
-        import time
 
-        from .profiler.core import record_op
-
-        start_time = time.perf_counter()
-        if not isinstance(other, ndarray):
-            raise ValueError("matmul requires array")
-
-        if self.backend == BackendType.CPU or (
-            self.backend == BackendType.GPU
-            and "metal" in str(self._get_buffer_view().device)
-        ):
-            try:
-                from . import _corepy_rust as ffi  # type: ignore[import-untyped]
-
-                # Check for Metal dispatch
-                view = self._get_buffer_view()
-                is_metal = view.device.is_metal()
-
-                if is_metal and len(self.shape) == 2 and len(other.shape) == 2:
-                    # Metal Matrix Multiplication
-                    m, k1 = self.shape
-                    k2, n = other.shape
-
-                    if k1 != k2:
-                        raise ValueError(
-                            f"Matrix dimension mismatch: ({m}, {k1}) @ ({k2}, {n})"
-                        )
-
-                    view_b = other._get_buffer_view()
-
-                    # Allocate output
-                    import numpy as np
-
-                    final_np = np.empty((m, n), dtype=np.float32)
-                    ptr_out = final_np.__array_interface__["data"][0]
-
-                    ffi.metal_matmul_f32(
-                        view.data_ptr, view_b.data_ptr, ptr_out, m, k1, n
-                    )
-
-                    elapsed_ms = (time.perf_counter() - start_time) * 1000
-                    record_op("matmul", elapsed_ms, "Metal")
-                    return ndarray(final_np, dtype=self._dtype, backend=self.backend)
-
-                # Case 1: Dot Product (1D @ 1D)
-                if len(self.shape) == 1 and len(other.shape) == 1 and not is_metal:
-                    ptr_a, count_a, _ref_a = self._get_buffer_pointer("f4")
-                    ptr_b, count_b, _ref_b = other._get_buffer_pointer("f4")
-
-                    if count_a != count_b:
-                        raise ValueError(
-                            f"Dot product size mismatch: {count_a} vs {count_b}"
-                        )
-
-                    result = ffi.tensor_matmul_f32(ptr_a, ptr_b, count_a)
-                    elapsed_ms = (time.perf_counter() - start_time) * 1000
-                    record_op("matmul", elapsed_ms, "CPU")
-                    return ndarray(result, dtype=self._dtype, backend=self.backend)
-
-                # Case 2: Matrix Multiplication (2D @ 2D) - CPU
-                elif len(self.shape) == 2 and len(other.shape) == 2 and not is_metal:
-                    m, k1 = self.shape
-                    k2, n = other.shape
-
-                    if k1 != k2:
-                        raise ValueError(
-                            f"Matrix dimension mismatch: ({m}, {k1}) @ ({k2}, {n})"
-                        )
-
-                    ptr_a, _c_a, _ref_a = self._get_buffer_pointer("f4")
-                    ptr_b, _c_b, _ref_b = other._get_buffer_pointer("f4")
-
-                    # Prepare output buffer (Zero-Copy Optimization)
-                    import numpy as np
-
-                    # Allocate uninitialized memory directly (fastest)
-                    # Note: C++ kernels (AVX2/OpenBLAS) will initialize this (beta=0.0)
-                    final_np = np.empty((m, n), dtype=np.float32)
-
-                    # Get raw pointer to the numpy array's data
-                    ptr_out = final_np.__array_interface__["data"][0]
-
-                    # Dispatch 2D kernel
-                    ffi.tensor_matmul_2d_f32(ptr_a, ptr_b, ptr_out, m, k1, n)
-
-                    # Return wrapped array
-                    elapsed_ms = (time.perf_counter() - start_time) * 1000
-                    record_op("matmul", elapsed_ms, "CPU")
-                    return ndarray(final_np, dtype=self._dtype, backend=self.backend)
-
-                else:
-                    # Generic shapes not supported in optimized kernel yet
-                    pass
-
-            except ImportError:
-                pass  # Fallback
-
-        from .backend.dispatch import dispatch_kernel
-
-        result = dispatch_kernel(
-            "matmul",
-            self.backend,
-            self._backing_data,
-            other._backing_data,
-            shape_a=self.shape,
-            shape_b=other.shape,
-        )
-        elapsed_ms = (time.perf_counter() - start_time) * 1000
-        record_op("matmul", elapsed_ms, self.backend.name)
-        return ndarray(result, dtype=self._dtype, backend=self.backend)
-
+#     def matmul(self, other: "ndarray") -> "ndarray":
+#         """Matrix multiplication (handles 1D dot product and 2D matmul)."""
+#         import time
+#
+#         from .profiler.core import record_op
+#
+#         start_time = time.perf_counter()
+#         if not isinstance(other, ndarray):
+#             raise ValueError("matmul requires array")
+#
+# Fast path: Use NumPy for small arrays to avoid FFI overhead
+#         if self._should_use_fast_path() and other._should_use_fast_path():
+#             import numpy as np
+#
+#             np_a = self.to_numpy()
+#             np_b = other.to_numpy()
+#             result = np.matmul(np_a, np_b)
+#             elapsed_ms = (time.perf_counter() - start_time) * 1000
+#             record_op("matmul", elapsed_ms, "NumPy-Fast")
+#             return ndarray(result, dtype=self._dtype, backend=self.backend)
+#
+#         if self.backend == BackendType.CPU or (
+#             self.backend == BackendType.GPU
+#             and "metal" in str(self._get_buffer_view().device)
+#         ):
+#             try:
+#                 from . import _corepy_rust as ffi  # type: ignore[import-untyped]
+#
+# Check for Metal dispatch
+#                 view = self._get_buffer_view()
+#                 is_metal = view.device.is_metal()
+#
+#                 if is_metal and len(self.shape) == 2 and len(other.shape) == 2:
+# Metal Matrix Multiplication
+#                     m, k1 = self.shape
+#                     k2, n = other.shape
+#
+#                     if k1 != k2:
+#                         raise ValueError(
+#                             f"Matrix dimension mismatch: ({m}, {k1}) @ ({k2}, {n})"
+#                         )
+#
+#                     view_b = other._get_buffer_view()
+#
+# Allocate output
+#                     import numpy as np
+#
+#                     final_np = np.empty((m, n), dtype=np.float32)
+#                     ptr_out = final_np.__array_interface__["data"][0]
+#
+#                     ffi.metal_matmul_f32(
+#                         view.data_ptr, view_b.data_ptr, ptr_out, m, k1, n
+#                     )
+#
+#                     elapsed_ms = (time.perf_counter() - start_time) * 1000
+#                     record_op("matmul", elapsed_ms, "Metal")
+#                     return ndarray(final_np, dtype=self._dtype, backend=self.backend)
+#
+# Case 1: Dot Product (1D @ 1D)
+#                 if len(self.shape) == 1 and len(other.shape) == 1 and not is_metal:
+#                     ptr_a, count_a, _ref_a = self._get_buffer_pointer("f4")
+#                     ptr_b, count_b, _ref_b = other._get_buffer_pointer("f4")
+#
+#                     if count_a != count_b:
+#                         raise ValueError(
+#                             f"Dot product size mismatch: {count_a} vs {count_b}"
+#                         )
+#
+#                     result = ffi.tensor_matmul_f32(ptr_a, ptr_b, count_a)
+#                     elapsed_ms = (time.perf_counter() - start_time) * 1000
+#                     record_op("matmul", elapsed_ms, "CPU")
+#                     return ndarray(result, dtype=self._dtype, backend=self.backend)
+#
+# Case 2: Matrix Multiplication (2D @ 2D) - CPU
+#                 elif len(self.shape) == 2 and len(other.shape) == 2 and not is_metal:
+#                     m, k1 = self.shape
+#                     k2, n = other.shape
+#
+#                     if k1 != k2:
+#                         raise ValueError(
+#                             f"Matrix dimension mismatch: ({m}, {k1}) @ ({k2}, {n})"
+#                         )
+#
+#                     ptr_a, _c_a, _ref_a = self._get_buffer_pointer("f4")
+#                     ptr_b, _c_b, _ref_b = other._get_buffer_pointer("f4")
+#
+# Prepare output buffer (Zero-Copy Optimization)
+#                     import numpy as np
+#
+# Allocate uninitialized memory directly (fastest)
+# Note: C++ kernels (AVX2/OpenBLAS) will initialize this (beta=0.0)
+#                     final_np = np.empty((m, n), dtype=np.float32)
+#
+# Get raw pointer to the numpy array's data
+#                     ptr_out = final_np.__array_interface__["data"][0]
+#
+# Dispatch 2D kernel
+#                     ffi.tensor_matmul_2d_f32(ptr_a, ptr_b, ptr_out, m, k1, n)
+#
+# Return wrapped array
+#                     elapsed_ms = (time.perf_counter() - start_time) * 1000
+#                     record_op("matmul", elapsed_ms, "CPU")
+#                     return ndarray(final_np, dtype=self._dtype, backend=self.backend)
+#
+#                 else:
+# Generic shapes not supported in optimized kernel yet
+#                     pass
+#
+#             except ImportError:
+#                 pass  # Fallback
+#
+#         from .backend.dispatch import dispatch_kernel
+#
+#         result = dispatch_kernel(
+#             "matmul",
+#             self.backend,
+#             self._backing_data,
+#             other._backing_data,
+#             shape_a=self.shape,
+#             shape_b=other.shape,
+#         )
+#         elapsed_ms = (time.perf_counter() - start_time) * 1000
+#         record_op("matmul", elapsed_ms, self.backend.name)
+#         return ndarray(result, dtype=self._dtype, backend=self.backend)
+#
 
 # Backward compatibility alias (deprecated)
 import warnings

@@ -17,7 +17,7 @@ Practical examples demonstrating Corepy features.
 
 - **`working_examples.py`** - Basic tensor operations and usage patterns
 - **`validated_examples.py`** - Tested use cases with expected outputs
-- **`new_features_demo.py`** - Demonstrates `concatenate` and `compute_stats` (New in 0.2.3)
+- **`new_features_demo.py`** - Demonstrates `concatenate` and `compute_stats` (New in 0.2.4)
 
 ## Running Examples
 

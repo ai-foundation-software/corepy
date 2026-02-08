@@ -2,7 +2,7 @@
 Tutorial 05: Profiler & Export
 ==============================
 
-This tutorial showcases the new Profiler Export features in Corepy v0.2.3.
+This tutorial showcases the new Profiler Export features in Corepy v0.2.4.
 You can now export performance traces to Google Chrome's tracing tool.
 
 Steps:
@@ -60,7 +60,7 @@ def main():
     output_file = "corepy_trace.json"
     print(f"\n--- Exporting Trace to {output_file} ---")
 
-    # This API is new in v0.2.3
+    # This API is new in v0.2.4
     try:
         path = cp.profiler.export_chrome_trace(output_file)
         print(f"✅ Trace exported successfully to: {path}")
@@ -70,7 +70,7 @@ def main():
         print("3. Click 'Load' and select the file.")
         print("OR visit https://ui.perfetto.dev/ and drop the file there.")
     except AttributeError:
-        print("❌ `export_chrome_trace` not found. Are you on v0.2.3?")
+        print("❌ `export_chrome_trace` not found. Are you on v0.2.4?")
     except Exception as e:
         print(f"❌ Export failed: {e}")
 

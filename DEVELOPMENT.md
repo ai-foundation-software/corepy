@@ -16,8 +16,7 @@ Before setting up the development environment, ensure you have:
 Run the automated setup script:
 
 ```bash
-chmod +x setup_dev.sh
-./scripts/setup_dev.sh
+make install
 ```
 
 This script will:
@@ -81,32 +80,40 @@ source .venv/bin/activate
 
 ```bash
 # Run all tests
-uv run pytest
+make test
 
 # Run with coverage
 uv run pytest --cov=corepy --cov-report=html
-
-# Run specific test file
-uv run pytest tests/test_specific.py
 ```
 
-### Building the Project
+### Standard Development Commands
 
+Use the provided `Makefile` for a standardized experience:
+
+- `make install`: Syncs dependencies via `uv sync`.
+- `make build`: Builds C++ and Rust extensions via `scripts/build.sh`.
+- `make test`: Runs tests via `uv run pytest`.
+- `make bench`: Runs benchmarks via `scripts/bench.sh`.
+- `make clean`: Cleans artifacts.
+- `make verify`: Verifies installation.
+
+### Manual Workflow Details
+
+#### Running Tests with Coverage
 ```bash
-# Build
+uv run pytest --cov=corepy --cov-report=html
+```
+
+#### Clean Build
+```bash
+make clean
 make build
-
-# Clean and Build
-make rebuild
-
-# Verify
-make verify
 ```
 
 ### Running Benchmarks
 
 ```bash
-./bench.sh
+make bench
 ```
 
 ### Code Quality Tools

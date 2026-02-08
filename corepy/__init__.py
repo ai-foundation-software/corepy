@@ -31,13 +31,18 @@ if platform.system() == "Windows":
         bin_dir = os.path.join(openblas_dir, "bin")
         if os.path.exists(bin_dir):
             try:
-                os.add_dll_directory(bin_dir)
+                if hasattr(os, "add_dll_directory"):  # Windows only
+                    os.add_dll_directory(bin_dir)  # type: ignore[attr-defined]
             except Exception:
                 pass
 
 from corepy import data, runtime, schema
 
-from . import backend
+from . import (
+    backend,
+    buffer_pool,  # Import buffer pool module
+    lazy,  # Import lazy evaluation module
+)
 
 # NumPy-compatible primary exports
 from .array import Tensor, ndarray  # ndarray is primary, Tensor is deprecated alias
@@ -64,14 +69,14 @@ except ImportError:
 
 
 try:
-    from . import _corepy_rust  # type: ignore[import-untyped]
+    from . import _corepy_rust  # type: ignore[import-not-found, import-untyped]
 except ImportError:
     try:
-        import _corepy_rust  # type: ignore[import-untyped]
+        import _corepy_rust  # type: ignore[import-not-found, import-untyped]
     except ImportError:
         pass
 
-__version__ = "0.2.3"
+__version__ = "0.2.4"
 
 # Expose types and backend control
 from .backend import (
@@ -80,6 +85,7 @@ from .backend import (
     detect_devices,
     explain_last_dispatch,
     get_backend_policy,
+    get_system_capabilities,
     set_backend_policy,
 )
 
@@ -189,6 +195,7 @@ def array(
     Create an array from data (NumPy-compatible).
 
     This is the primary way to create arrays in CorePy, matching np.array().
+    Automatically switches between eager and lazy evaluation based on context.
 
     Args:
         data: Input data (list, tuple, numpy array, or existing ndarray).
@@ -196,15 +203,30 @@ def array(
         device: Target device ('cpu', 'metal', 'gpu').
 
     Returns:
-        ndarray: A new CorePy array.
+        ndarray in normal mode, LazyArray in lazy mode
 
     Example:
         >>> import corepy as cp
+        >>> # Eager mode
         >>> arr = cp.array([1.0, 2.0, 3.0])
-        >>> arr.shape
-        (3,)
+        >>> result = arr + arr  # Executes immediately
+        >>>
+        >>> # Lazy mode (same API!)
+        >>> with cp.lazy():
+        ...     arr = cp.array([1.0, 2.0, 3.0])
+        ...     result = arr + arr  # Builds expression tree
+        ...     materialized = result.compute()
     """
-    return ndarray(data, dtype=dtype, device=device)
+    from .lazy import LazyArray
+    from .lazy.context import is_lazy_mode
+
+    arr = ndarray(data, dtype=dtype, device=device)
+
+    # Wrap in LazyArray if in lazy mode
+    if is_lazy_mode():
+        return LazyArray(arr)  # type: ignore[return-value]
+
+    return arr
 
 
 def zeros(
@@ -395,39 +417,36 @@ def compute_stats(arr: ndarray, stats: list) -> dict:
 # Deprecated alias (kept for backward compatibility)
 tensor = Tensor
 
+# Import lazy context manager for export
+from .lazy import lazy  # Export context manager: with cp.lazy()
 
+# NumPy-compatible type hints
+NDArray = np.ndarray
+
+# BackendType for explicit backend selection
 __all__ = [
-    # NumPy-compatible primary API
-    "array",
+    # Core types
     "ndarray",
+    "Tensor",
+    "DataType",
+    "BackendType",
+    "NDArray",
+    # Factory functions
+    "array",
     "zeros",
     "ones",
-    "empty",
     "arange",
-    "add",
-    "matmul",
-    "dot",
-    "concatenate",
-    # Deprecated (backward compatibility)
-    "Tensor",
-    "tensor",
-    # Submodules
-    "data",
-    "schema",
-    "runtime",
-    "backend",
-    # Profiler
+    "linspace",
+    # Lazy evaluation
+    "lazy",
+    # Profiling
+    "ProfileContext",
+    "clear_profile",
     "enable_profiling",
     "disable_profiling",
-    "clear_profile",
-    "profile_report",
-    "export_profile",
-    "ProfileContext",
-    "profile_operation",
+    "record_op_time",
     "detect_bottlenecks",
-    "get_recommendations",
     "detect_regressions",
-    # Utilities
     "add_one",
     "compute_stats",
     # Data types

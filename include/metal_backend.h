@@ -38,6 +38,28 @@ void metal_mul(const float* a, const float* b, float* result, int size);
 void metal_div(const float* a, const float* b, float* result, int size);
 
 // ============================================================================
+// Broadcasting Operations
+// ============================================================================
+
+typedef enum {
+    METAL_OP_ADD = 0,
+    METAL_OP_SUB = 1,
+    METAL_OP_MUL = 2,
+    METAL_OP_DIV = 3
+} MetalOpType;
+
+/// Broadcasted binary operation
+/// shape: Output shape (rank elements)
+/// stridesA: Input A strides (rank elements)
+/// stridesB: Input B strides (rank elements)
+/// rank: Number of dimensions
+/// size: Total elements in output
+/// sizeA: Total elements in input A buffer (for bounds safety)
+/// sizeB: Total elements in input B buffer (for bounds safety)
+void metal_broadcast_op(MetalOpType op, const float* a, const float* b, float* result,
+                        const int* shape, const int* stridesA, const int* stridesB, int rank, int size, int sizeA, int sizeB);
+
+// ============================================================================
 // Reduction Operations
 // ============================================================================
 
@@ -60,6 +82,14 @@ float metal_min_f32(const float* data, int size);
 /// Matrix multiplication: C = A @ B
 /// A is MxK, B is KxN, C is MxN (row-major layout)
 void metal_matmul_f32(const float* a, const float* b, float* c, int m, int k, int n);
+
+// ============================================================================
+// Transpose Utils
+// ============================================================================
+
+/// Transpose matrix: Output = Input^T
+/// Input is MxN, Output is NxM
+void metal_transpose_f32(const float* in, float* out, int m, int n);
 
 #ifdef __cplusplus
 }

@@ -42,7 +42,13 @@ def test_tensor_operations():
 
     res = t1 + t2
     assert isinstance(res, ndarray)
-    assert res._backing_data == [4.0, 6.0]
+    import numpy as np
+
+    expected = [4.0, 6.0]
+    if isinstance(res._backing_data, np.ndarray):
+        np.testing.assert_array_equal(res._backing_data, expected)
+    else:
+        assert res._backing_data == expected
 
 
 def test_isinstance_tensor():

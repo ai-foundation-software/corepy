@@ -3,7 +3,7 @@ Tutorial 04: Metal GPU Acceleration
 ================================
 
 This tutorial demonstrates how to use the Metal GPU backend on macOS devices (Apple Silicon).
-Corepy v0.2.3 introduces native Metal support for high-performance tensor operations.
+Corepy v0.2.4 introduces native Metal support for high-performance tensor operations.
 
 Prerequisites:
 - macOS 12.0+

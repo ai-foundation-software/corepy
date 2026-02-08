@@ -41,8 +41,8 @@ def test_tensor_auto_gpu_threshold_mock(monkeypatch):
             assert t_small.backend == BackendType.CPU
 
             # 2. Large Tensor -> GPU
-            # THRESHOLD is 100,000
-            t_large = array([1.0] * 100_001)
+            # THRESHOLD is 1,000,000
+            t_large = array([1.0] * 1_000_001)
             assert t_large.backend == BackendType.GPU
     finally:
         # Restore session

@@ -1,7 +1,7 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # =============================================================================
 # CorePy Benchmark Script
-# Supports: Linux, macOS, Windows (Git Bash/WSL)
+# Usage: ./scripts/bench.sh (or via `make bench`)
 # =============================================================================
 set -e
 
@@ -12,6 +12,9 @@ cd "$REPO_ROOT"
 
 echo "=== CorePy Performance Benchmark ==="
 echo ""
+
+# Check uv
+command -v uv >/dev/null 2>&1 || { echo "❌ uv required"; exit 1; }
 
 # Detect CPU count
 if command -v nproc >/dev/null 2>&1; then
@@ -35,41 +38,30 @@ mkdir -p build
 # Actually bench.sh does a clean build usually.
 cd build
 
-if command -v uv >/dev/null 2>&1; then
-    PYBIND11_CMAKE_DIR=$(uv run python -c "import pybind11; print(pybind11.get_cmake_dir())" 2>/dev/null)
-    CMAKE_ARGS="-Dpybind11_DIR=$PYBIND11_CMAKE_DIR"
-else
-    CMAKE_ARGS=""
-fi
+python_cmake_dir=$(uv run --no-sync python -c "import pybind11; print(pybind11.get_cmake_dir())" 2>/dev/null)
 
 if command -v ninja >/dev/null 2>&1; then
-    cmake .. -G Ninja -DCMAKE_BUILD_TYPE=Release -Wno-dev $CMAKE_ARGS
-    cmake --build . --config Release
+    GENERATOR="-G Ninja"
 else
-    cmake .. -DCMAKE_BUILD_TYPE=Release -Wno-dev $CMAKE_ARGS
-    cmake --build . --config Release -j $JOBS
+    GENERATOR=""
 fi
+
+uv run --no-sync cmake .. $GENERATOR -DCMAKE_BUILD_TYPE=Release -Dpybind11_DIR="$python_cmake_dir"
+uv run --no-sync cmake --build . --config Release --parallel "$JOBS"
+
 cd "$REPO_ROOT"
 echo "✅ C++ kernels built"
 
 # Phase 3: Build Rust runtime
 echo ""
 echo "Phase 3/4: Building Rust Runtime..."
-if command -v uv >/dev/null 2>&1; then
-    uv run maturin develop --release --manifest-path rust/core/Cargo.toml
-else
-    maturin develop --release --manifest-path rust/core/Cargo.toml
-fi
+uv run maturin develop --release --manifest-path rust/core/Cargo.toml
 echo "✅ Rust runtime built"
 
 # Phase 4: Performance tests
 echo ""
 echo "Phase 4/4: Performance Verification..."
-if command -v uv >/dev/null 2>&1; then
-    uv run python scripts/benchmark.py
-else
-    python3 scripts/benchmark.py
-fi
+uv run python scripts/benchmark.py
 
 # Cleanup object files (optional)
 echo ""

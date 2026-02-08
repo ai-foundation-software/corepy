@@ -1,5 +1,5 @@
 """
-New Features Demonstration for Corepy 0.2.3
+New Features Demonstration for Corepy 0.2.4
 ===========================================
 
 This script demonstrates recently added features:

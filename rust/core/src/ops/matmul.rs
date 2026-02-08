@@ -32,6 +32,7 @@ impl<T> SendPtrMut<T> {
 }
 
 /// Scalar fallback for dot product
+#[allow(dead_code)]
 unsafe fn dot_product_f32_scalar(a: *const f32, b: *const f32, count: usize) -> f32 {
     let mut sum = 0.0;
     for i in 0..count {
@@ -144,20 +145,20 @@ pub unsafe fn dot_product_f32_cpu_dispatch(a: *const f32, b: *const f32, count: 
         #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
         {
             if is_x86_feature_detected!("avx2") && is_x86_feature_detected!("fma") {
-                return dot_product_f32_avx2(a, b, count);
+                dot_product_f32_avx2(a, b, count)
             }
         }
 
         #[cfg(target_arch = "aarch64")]
         {
             // ARM64 always has NEON
-            return dot_product_f32_neon(a, b, count);
+            dot_product_f32_neon(a, b, count)
         }
 
         // Scalar fallback for other architectures
         #[cfg(not(any(target_arch = "x86", target_arch = "x86_64", target_arch = "aarch64")))]
         {
-            return dot_product_f32_scalar(a, b, count);
+            dot_product_f32_scalar(a, b, count)
         }
 
         // Fallback if feature detection fails on x86
@@ -305,13 +306,13 @@ unsafe fn kernel_matmul_f32_neon(
 
             for l in 0..k {
                 let vb = vld1q_f32(b.add(l * n + j));
-                s0 = vfmaq_f32(s0, vdupq_n_f32(*a.add((i + 0) * k + l)), vb);
+                s0 = vfmaq_f32(s0, vdupq_n_f32(*a.add(i * k + l)), vb);
                 s1 = vfmaq_f32(s1, vdupq_n_f32(*a.add((i + 1) * k + l)), vb);
                 s2 = vfmaq_f32(s2, vdupq_n_f32(*a.add((i + 2) * k + l)), vb);
                 s3 = vfmaq_f32(s3, vdupq_n_f32(*a.add((i + 3) * k + l)), vb);
             }
 
-            vst1q_f32(c.add((i + 0) * n + j), s0);
+            vst1q_f32(c.add(i * n + j), s0);
             vst1q_f32(c.add((i + 1) * n + j), s1);
             vst1q_f32(c.add((i + 2) * n + j), s2);
             vst1q_f32(c.add((i + 3) * n + j), s3);
@@ -395,10 +396,9 @@ unsafe fn matmul_f32_cpu_kernel(
     k: usize,
     n: usize,
 ) {
-    // Note: Always prefer OpenBLAS for CPU if available, as it is highly optimized
-    // for multiple generations of architectures and handles internal blocking/threading.
-    // However, for very small sizes, our SIMD kernels might still be faster due to
-    // lower call overhead.
+    // Note: On macOS with Apple Silicon, we use Accelerate framework which
+    // automatically leverages AMX (Apple Matrix eXtension) coprocessor.
+    // AMX is significantly faster than NEON, so we use it more aggressively.
 
     #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
     {
@@ -421,12 +421,28 @@ unsafe fn matmul_f32_cpu_kernel(
 
     #[cfg(target_arch = "aarch64")]
     {
-        // ARM64 always has NEON - use native kernel for small/medium sizes
-        if m * n * k <= 128 * 128 * 128 {
-            return kernel_matmul_f32_neon(a, b, c, m, k, n);
+        // On macOS with Accelerate (AMX), prefer BLAS even for smaller matrices
+        // because AMX is ~2x faster than NEON for matrix operations
+        #[cfg(use_accelerate)]
+        {
+            // Use NEON only for very small matrices where overhead dominates
+            // AMX is beneficial starting from ~32x32 matrices
+            if m * n * k <= 32 * 32 * 32 {
+                return kernel_matmul_f32_neon(a, b, c, m, k, n);
+            }
+        }
+
+        // On non-macOS ARM64 (Linux, etc) or when Accelerate is not available,
+        // use NEON for small/medium sizes
+        #[cfg(not(use_accelerate))]
+        {
+            if m * n * k <= 128 * 128 * 128 {
+                return kernel_matmul_f32_neon(a, b, c, m, k, n);
+            }
         }
     }
 
+    // Fall back to BLAS (OpenBLAS or Accelerate depending on platform)
     kernel_matmul_f32_openblas(a, b, c, m, k, n);
 }
 

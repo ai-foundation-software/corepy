@@ -27,24 +27,24 @@ def test_select_backend_cpu_default(cpu_only_device):
 
 def test_select_backend_gpu_vector_threshold(gpu_device):
     # Below threshold
-    op_props_small = OperationProperties(element_count=100_000, shape=(100_000,))
+    op_props_small = OperationProperties(element_count=1_000_000, shape=(1_000_000,))
     backend = select_backend(OperationType.COMPUTE_VECTOR, op_props_small, gpu_device)
     assert backend == BackendType.CPU
 
     # Above threshold
-    op_props_large = OperationProperties(element_count=100_001, shape=(100_001,))
+    op_props_large = OperationProperties(element_count=1_000_001, shape=(1_000_001,))
     backend = select_backend(OperationType.COMPUTE_VECTOR, op_props_large, gpu_device)
     assert backend == BackendType.GPU
 
 
 def test_select_backend_gpu_matrix_threshold(gpu_device):
     # Below threshold
-    op_props_small = OperationProperties(element_count=511 * 511, shape=(511, 511))
+    op_props_small = OperationProperties(element_count=2047 * 2047, shape=(2047, 2047))
     backend = select_backend(OperationType.COMPUTE_MATRIX, op_props_small, gpu_device)
     assert backend == BackendType.CPU
 
     # Above threshold
-    op_props_large = OperationProperties(element_count=512 * 512, shape=(512, 512))
+    op_props_large = OperationProperties(element_count=2048 * 2048, shape=(2048, 2048))
     backend = select_backend(OperationType.COMPUTE_MATRIX, op_props_large, gpu_device)
     assert backend == BackendType.GPU
 

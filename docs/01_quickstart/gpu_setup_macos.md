@@ -4,7 +4,7 @@ This guide covers setting up **Corepy** on macOS for both **Apple Silicon (M-ser
 
 > [!NOTE]
 > **Metal GPU Acceleration:**
-> Corepy v0.2.3+ supports **Metal** acceleration on Apple Silicon.
+> Corepy v0.2.4+ supports **Metal** acceleration on Apple Silicon.
 
 ---
 

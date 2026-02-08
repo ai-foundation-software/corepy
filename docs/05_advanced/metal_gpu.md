@@ -29,7 +29,7 @@ If you request `device="metal"` on a non-Mac or an Intel Mac without Metal suppo
 
 ## Supported Operations
 
-As of v0.2.3, the following operations are optimized for Metal:
+As of v0.2.4, the following operations are optimized for Metal:
 
 *   **Reduction**: `sum`, `mean`, `max`, `min`
 *   **Matrix Multiplication**: `matmul` (@) for 2D arrays

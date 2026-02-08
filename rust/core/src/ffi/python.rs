@@ -1,4 +1,4 @@
-#![allow(clippy::useless_conversion)]
+#![allow(clippy::useless_conversion, clippy::too_many_arguments)]
 
 use pyo3::prelude::*;
 
@@ -54,6 +54,8 @@ pub fn register_functions(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(metal_sub_f32, m)?)?;
     m.add_function(wrap_pyfunction!(metal_mul_f32, m)?)?;
     m.add_function(wrap_pyfunction!(metal_div_f32, m)?)?;
+    m.add_function(wrap_pyfunction!(metal_transpose_f32, m)?)?;
+    m.add_function(wrap_pyfunction!(metal_broadcast_op, m)?)?;
 
     // System capabilities
     m.add_function(wrap_pyfunction!(get_system_capabilities, m)?)?;
@@ -1026,6 +1028,102 @@ fn metal_div_f32(a_ptr: usize, b_ptr: usize, result_ptr: usize, count: usize) ->
     #[cfg(not(target_os = "macos"))]
     {
         let _ = (a_ptr, b_ptr, result_ptr, count);
+        Err(pyo3::exceptions::PyRuntimeError::new_err(
+            "Metal is only available on macOS",
+        ))
+    }
+}
+// ============================================================================
+// Metal Transpose
+// ============================================================================
+
+#[pyfunction]
+fn metal_transpose_f32(in_ptr: usize, out_ptr: usize, m: usize, n: usize) -> PyResult<()> {
+    #[cfg(target_os = "macos")]
+    {
+        use crate::ops::metal::transpose_f32_metal_dispatch;
+
+        if in_ptr == 0 || out_ptr == 0 {
+            return Err(pyo3::exceptions::PyValueError::new_err(
+                "Null pointer passed to metal_transpose_f32",
+            ));
+        }
+
+        let _scope = crate::profiler::ProfileScope::new(
+            GLOBAL_PROFILER.clone(),
+            "transpose".to_string(),
+            "Metal".to_string(),
+            m * n,
+        );
+
+        unsafe {
+            transpose_f32_metal_dispatch(in_ptr as *const f32, out_ptr as *mut f32, m, n);
+        }
+        Ok(())
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = (in_ptr, out_ptr, m, n);
+        Err(pyo3::exceptions::PyRuntimeError::new_err(
+            "Metal is only available on macOS",
+        ))
+    }
+}
+
+#[pyfunction]
+fn metal_broadcast_op(
+    op: i32,
+    a_ptr: usize,
+    b_ptr: usize,
+    out_ptr: usize,
+    shape: Vec<i32>,
+    strides_a: Vec<i32>,
+    strides_b: Vec<i32>,
+    size: usize,
+    size_a: usize,
+    size_b: usize,
+) -> PyResult<()> {
+    #[cfg(target_os = "macos")]
+    {
+        use crate::ops::metal::broadcast_op;
+
+        if a_ptr == 0 || b_ptr == 0 || out_ptr == 0 {
+            return Err(pyo3::exceptions::PyValueError::new_err(
+                "Null pointer passed to metal_broadcast_op",
+            ));
+        }
+
+        let rank = shape.len();
+        if strides_a.len() != rank || strides_b.len() != rank {
+            return Err(pyo3::exceptions::PyValueError::new_err(
+                "Strides rank mismatch in metal_broadcast_op",
+            ));
+        }
+
+        unsafe {
+            broadcast_op(
+                op,
+                a_ptr as *const f32,
+                b_ptr as *const f32,
+                out_ptr as *mut f32,
+                shape.as_ptr(),
+                strides_a.as_ptr(),
+                strides_b.as_ptr(),
+                rank as i32,
+                size as i32,
+                size_a as i32,
+                size_b as i32,
+            );
+        }
+        Ok(())
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = (
+            op, a_ptr, b_ptr, out_ptr, shape, strides_a, strides_b, size, size_a, size_b,
+        );
         Err(pyo3::exceptions::PyRuntimeError::new_err(
             "Metal is only available on macOS",
         ))

@@ -29,7 +29,7 @@ def test_init_fallback_missing_extension():
         importlib.reload(corepy)
 
         # 5. Verify proper version (should still be set)
-        assert corepy.__version__ == "0.2.3"
+        assert corepy.__version__ == "0.2.4"
 
         # 6. Verify fallback behavior
         # add_one should exist (as the python fallback)

@@ -26,6 +26,13 @@ def _flatten(data: Any) -> List[float]:
     """Recursively flatten nested lists/tuples/arrays to a flat list of floats."""
     import numpy as np
 
+    # Import here to avoid circular dependency
+    from corepy.array import ndarray
+
+    # Handle CorePy ndarray objects by converting to numpy first
+    if isinstance(data, ndarray):
+        return _flatten(data.to_numpy())
+
     # Handle numpy arrays first
     if isinstance(data, np.ndarray):
         return [float(x) for x in data.flatten()]

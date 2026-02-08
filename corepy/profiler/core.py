@@ -115,12 +115,20 @@ try:
     _clear_profile = _corepy_rust.clear_profile
     _get_profile_report = _corepy_rust.get_profile_report
     _set_profile_context = _corepy_rust.set_profile_context
-    _RUST_AVAILABLE = True
+    # _RUST_AVAILABLE = True
+    # For now, disable Rust profiler to ensure we capture Python-side events
+    _RUST_AVAILABLE = False
+    logger.warning("Disabling Rust profiler to ensure Python events are captured.")
 except ImportError:
     _RUST_AVAILABLE = False
     logger.warning("Corepy Rust extension not found. Profiling will be disabled.")
 
-    # Use Python fallback
+
+# Force Python profiler if we're debugging or Rust is broken
+# This ensures that even if Rust is loaded, we use the Python implementation
+# which honors record_op calls from Python.
+if not _RUST_AVAILABLE:
+
     def _enable_profiling():
         _python_profiler.enable()
 
@@ -139,8 +147,13 @@ except ImportError:
 
 def record_op(op_name: str, time_ms: float, backend: str = "cpu"):
     """Record an operation (for Python fallback)."""
-    if not _RUST_AVAILABLE:
-        _python_profiler.record_operation(op_name, time_ms, backend)
+    # If Rust is available but doesn't support custom recording, or we want hybrid:
+    # For now, always record to Python profiler if Rust doesn't expose a recorder.
+    # The current Rust extension seems to not expose record_op, so we must rely on Python.
+    # However, profile_report prefers Rust. So we should probably disable Rust integration
+    # if it's incomplete, OR we merge reports.
+    # Safest fix: Force use of Python profiler for now.
+    _python_profiler.record_operation(op_name, time_ms, backend)
 
 
 def enable_profiling():

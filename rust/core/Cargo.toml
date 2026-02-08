@@ -1,7 +1,11 @@
 [package]
 name = "corepy-backend"
-version = "0.2.3"
+version = "0.2.4"
 edition = "2021"
+description = "Rust backend for CorePy - High-performance tensor operations with Metal acceleration"
+license = "MIT"
+repository = "https://github.com/yourusername/corepy"
+homepage = "https://github.com/yourusername/corepy"
 
 [lib]
 name = "_corepy_rust"
@@ -19,3 +23,12 @@ uuid = { version = "1.0", features = ["v4", "serde"] }
 lazy_static = "1.4"
 cblas-sys = "0.1.4"
 
+# Platform-specific BLAS backends
+[target.'cfg(all(target_os = "macos", target_arch = "aarch64"))'.dependencies]
+accelerate-src = "0.3"  # Apple Accelerate framework (AMX support on M1/M2/M3)
+
+
+
+[features]
+default = ["cpp_kernels"]
+cpp_kernels = []

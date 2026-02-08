@@ -38,7 +38,7 @@ It is designed for developers building **AI foundations**, **scientific simulati
 | Platform | Architecture | Accelerators | Status |
 | :--- | :--- | :--- | :--- |
 | **Linux** | x86_64 | AVX2, OpenBLAS | ✅ Production |
-| **macOS** | Apple Silicon | **Metal**, NEON | ✅ Beta (0.2.3+) |
+| **macOS** | Apple Silicon | **Metal**, NEON | ✅ Beta (0.2.4+) |
 | **Windows** | x86_64 | AVX2 | ✅ Experimental |
 
 ---
@@ -65,12 +65,18 @@ pip install corepy
 git clone https://github.com/ai-foundation-software/corepy.git
 cd corepy
 
-# Using Make (Recommended)
+# Using Make (Standard Workflow)
 make build && make install
+
+# Commands Reference:
+# - make install: Syncs dependencies via uv sync
+# - make build: Builds C++ and Rust extensions (v0.2.4)
+# - make test: Runs tests
+# - make verify: Verifies installation
 
 # Manual
 ./scripts/build.sh
-pip install .
+uv sync
 ```
 
 ---
@@ -117,8 +123,8 @@ cp.profiler.export_chrome_trace("trace.json")
 ---
 
 ## 🤝 Stability & Roadmap
-Corepy is currently **Alpha (v0.2.3)**.
-- **v0.2.3**: Metal GPU Support, Robust CMake Build, Profiler Export.
+Corepy is currently **Alpha (v0.2.4)**.
+- **v0.2.4**: Local CI Simulation, Metal Framework linking, Pinned Deps.
 - **v0.3.0**: CUDA Support and Tiled Matmul Optimization.
 - **v1.0**: Stable API promise.
 

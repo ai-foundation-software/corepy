@@ -39,6 +39,38 @@ kernel void div_arrays(device const float* inA [[ buffer(0) ]],
     result[index] = inA[index] / inB[index];
 }
 
+// Broadcasting Helper
+inline uint get_broadcast_index(uint linear_index, constant int* shape, constant int* strides, int rank) {
+    uint offset = 0;
+    for (int i = rank - 1; i >= 0; --i) {
+        int dim_size = shape[i];
+        int coord = linear_index % dim_size;
+        linear_index /= dim_size;
+        offset += coord * strides[i];
+    }
+    return offset;
+}
+
+#define BROADCAST_KERNEL(NAME, OP) \
+kernel void NAME(device const float* inA [[ buffer(0) ]], \
+                 device const float* inB [[ buffer(1) ]], \
+                 device float* result [[ buffer(2) ]], \
+                 constant int* shape [[ buffer(3) ]], \
+                 constant int* stridesA [[ buffer(4) ]], \
+                 constant int* stridesB [[ buffer(5) ]], \
+                 constant int& rank [[ buffer(6) ]], \
+                 uint index [[ thread_position_in_grid ]]) \
+{ \
+    uint idxA = get_broadcast_index(index, shape, stridesA, rank); \
+    uint idxB = get_broadcast_index(index, shape, stridesB, rank); \
+    result[index] = inA[idxA] OP inB[idxB]; \
+}
+
+BROADCAST_KERNEL(add_broadcast, +)
+BROADCAST_KERNEL(sub_broadcast, -)
+BROADCAST_KERNEL(mul_broadcast, *)
+BROADCAST_KERNEL(div_broadcast, /)
+
 kernel void fill_array(device float* result [[ buffer(0) ]],
                        constant float& value [[ buffer(1) ]],
                        uint index [[ thread_position_in_grid ]])
@@ -242,5 +274,70 @@ kernel void matmul_tiled(device const float* A [[ buffer(0) ]],
     
     if (row < M && col < N) {
         C[row * N + col] = sum;
+    }
+}
+
+// ============================================================================
+// Transpose
+// ============================================================================
+
+// Vectorized Element-wise Operations (float4)
+kernel void add_arrays_float4(device const float4* inA [[ buffer(0) ]],
+                              device const float4* inB [[ buffer(1) ]],
+                              device float4* result [[ buffer(2) ]],
+                              uint index [[ thread_position_in_grid ]])
+{
+    result[index] = inA[index] + inB[index];
+}
+
+kernel void transpose_naive(device const float* in [[ buffer(0) ]],
+                            device float* out [[ buffer(1) ]],
+                            constant uint& M [[ buffer(2) ]], // Rows of Input
+                            constant uint& N [[ buffer(3) ]], // Cols of Input
+                            uint2 gid [[ thread_position_in_grid ]])
+{
+    uint row = gid.y;
+    uint col = gid.x;
+    
+    if (row >= M || col >= N) return;
+    
+    out[col * M + row] = in[row * N + col];
+}
+
+// Tiled Transpose
+#define TRANSPOSE_TILE_SIZE 32
+#define TRANSPOSE_BLOCK_ROWS 8
+
+kernel void transpose_tiled(device const float* in [[ buffer(0) ]],
+                            device float* out [[ buffer(1) ]],
+                            constant uint& M [[ buffer(2) ]],
+                            constant uint& N [[ buffer(3) ]],
+                            uint2 gid [[ thread_position_in_grid ]],
+                            uint2 tid [[ thread_position_in_threadgroup ]],
+                            uint2 tgid [[ threadgroup_position_in_grid ]],
+                            threadgroup float* tile [[ threadgroup(0) ]])
+{
+    // Handle tile loading
+    uint x = tgid.x * TRANSPOSE_TILE_SIZE + tid.x;
+    uint y = tgid.y * TRANSPOSE_TILE_SIZE + tid.y;
+    uint index_in = y * N + x;
+    
+    // Load data into shared memory
+    // Handle bounds
+    if (x < N && y < M) {
+        tile[tid.y * TRANSPOSE_TILE_SIZE + tid.x] = in[index_in];
+    }
+    
+    threadgroup_barrier(mem_flags::mem_threadgroup);
+    
+    // Write out transposed
+    // Transpose tile logical coordinates: x becomes y, y becomes x
+    x = tgid.y * TRANSPOSE_TILE_SIZE + tid.x;
+    y = tgid.x * TRANSPOSE_TILE_SIZE + tid.y;
+    
+    uint index_out = y * M + x;
+    
+    if (x < M && y < N) {
+        out[index_out] = tile[tid.x * TRANSPOSE_TILE_SIZE + tid.y];
     }
 }

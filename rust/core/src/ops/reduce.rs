@@ -14,29 +14,66 @@
 const PARALLEL_THRESHOLD_F32: usize = 1_000_000;
 const PARALLEL_THRESHOLD_I32: usize = 1_000_000;
 
-// FFI declaration for C++ kernels
+// FFI declaration for C++ kernels (optional)
+#[cfg(feature = "cpp_kernels")]
 extern "C" {
-    /// CPU kernel for all() reduction
-    /// Returns true if all elements in data are non-zero
-    ///
-    /// C++ signature: bool all_bool_cpu(const uint8_t* data, size_t count)
-    /// Location: csrc/kernels/reduction.cpp
     pub fn all_bool_cpu(data_ptr: *const u8, count: usize) -> bool;
-
-    /// CPU kernel for any() reduction
-    /// Returns true if any element in data is non-zero (truthy)
     pub fn any_bool_cpu(data_ptr: *const u8, count: usize) -> bool;
-
-    /// CPU kernel for sum() reduction on f32
-    /// Returns sum of all elements
     pub fn sum_f32_cpu(data_ptr: *const f32, count: usize) -> f32;
-
-    /// CPU kernel for sum() reduction on i32
     pub fn sum_i32_cpu(data_ptr: *const i32, count: usize) -> i32;
-
-    /// CPU kernel for mean() reduction on f32
-    /// Returns arithmetic mean of all elements
     pub fn mean_f32_cpu(data_ptr: *const f32, count: usize) -> f32;
+}
+
+// Rust fallback implementations
+#[cfg(not(feature = "cpp_kernels"))]
+#[inline]
+unsafe fn all_bool_cpu(data_ptr: *const u8, count: usize) -> bool {
+    for i in 0..count {
+        if *data_ptr.add(i) == 0 {
+            return false;
+        }
+    }
+    true
+}
+
+#[cfg(not(feature = "cpp_kernels"))]
+#[inline]
+unsafe fn any_bool_cpu(data_ptr: *const u8, count: usize) -> bool {
+    for i in 0..count {
+        if *data_ptr.add(i) != 0 {
+            return true;
+        }
+    }
+    false
+}
+
+#[cfg(not(feature = "cpp_kernels"))]
+#[inline]
+unsafe fn sum_f32_cpu(data_ptr: *const f32, count: usize) -> f32 {
+    let mut sum = 0.0;
+    for i in 0..count {
+        sum += *data_ptr.add(i);
+    }
+    sum
+}
+
+#[cfg(not(feature = "cpp_kernels"))]
+#[inline]
+unsafe fn sum_i32_cpu(data_ptr: *const i32, count: usize) -> i32 {
+    let mut sum = 0i32;
+    for i in 0..count {
+        sum = sum.wrapping_add(*data_ptr.add(i));
+    }
+    sum
+}
+
+#[cfg(not(feature = "cpp_kernels"))]
+#[inline]
+unsafe fn mean_f32_cpu(data_ptr: *const f32, count: usize) -> f32 {
+    if count == 0 {
+        return 0.0;
+    }
+    sum_f32_cpu(data_ptr, count) / (count as f32)
 }
 
 /// Dispatch all() operation to CPU kernel

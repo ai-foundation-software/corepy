@@ -4,7 +4,7 @@ build-backend = "maturin"
 
 [project]
 name = "corepy"
-version = "0.2.3"
+version = "0.2.4"
 description = "A unified, high-performance core runtime for data, computation, and AI workflows."
 readme = "README.md"
 requires-python = ">=3.9"
@@ -28,9 +28,9 @@ classifiers = [
 ]
 dependencies = [
     "typing-extensions>=4.6.0",
-    "pydantic>=2.0.0",
-    "numpy>=2.0.2",
-    "pybind11>=3.0.1",
+    "pydantic==2.12.5",
+    "numpy==1.26.4",
+    "pybind11==3.0.1",
 ]
 
 [tool.maturin]

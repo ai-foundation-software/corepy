@@ -146,6 +146,8 @@ pub unsafe fn dot_product_f32_cpu_dispatch(a: *const f32, b: *const f32, count: 
         {
             if is_x86_feature_detected!("avx2") && is_x86_feature_detected!("fma") {
                 dot_product_f32_avx2(a, b, count)
+            } else {
+                dot_product_f32_scalar(a, b, count)
             }
         }
 
@@ -157,12 +159,6 @@ pub unsafe fn dot_product_f32_cpu_dispatch(a: *const f32, b: *const f32, count: 
 
         // Scalar fallback for other architectures
         #[cfg(not(any(target_arch = "x86", target_arch = "x86_64", target_arch = "aarch64")))]
-        {
-            dot_product_f32_scalar(a, b, count)
-        }
-
-        // Fallback if feature detection fails on x86
-        #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
         {
             dot_product_f32_scalar(a, b, count)
         }

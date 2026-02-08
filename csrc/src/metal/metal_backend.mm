@@ -102,8 +102,8 @@ void metal_init() {
             if (envPath != nullptr) {
                 // std::cout << "Metal: Loading library from env: " << envPath << std::endl;
                 NSString* path = [NSString stringWithUTF8String:envPath];
-                NSURL* url = [NSURL fileURLWithPath:path];
-                g_library = [g_device newLibraryWithFile:[path stringByExpandingTildeInPath] error:&error];
+                NSURL* url = [NSURL fileURLWithPath:[path stringByExpandingTildeInPath]];
+                g_library = [g_device newLibraryWithURL:url error:&error];
                 
                 if (g_library == nil) {
                      std::cerr << "Metal: Failed to load library from COREPY_METAL_LIB_PATH='" 

@@ -13,7 +13,12 @@ fn main() {
         .parent()
         .unwrap();
 
-    let build_path = repo_root.join("build").join("csrc");
+    // Check for explicit C++ source directory from environment
+    let build_path = if let Ok(csrc_dir) = std::env::var("COREPY_CSRC_DIR") {
+        std::path::PathBuf::from(csrc_dir)
+    } else {
+        repo_root.join("build").join("csrc")
+    };
 
     // Check if C++ library is built
     let cpp_lib_exists = build_path.exists();
@@ -32,11 +37,13 @@ fn main() {
              Diagnostic info:\\n\
              - Repository root: {}\\n\
              - Current working directory: {}\\n\
-             - Expected C++ library path: {}",
+             - Expected C++ library path: {}\\n\
+             - COREPY_CSRC_DIR env var: {:?}",
             build_path.display(),
             repo_root.display(),
             cwd,
-            build_path.display()
+            build_path.display(),
+            std::env::var("COREPY_CSRC_DIR").ok()
         );
 
         // Emit a cargo warning so it's visible even if we panic convention changes
@@ -71,19 +78,17 @@ fn main() {
         println!("cargo:rustc-link-lib=static=corepy_kernels");
     }
 
-    // Link OpenBLAS (required by corepy_kernels)
-    #[cfg(target_os = "linux")]
-    {
+    // Link OpenBLAS or Accelerate based on target OS
+    let target_os = std::env::var("CARGO_CFG_TARGET_OS").unwrap_or_default();
+    let target_arch = std::env::var("CARGO_CFG_TARGET_ARCH").unwrap_or_default();
+
+    if target_os == "linux" {
         println!("cargo:rustc-link-search=native=/usr/lib/x86_64-linux-gnu");
         println!("cargo:rustc-link-lib=dylib=openblas");
         println!("cargo:rustc-link-lib=dylib=stdc++");
-    }
-
-    #[cfg(target_os = "macos")]
-    {
+    } else if target_os == "macos" {
         // On Apple Silicon (aarch64), link Accelerate framework for AMX support
-        #[cfg(target_arch = "aarch64")]
-        {
+        if target_arch == "aarch64" {
             println!("cargo:rustc-link-lib=framework=Accelerate");
             println!("cargo:rustc-link-lib=framework=Metal");
             println!("cargo:rustc-link-lib=framework=Foundation");
@@ -91,11 +96,8 @@ fn main() {
             println!(
                 "cargo:warning=Using Apple Accelerate framework (AMX coprocessor enabled) & Metal"
             );
-        }
-
-        // On Intel Macs, still use OpenBLAS
-        #[cfg(not(target_arch = "aarch64"))]
-        {
+        } else {
+            // On Intel Macs, still use OpenBLAS
             // Try common Homebrew paths
             if let Ok(prefix) = std::env::var("LIBRARY_PATH") {
                 for path in prefix.split(':') {
@@ -106,12 +108,8 @@ fn main() {
             }
             println!("cargo:rustc-link-lib=dylib=openblas");
         }
-
         println!("cargo:rustc-link-lib=dylib=c++");
-    }
-
-    #[cfg(target_os = "windows")]
-    {
+    } else if target_os == "windows" {
         // Use OPENBLAS_DIR if set
         if let Ok(openblas_dir) = std::env::var("OPENBLAS_DIR") {
             println!("cargo:rustc-link-search=native={}/lib", openblas_dir);

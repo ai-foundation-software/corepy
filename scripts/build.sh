@@ -60,6 +60,7 @@ echo "✅ C++ kernels built"
 # Step 2: Build Rust runtime
 echo ""
 echo "Step 2/3: Building Rust runtime..."
+export COREPY_CSRC_DIR="$REPO_ROOT/build/csrc"
 uv run maturin develop --release --manifest-path rust/core/Cargo.toml
 echo "✅ Rust runtime built"
 

@@ -54,6 +54,27 @@ Issues = "https://github.com/ai-foundation-software/corepy/issues"
 
 
 
+
+[tool.coverage.run]
+disable_warnings = ["no-ctracer"]
+relative_files = true
+branch = true
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "if self.debug:",
+    "if settings.DEBUG",
+    "raise AssertionError",
+    "raise NotImplementedError",
+    "if 0:",
+    "if __name__ == .__main__.:",
+    "if TYPE_CHECKING:",
+    "class .*\\bProtocol\\):",
+    "@(abc\\.)?abstractmethod",
+]
+
 [tool.pytest.ini_options]
 minversion = "7.0"
 addopts = "-ra -q --cov=corepy"

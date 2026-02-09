@@ -7,8 +7,8 @@
 // Note: Some functions are reserved for future API exposure and may appear unused.
 #![allow(dead_code, clippy::too_many_arguments)]
 
-/// Metal FFI declarations - only available with C++ kernels
-#[cfg(feature = "cpp_kernels")]
+/// Metal FFI declarations - only available with C++ kernels on macOS
+#[cfg(all(feature = "cpp_kernels", target_os = "macos"))]
 mod ffi {
     extern "C" {
         pub fn metal_is_available() -> bool;
@@ -40,8 +40,8 @@ mod ffi {
     }
 }
 
-/// Rust fallbacks when C++ kernels not available
-#[cfg(not(feature = "cpp_kernels"))]
+/// Rust fallbacks when C++ kernels not available OR not on macOS
+#[cfg(any(not(feature = "cpp_kernels"), not(target_os = "macos")))]
 mod ffi {
     pub unsafe fn metal_is_available() -> bool {
         false
@@ -129,12 +129,12 @@ mod ffi {
         _b: *const f32,
         _result: *mut f32,
         _shape: *const i32,
-        _stridesA: *const i32,
-        _stridesB: *const i32,
+        _strides_a: *const i32,
+        _strides_b: *const i32,
         _rank: i32,
         _size: i32,
-        _sizeA: i32,
-        _sizeB: i32,
+        _size_a: i32,
+        _size_b: i32,
     ) {
         // Fallback or no-op
     }

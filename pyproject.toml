@@ -29,7 +29,8 @@ classifiers = [
 dependencies = [
     "typing-extensions>=4.6.0",
     "pydantic==2.12.5",
-    "numpy==1.26.4",
+    "numpy==1.26.4; python_version < '3.13'",
+    "numpy>=2.1; python_version >= '3.13'",
     "pybind11==3.0.1",
 ]
 

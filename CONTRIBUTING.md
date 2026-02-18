@@ -30,20 +30,17 @@ We are transitioning from C/C++ to Rust for our compute kernels because:
 
 ## 🛠️ Developer Setup
 
-We use a hybrid build system (Python + Rust). C++ kernels are legacy and being phased out.
+For detailed setup instructions for Windows, Linux, and macOS, please see **[DEVELOPMENT.md](DEVELOPMENT.md)**.
 
-For detailed setup instructions, please see **[DEVELOPMENT.md](DEVELOPMENT.md)**.
+**Quick Layout**:
+- **Python**: `corepy/`
+- **Rust**: `rust/`
+- **C++**: `csrc/`
 
-**Quick Summary**:
+**Quick Start**:
 ```bash
-# 1. Install dependencies
-./scripts/setup_dev.sh
-
-# 2. Build project
-make build
-
-# 3. Verify installation
-make verify
+make install
+make test
 ```
 
 ---

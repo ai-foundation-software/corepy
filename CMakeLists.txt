@@ -7,7 +7,19 @@ set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
 # Find Python
 find_package(Python COMPONENTS Interpreter Development.Module REQUIRED)
-find_package(pybind11 CONFIG REQUIRED)
+
+# Find pybind11 with fallback
+find_package(pybind11 CONFIG QUIET)
+if(NOT pybind11_FOUND)
+    message(STATUS "pybind11 not found, fetching from source...")
+    include(FetchContent)
+    FetchContent_Declare(
+        pybind11
+        GIT_REPOSITORY https://github.com/pybind/pybind11.git
+        GIT_TAG        v2.11.1
+    )
+    FetchContent_MakeAvailable(pybind11)
+endif()
 
 # Add C++ source directory
 add_subdirectory(csrc)

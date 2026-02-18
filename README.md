@@ -49,34 +49,23 @@ It is designed for developers building **AI foundations**, **scientific simulati
 We recommend `uv` for fast, correct cross-platform installation.
 
 ```bash
-# Install corepy
 uv pip install corepy
 ```
 
 ### Fallback (pip)
-Standard pip installation works if dependencies (CMake, Rust) are present.
-
 ```bash
 pip install corepy
 ```
 
-### From Source
+## 👨‍💻 Development
+
+For detailed instructions on setting up a development environment, building from source, and running tests, please refer to **[DEVELOPMENT.md](DEVELOPMENT.md)**.
+
+### Quick Build
 ```bash
 git clone https://github.com/ai-foundation-software/corepy.git
 cd corepy
-
-# Using Make (Standard Workflow)
-make build && make install
-
-# Commands Reference:
-# - make install: Syncs dependencies via uv sync
-# - make build: Builds C++ and Rust extensions (v0.2.4)
-# - make test: Runs tests
-# - make verify: Verifies installation
-
-# Manual
-./scripts/build.sh
-uv sync
+make install
 ```
 
 ---

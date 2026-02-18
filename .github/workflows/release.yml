@@ -23,6 +23,9 @@ jobs:
         target: [x86_64, aarch64]
     steps:
       - uses: actions/checkout@v4
+      
+      # Use uv for caching and tool management even in the manylinux container setup if possible, 
+      # but maturin-action handles its own environment. We'll keep it simple here.
       - uses: PyO3/maturin-action@v1
         with:
           manylinux: auto
@@ -30,19 +33,24 @@ jobs:
           args: --release --out dist --interpreter 3.9 3.10 3.11 3.12 3.13
           target: ${{ matrix.target }}
           before-script-linux: |
+            # Minimal deps for building C++ extensions inside manylinux
             if command -v apt-get &> /dev/null; then
               apt-get update && apt-get install -y libopenblas-dev cmake ninja-build
             elif command -v yum &> /dev/null; then
               yum install -y openblas-devel cmake ninja-build
             fi
             
-            # Install pybind11 to get CMake config
-            python3 -m pip install pybind11
+            # Use a venv for build tools to avoid system pollution
+            python3 -m venv .build-venv
+            source .build-venv/bin/activate
+            pip install pybind11 cmake ninja
+            
             PYBIND11_CMAKE_DIR=$(python3 -c "import pybind11; print(pybind11.get_cmake_dir())")
             
-            # Build C++ Kernels (Required for linking)
+            # Build C++ Kernels
             cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -Dpybind11_DIR="$PYBIND11_CMAKE_DIR"
             cmake --build build --config Release
+
       - uses: actions/upload-artifact@v4
         with:
           name: wheels-linux-${{ matrix.target }}
@@ -77,16 +85,6 @@ jobs:
             python-version: "3.13"
             openblas_url: "https://github.com/OpenMathLib/OpenBLAS/releases/download/v0.3.28/OpenBLAS-0.3.28-x64.zip"
           
-          # Windows ARM64 (Experimental - Disabled until OpenBLAS artifacts are verified)
-          # - os: windows-latest
-          #   target: aarch64-pc-windows-msvc
-          #   python-version: "3.11"
-          #   openblas_url: "https://github.com/OpenMathLib/OpenBLAS/releases/download/v0.3.28/OpenBLAS-0.3.28-arm64.zip" 
-          # - os: windows-latest
-          #   target: aarch64-pc-windows-msvc
-          #   python-version: "3.12"
-          #   openblas_url: "https://github.com/OpenMathLib/OpenBLAS/releases/download/v0.3.28/OpenBLAS-0.3.28-arm64.zip"
-
           # macOS ARM64 (Apple Silicon)
           - os: macos-14
             target: aarch64-apple-darwin
@@ -123,66 +121,61 @@ jobs:
 
       # --- Dependencies & C++ Build ---
 
-      - name: Install OpenBLAS & Build C++ (macOS)
+      - name: Setup OpenBLAS & cmake (macOS)
         if: runner.os == 'macOS'
         run: |
           brew install openblas cmake ninja
           echo "CMAKE_PREFIX_PATH=$(brew --prefix openblas)" >> $GITHUB_ENV
           echo "LIBRARY_PATH=$(brew --prefix openblas)/lib:$LIBRARY_PATH" >> $GITHUB_ENV
-          
-          # Detect pybind11
-          PYBIND11_CMAKE_DIR=$(uv run python -c "import pybind11; print(pybind11.get_cmake_dir())")
-          echo "pybind11 found at: $PYBIND11_CMAKE_DIR"
 
-          # Build C++ Kernels matching ci.yml
-          echo "Building C++ Kernels..."
-          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -Dpybind11_DIR="$PYBIND11_CMAKE_DIR"
-          cmake --build build --config Release
-
-          # Build Metal Kernels
-          echo "Compiling Metal Kernels..."
-          xcrun -sdk macosx metal -v -c csrc/src/metal/kernels.metal -o build/csrc/kernels.air
-          xcrun -sdk macosx metallib build/csrc/kernels.air -o build/csrc/default.metallib
-          # Place metallib where package can find it
-          cp build/csrc/default.metallib corepy/default.metallib
-
-      - name: Install OpenBLAS & Build C++ (Windows)
+      - name: Setup OpenBLAS (Windows)
         if: runner.os == 'Windows'
         shell: bash
         run: |
+          # Cache OpenBLAS download could be improved here, but keep simple for now
           curl -L -o openblas.zip ${{ matrix.openblas_url }}
           unzip -q openblas.zip -d openblas
           echo "OPENBLAS_DIR=${{ github.workspace }}/openblas" >> $GITHUB_ENV
           echo "CMAKE_PREFIX_PATH=${{ github.workspace }}/openblas" >> $GITHUB_ENV
           echo "${{ github.workspace }}/openblas/bin" >> $GITHUB_PATH
 
-          # Detect pybind11
-          PYBIND11_CMAKE_DIR=$(uv run python -c "import pybind11; print(pybind11.get_cmake_dir())")
-          echo "pybind11 found at: $PYBIND11_CMAKE_DIR"
+      - name: Sync Dev Dependencies
+        # This installs pybind11, cmake, ninja, maturin etc into the uv environment
+        run: uv sync --all-extras --group dev --no-install-project
 
-          # Build C++ Kernels
-          # Note: CMake determines target arch from generator or environment.
-          # For cross-compiling to ARM64 on x64 host, we might need specific flags.
-          echo "Building C++ Kernels..."
-          if [[ "${{ matrix.target }}" == "aarch64-pc-windows-msvc" ]]; then
-            # Attempt to configure for ARM64. 
-            # This is optimistic; usually requires -A ARM64 with Visual Studio generator
-            cmake -S . -B build -A ARM64 -DCMAKE_BUILD_TYPE=Release -Dpybind11_DIR="$PYBIND11_CMAKE_DIR"
-          else
-            cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -Dpybind11_DIR="$PYBIND11_CMAKE_DIR"
-          fi
-          cmake --build build --config Release
-
-      - name: Build Wheels with uv
+      - name: Build C++ Kernels
         shell: bash
         run: |
-          uv sync --all-extras --group dev
-          # Use the Python from uv's venv
-          if [ "$RUNNER_OS" == "Windows" ]; then
-            uv run maturin build --release --out dist --manifest-path rust/core/Cargo.toml --target ${{ matrix.target }} --interpreter .venv/Scripts/python.exe
+          # pybind11 is in the uv venv
+          PYBIND11_CMAKE_DIR=$(uv run python -c "import pybind11; print(pybind11.get_cmake_dir())")
+          echo "pybind11 found at: $PYBIND11_CMAKE_DIR"
+          
+          # Configure CMake
+          CMAKE_ARGS="-DCMAKE_BUILD_TYPE=Release -Dpybind11_DIR=$PYBIND11_CMAKE_DIR"
+          
+          if [[ "$RUNNER_OS" == "Windows" ]]; then
+             cmake -S . -B build $CMAKE_ARGS
           else
-            uv run maturin build --release --out dist --manifest-path rust/core/Cargo.toml --target ${{ matrix.target }} --interpreter .venv/bin/python
+             cmake -S . -B build -G Ninja $CMAKE_ARGS
           fi
+          
+          cmake --build build --config Release
+
+      - name: Post-Build Metal (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          xcrun -sdk macosx metal -v -c csrc/src/metal/kernels.metal -o build/csrc/kernels.air
+          xcrun -sdk macosx metallib build/csrc/kernels.air -o build/csrc/default.metallib
+          cp build/csrc/default.metallib corepy/default.metallib
+
+      - name: Build Wheels
+        shell: bash
+        run: |
+          # Use uv run to execute maturin within the environment where we just synced deps
+          # --no-sync prevents re-locking/syncing, saving time
+          uv run --no-sync maturin build --release --out dist \
+            --manifest-path rust/core/Cargo.toml \
+            --target ${{ matrix.target }}
 
       - uses: actions/upload-artifact@v4
         with:
@@ -194,10 +187,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: PyO3/maturin-action@v1
-        with:
-          command: sdist
-          args: --out dist
+      - uses: astral-sh/setup-uv@v5
+      - run: uv build --sdist --out-dir dist
       - uses: actions/upload-artifact@v4
         with:
           name: sdist
@@ -207,6 +198,7 @@ jobs:
     name: Publish to PyPI
     needs: [linux_build, host_build, build_sdist]
     runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
     environment:
       name: pypi
       url: https://pypi.org/p/corepy

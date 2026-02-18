@@ -1,6 +1,6 @@
 [package]
 name = "corepy-ai"
-version = "0.2.5"
+version = "0.2.6"
 edition = "2021"
 description = "Rust backend for CorePy - High-performance tensor operations with Metal acceleration"
 license = "MIT"

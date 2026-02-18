@@ -112,7 +112,33 @@ rust-lint:
 	@echo "Running cargo clippy..."
 	uv run --no-sync cargo clippy --manifest-path rust/core/Cargo.toml -- -D warnings --allow clippy::missing_safety_doc
 
-ci: check-compatibility lint rust-fmt rust-check rust-lint rust-cross-check build test
+ci-cross-cpp:
+ci-cross-cpp:
+	@echo "Cross-compiling C++ kernels (if cross-compilers available)..."
+	@if command -v aarch64-linux-gnu-g++ >/dev/null 2>&1; then \
+		echo "  Found cross-compiler. Attempting build..."; \
+		if (set -e; \
+		    . .venv/bin/activate; \
+		    PYBIND11_DIR=$$(python -c "import pybind11; print(pybind11.get_cmake_dir())"); \
+		    cmake -S . -B build-cross-aarch64 -G Ninja \
+			-DCMAKE_BUILD_TYPE=Release \
+			-DCMAKE_SYSTEM_NAME=Linux \
+			-DCMAKE_SYSTEM_PROCESSOR=aarch64 \
+			-DCMAKE_C_COMPILER=aarch64-linux-gnu-gcc \
+			-DCMAKE_CXX_COMPILER=aarch64-linux-gnu-g++ \
+			-Dpybind11_DIR="$$PYBIND11_DIR" > build-cross.log 2>&1 && \
+		    cmake --build build-cross-aarch64 --config Release >> build-cross.log 2>&1); then \
+			echo "  ✅ aarch64 C++ cross-compilation succeeded"; \
+		else \
+			echo "  ⚠️  aarch64 C++ cross-compilation FAILED. (See build-cross.log for details)"; \
+			echo "      This is expected if missing aarch64 python libraries."; \
+		fi; \
+		rm -rf build-cross-aarch64; \
+	else \
+		echo "  ⚠️  Skipping aarch64 C++ cross-compilation (aarch64-linux-gnu-g++ not found)"; \
+	fi
+
+ci: check-compatibility lint rust-fmt rust-check rust-lint rust-cross-check ci-cross-cpp build test
 	@echo "✅ All CI checks passed!"
 
 # Cleanup

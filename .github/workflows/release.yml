@@ -47,8 +47,20 @@ jobs:
             
             PYBIND11_CMAKE_DIR=$(python3 -c "import pybind11; print(pybind11.get_cmake_dir())")
             
+            # Detect cross-compilation (host arch != target arch)
+            HOST_ARCH=$(uname -m)
+            TARGET_ARCH="${{ matrix.target }}"
+            
+            CMAKE_EXTRA_ARGS=""
+            if [ "$HOST_ARCH" != "$TARGET_ARCH" ]; then
+              echo "Cross-compiling C++ kernels: $HOST_ARCH -> $TARGET_ARCH"
+              CMAKE_EXTRA_ARGS="-DCMAKE_SYSTEM_NAME=Linux -DCMAKE_SYSTEM_PROCESSOR=$TARGET_ARCH"
+              CMAKE_EXTRA_ARGS="$CMAKE_EXTRA_ARGS -DCMAKE_C_COMPILER=${TARGET_ARCH}-unknown-linux-gnu-gcc"
+              CMAKE_EXTRA_ARGS="$CMAKE_EXTRA_ARGS -DCMAKE_CXX_COMPILER=${TARGET_ARCH}-unknown-linux-gnu-g++"
+            fi
+            
             # Build C++ Kernels
-            cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -Dpybind11_DIR="$PYBIND11_CMAKE_DIR"
+            cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -Dpybind11_DIR="$PYBIND11_CMAKE_DIR" $CMAKE_EXTRA_ARGS
             cmake --build build --config Release
 
       - uses: actions/upload-artifact@v4
@@ -146,8 +158,10 @@ jobs:
       - name: Build C++ Kernels
         shell: bash
         run: |
+          source .venv/bin/activate || source .venv/Scripts/activate
+          
           # pybind11 is in the uv venv
-          PYBIND11_CMAKE_DIR=$(uv run python -c "import pybind11; print(pybind11.get_cmake_dir())")
+          PYBIND11_CMAKE_DIR=$(python -c "import pybind11; print(pybind11.get_cmake_dir())")
           echo "pybind11 found at: $PYBIND11_CMAKE_DIR"
           
           # Configure CMake
@@ -171,9 +185,10 @@ jobs:
       - name: Build Wheels
         shell: bash
         run: |
-          # Use uv run to execute maturin within the environment where we just synced deps
-          # --no-sync prevents re-locking/syncing, saving time
-          uv run --no-sync maturin build --release --out dist \
+          source .venv/bin/activate || source .venv/Scripts/activate
+          
+          # Prevent uv from trying to build/install the project itself
+          maturin build --release --out dist \
             --manifest-path rust/core/Cargo.toml \
             --target ${{ matrix.target }}
 

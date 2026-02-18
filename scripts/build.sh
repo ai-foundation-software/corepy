@@ -34,7 +34,18 @@ echo ""
 echo "Step 1/3: Building C++ kernels..."
 mkdir -p build
 # Use --no-sync to avoid triggering project install (which fails before kernels are built)
-python_cmake_dir=$(uv run --no-sync python -c "import pybind11; print(pybind11.get_cmake_dir())" 2>/dev/null)
+# Manually activate venv to avoid uv triggering project install/build prematurely
+if [ -f ".venv/bin/activate" ]; then
+    source .venv/bin/activate
+elif [ -f ".venv/Scripts/activate" ]; then
+    source .venv/Scripts/activate
+else
+    echo "❌ Virtual environment not found. Run 'uv sync' first."
+    exit 1
+fi
+
+python_cmake_dir=$(python -c "import pybind11; print(pybind11.get_cmake_dir())")
+echo "PyBind11 CMake Dir: $python_cmake_dir"
 
 cd build
 
@@ -44,9 +55,9 @@ else
     GENERATOR=""
 fi
 
-uv run --no-sync cmake .. $GENERATOR -DCMAKE_BUILD_TYPE=Release -Dpybind11_DIR="$python_cmake_dir"
-uv run --no-sync cmake --build . --config Release --parallel "$JOBS"
-uv run --no-sync cmake --install . --prefix ..
+cmake .. $GENERATOR -DCMAKE_BUILD_TYPE=Release -Dpybind11_DIR="$python_cmake_dir"
+cmake --build . --config Release --parallel "$JOBS"
+cmake --install . --prefix ..
 
 # Move Metal library if present (macOS specific)
 if [ -f "../default.metallib" ]; then

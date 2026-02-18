@@ -1,5 +1,5 @@
 [package]
-name = "corepy-backend"
+name = "corepy-ai"
 version = "0.2.4"
 edition = "2021"
 description = "Rust backend for CorePy - High-performance tensor operations with Metal acceleration"

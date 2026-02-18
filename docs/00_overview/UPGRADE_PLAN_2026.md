@@ -10,7 +10,7 @@
 **Problem**: Currently, shapes must match exactly (e.g., `(10, 10) + (10, 10)` works, but `(10, 10) + (10,)` fails).
 **Goal**: Implement NumPy-style broadcasting rules.
 - **Tasks**:
-    - [ ] Implement `broadcast_to(shape)` in `tensor.py`.
+    - [ ] Implement `broadcast_to(shape)` in `array.py`.
     - [ ] Update `elementwise.rs` to handle strides != 1 (virtual expansion).
     - [ ] Support implicit expansion in binary ops (`add`, `sub`, `mul`).
 

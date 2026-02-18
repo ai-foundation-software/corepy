@@ -115,12 +115,20 @@ try:
     _clear_profile = _corepy_rust.clear_profile
     _get_profile_report = _corepy_rust.get_profile_report
     _set_profile_context = _corepy_rust.set_profile_context
-    _RUST_AVAILABLE = True
+    # _RUST_AVAILABLE = True
+    # For now, disable Rust profiler to ensure we capture Python-side events
+    _RUST_AVAILABLE = False
+    logger.warning("Disabling Rust profiler to ensure Python events are captured.")
 except ImportError:
     _RUST_AVAILABLE = False
     logger.warning("Corepy Rust extension not found. Profiling will be disabled.")
 
-    # Use Python fallback
+
+# Force Python profiler if we're debugging or Rust is broken
+# This ensures that even if Rust is loaded, we use the Python implementation
+# which honors record_op calls from Python.
+if not _RUST_AVAILABLE:
+
     def _enable_profiling():
         _python_profiler.enable()
 
@@ -139,8 +147,13 @@ except ImportError:
 
 def record_op(op_name: str, time_ms: float, backend: str = "cpu"):
     """Record an operation (for Python fallback)."""
-    if not _RUST_AVAILABLE:
-        _python_profiler.record_operation(op_name, time_ms, backend)
+    # If Rust is available but doesn't support custom recording, or we want hybrid:
+    # For now, always record to Python profiler if Rust doesn't expose a recorder.
+    # The current Rust extension seems to not expose record_op, so we must rely on Python.
+    # However, profile_report prefers Rust. So we should probably disable Rust integration
+    # if it's incomplete, OR we merge reports.
+    # Safest fix: Force use of Python profiler for now.
+    _python_profiler.record_operation(op_name, time_ms, backend)
 
 
 def enable_profiling():
@@ -276,35 +289,41 @@ def export_profile(filename: str, format: str = "json", context: Optional[str] =
         # Since we only have aggregated stats, we visualize them as a sequential timeline
         # to represent relative costs.
         trace_events = []
-        
+
         # Metadata
-        trace_events.append({
-            "name": "process_name", "ph": "M", "pid": 1, 
-            "args": {"name": "Corepy Profile"}
-        })
-        
+        trace_events.append(
+            {
+                "name": "process_name",
+                "ph": "M",
+                "pid": 1,
+                "args": {"name": "Corepy Profile"},
+            }
+        )
+
         current_ts = 0.0
-        
+
         ops = report.get("operations", {}).values()
         # Sort by total time for better visibility
         sorted_ops = sorted(ops, key=lambda x: x["total_time_ms"], reverse=True)
-        
+
         for op in sorted_ops:
             duration_us = op["total_time_ms"] * 1000.0
-            trace_events.append({
-                "name": op["operation"],
-                "cat": "op",
-                "ph": "X", # Complete event
-                "ts": current_ts,
-                "dur": duration_us,
-                "pid": 1,
-                "tid": 1,
-                "args": {
-                    "count": op["count"],
-                    "avg_ms": op["avg_time_ms"],
-                    "backend": op.get("primary_backend", "unknown")
+            trace_events.append(
+                {
+                    "name": op["operation"],
+                    "cat": "op",
+                    "ph": "X",  # Complete event
+                    "ts": current_ts,
+                    "dur": duration_us,
+                    "pid": 1,
+                    "tid": 1,
+                    "args": {
+                        "count": op["count"],
+                        "avg_ms": op["avg_time_ms"],
+                        "backend": op.get("primary_backend", "unknown"),
+                    },
                 }
-            })
+            )
             current_ts += duration_us
 
         with open(filename, "w") as f:
@@ -314,15 +333,16 @@ def export_profile(filename: str, format: str = "json", context: Optional[str] =
 def export_chrome_trace(filename: str) -> str:
     """
     Export the current profile to a Chrome Tracing JSON configuration.
-    
+
     Args:
         filename: Output path (e.g. 'trace.json')
-        
+
     Returns:
         The absolute path to the file.
     """
     export_profile(filename, format="chrome_tracing")
     import os
+
     return os.path.abspath(filename)
 
 
@@ -333,7 +353,7 @@ def _convert_to_speedscope(report):
 
     start_time = 0.0
     # ... (rest of speedscope implementation)
-    return report # Placeholder implementation consistent with previous state
+    return report  # Placeholder implementation consistent with previous state
 
 
 class ProfileContext:

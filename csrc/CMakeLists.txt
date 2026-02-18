@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.15)
-project(corepy_kernels VERSION 0.2.3 LANGUAGES C CXX)
+project(corepy_kernels VERSION 0.2.4 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -46,15 +46,26 @@ if(CMAKE_SYSTEM_NAME MATCHES "Darwin")
          set(METALLIB_OUT "${CMAKE_CURRENT_BINARY_DIR}/default.metallib")
          find_program(XCRUN_EXE xcrun)
          if(XCRUN_EXE)
-            add_custom_command(
-                OUTPUT ${METALLIB_OUT}
-                COMMAND ${XCRUN_EXE} -sdk macosx metal -c ${METAL_SRC} -o ${CMAKE_CURRENT_BINARY_DIR}/kernels.air
-                COMMAND ${XCRUN_EXE} -sdk macosx metallib ${CMAKE_CURRENT_BINARY_DIR}/kernels.air -o ${METALLIB_OUT}
-                DEPENDS ${METAL_SRC}
-                COMMENT "Compiling Metal kernels..."
+            # Test if metal compiler is actually available
+            execute_process(
+                COMMAND ${XCRUN_EXE} -find metal
+                RESULT_VARIABLE METAL_FIND_RESULT
+                OUTPUT_QUIET
+                ERROR_QUIET
             )
-            add_custom_target(compile_metal_kernels ALL DEPENDS ${METALLIB_OUT})
-            install(FILES ${METALLIB_OUT} DESTINATION ".")
+            if(METAL_FIND_RESULT EQUAL 0)
+                add_custom_command(
+                    OUTPUT ${METALLIB_OUT}
+                    COMMAND ${XCRUN_EXE} -sdk macosx metal -c ${METAL_SRC} -o ${CMAKE_CURRENT_BINARY_DIR}/kernels.air
+                    COMMAND ${XCRUN_EXE} -sdk macosx metallib ${CMAKE_CURRENT_BINARY_DIR}/kernels.air -o ${METALLIB_OUT}
+                    DEPENDS ${METAL_SRC}
+                    COMMENT "Compiling Metal kernels..."
+                )
+                add_custom_target(compile_metal_kernels ALL DEPENDS ${METALLIB_OUT})
+                install(FILES ${METALLIB_OUT} DESTINATION ".")
+            else()
+                message(WARNING "Metal compiler not found, building without Metal shader compilation. Metal support in Rust will handle kernels at runtime.")
+            endif()
          endif()
     endif()
 endif()

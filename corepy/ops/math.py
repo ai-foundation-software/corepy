@@ -13,7 +13,7 @@ from ..backend.types import BackendType
 # - Rust Layer: Validation, scheduling, memory management
 # - C++ Layer: Pure execution (SIMD kernels)
 #
-# When Rust/C++ FFI is available, the Tensor class uses FFI directly.
+# When Rust/C++ FFI is available, the ndarray class uses FFI directly.
 # These Python fallbacks are used ONLY when the Rust extension is not
 # compiled, providing cross-platform compatibility (ARM/x86).
 #
@@ -25,6 +25,13 @@ from ..backend.types import BackendType
 def _flatten(data: Any) -> List[float]:
     """Recursively flatten nested lists/tuples/arrays to a flat list of floats."""
     import numpy as np
+
+    # Import here to avoid circular dependency
+    from corepy.array import ndarray
+
+    # Handle CorePy ndarray objects by converting to numpy first
+    if isinstance(data, ndarray):
+        return _flatten(data.to_numpy())
 
     # Handle numpy arrays first
     if isinstance(data, np.ndarray):

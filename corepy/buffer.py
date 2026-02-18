@@ -206,7 +206,9 @@ class BufferView:
                 writable=contiguous.flags["WRITEABLE"],
             )
 
-        raise ValueError(f"Cannot create contiguous copy from owner: {type(self.owner)}")
+        raise ValueError(
+            f"Cannot create contiguous copy from owner: {type(self.owner)}"
+        )
 
     @property
     def element_count(self) -> int:
@@ -247,7 +249,11 @@ def from_numpy(
     """
     # Infer dtype from array if not provided
     if dtype is None:
-        dtype = DataType.from_numpy(arr.dtype) if hasattr(DataType, "from_numpy") else _infer_dtype(arr.dtype)
+        dtype = (
+            DataType.from_numpy(arr.dtype)
+            if hasattr(DataType, "from_numpy")
+            else _infer_dtype(arr.dtype)
+        )
 
     # Extract pointer from array interface
     ptr = arr.__array_interface__["data"][0]
@@ -302,7 +308,7 @@ def from_buffer(
     import ctypes
 
     mv = memoryview(obj)
-    
+
     # Handle read-only vs writable buffers differently
     if mv.readonly:
         # For immutable buffers (bytes), we must copy
@@ -310,7 +316,7 @@ def from_buffer(
     else:
         # For mutable buffers (bytearray), zero-copy
         c_buffer = (ctypes.c_uint8 * len(mv)).from_buffer(mv)
-    
+
     ptr = ctypes.addressof(c_buffer)
 
     return BufferView(

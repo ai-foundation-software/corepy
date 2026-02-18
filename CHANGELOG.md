@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.4] - 2026-02-08
+
+### Added
+- **CI Local Simulation**: New `make ci` target to run full Python/Rust checks locally.
+- **Improved Metal Build**: Automatic framework linking and GPU verification.
+
+### Changed
+- **Dependency Pinning**: Standardized on stable versions for `numpy`, `pydantic`, `pydantic-core`, and `pybind11`.
+- **Script Modernization**: All scripts now strictly use `uv`.
+
+### Fixed
+- **Coverage C Tracer**: Resolved `CoverageWarning` by ensuring C extensions are correctly installed.
+- **Rust Lints**: Fixed identity operations and unnecessary returns in backend kernels.
+
+
 ## [0.2.3] - 2026-02-06
 
 ### Added

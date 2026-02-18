@@ -15,44 +15,178 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  build_wheels:
-    name: Build wheels on ${{ matrix.os }}
+  linux_build:
+    name: Linux / ${{ matrix.target }}
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        target: [x86_64, aarch64]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: PyO3/maturin-action@v1
+        with:
+          manylinux: auto
+          command: build
+          args: --release --out dist --interpreter 3.9 3.10 3.11 3.12 3.13
+          target: ${{ matrix.target }}
+          before-script-linux: |
+            if command -v apt-get &> /dev/null; then
+              apt-get update && apt-get install -y libopenblas-dev cmake ninja-build
+            elif command -v yum &> /dev/null; then
+              yum install -y openblas-devel cmake ninja-build
+            fi
+            
+            # Install pybind11 to get CMake config
+            python3 -m pip install pybind11
+            PYBIND11_CMAKE_DIR=$(python3 -c "import pybind11; print(pybind11.get_cmake_dir())")
+            
+            # Build C++ Kernels (Required for linking)
+            cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -Dpybind11_DIR="$PYBIND11_CMAKE_DIR"
+            cmake --build build --config Release
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wheels-linux-${{ matrix.target }}
+          path: dist/*.whl
+
+  host_build:
+    name: ${{ matrix.os }} / ${{ matrix.target }} / ${{ matrix.python-version }}
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
+        include:
+          # Windows x86_64
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            python-version: "3.9"
+            openblas_url: "https://github.com/OpenMathLib/OpenBLAS/releases/download/v0.3.28/OpenBLAS-0.3.28-x64.zip"
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            python-version: "3.10"
+            openblas_url: "https://github.com/OpenMathLib/OpenBLAS/releases/download/v0.3.28/OpenBLAS-0.3.28-x64.zip"
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            python-version: "3.11"
+            openblas_url: "https://github.com/OpenMathLib/OpenBLAS/releases/download/v0.3.28/OpenBLAS-0.3.28-x64.zip"
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            python-version: "3.12"
+            openblas_url: "https://github.com/OpenMathLib/OpenBLAS/releases/download/v0.3.28/OpenBLAS-0.3.28-x64.zip"
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            python-version: "3.13"
+            openblas_url: "https://github.com/OpenMathLib/OpenBLAS/releases/download/v0.3.28/OpenBLAS-0.3.28-x64.zip"
+          
+          # Windows ARM64 (Experimental - Disabled until OpenBLAS artifacts are verified)
+          # - os: windows-latest
+          #   target: aarch64-pc-windows-msvc
+          #   python-version: "3.11"
+          #   openblas_url: "https://github.com/OpenMathLib/OpenBLAS/releases/download/v0.3.28/OpenBLAS-0.3.28-arm64.zip" 
+          # - os: windows-latest
+          #   target: aarch64-pc-windows-msvc
+          #   python-version: "3.12"
+          #   openblas_url: "https://github.com/OpenMathLib/OpenBLAS/releases/download/v0.3.28/OpenBLAS-0.3.28-arm64.zip"
+
+          # macOS ARM64 (Apple Silicon)
+          - os: macos-14
+            target: aarch64-apple-darwin
+            python-version: "3.9"
+          - os: macos-14
+            target: aarch64-apple-darwin
+            python-version: "3.10"
+          - os: macos-14
+            target: aarch64-apple-darwin
+            python-version: "3.11"
+          - os: macos-14
+            target: aarch64-apple-darwin
+            python-version: "3.12"
+          - os: macos-14
+            target: aarch64-apple-darwin
+            python-version: "3.13"
 
     steps:
       - uses: actions/checkout@v4
+      
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          cache-suffix: "py${{ matrix.python-version }}"
 
-      - name: Install OpenBLAS (macOS)
+      - name: Set up Python ${{ matrix.python-version }}
+        run: uv python install ${{ matrix.python-version }}
+
+      - name: Install Rust Toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      # --- Dependencies & C++ Build ---
+
+      - name: Install OpenBLAS & Build C++ (macOS)
         if: runner.os == 'macOS'
         run: |
           brew install openblas cmake ninja
           echo "CMAKE_PREFIX_PATH=$(brew --prefix openblas)" >> $GITHUB_ENV
           echo "LIBRARY_PATH=$(brew --prefix openblas)/lib:$LIBRARY_PATH" >> $GITHUB_ENV
+          
+          # Detect pybind11
+          PYBIND11_CMAKE_DIR=$(uv run python -c "import pybind11; print(pybind11.get_cmake_dir())")
+          echo "pybind11 found at: $PYBIND11_CMAKE_DIR"
 
-      - name: Install OpenBLAS (Windows)
+          # Build C++ Kernels matching ci.yml
+          echo "Building C++ Kernels..."
+          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -Dpybind11_DIR="$PYBIND11_CMAKE_DIR"
+          cmake --build build --config Release
+
+          # Build Metal Kernels
+          echo "Compiling Metal Kernels..."
+          xcrun -sdk macosx metal -v -c csrc/src/metal/kernels.metal -o build/csrc/kernels.air
+          xcrun -sdk macosx metallib build/csrc/kernels.air -o build/csrc/default.metallib
+          # Place metallib where package can find it
+          cp build/csrc/default.metallib corepy/default.metallib
+
+      - name: Install OpenBLAS & Build C++ (Windows)
         if: runner.os == 'Windows'
         shell: bash
         run: |
-          curl -L -o openblas.zip https://github.com/OpenMathLib/OpenBLAS/releases/download/v0.3.28/OpenBLAS-0.3.28-x64.zip
+          curl -L -o openblas.zip ${{ matrix.openblas_url }}
           unzip -q openblas.zip -d openblas
           echo "OPENBLAS_DIR=${{ github.workspace }}/openblas" >> $GITHUB_ENV
           echo "CMAKE_PREFIX_PATH=${{ github.workspace }}/openblas" >> $GITHUB_ENV
+          echo "${{ github.workspace }}/openblas/bin" >> $GITHUB_PATH
 
-      - uses: PyO3/maturin-action@v1
-        with:
-          command: build
-          args: --release --out dist
-          manylinux: auto
-          before-script-linux: |
-            yum install -y openblas-devel cmake ninja-build
+          # Detect pybind11
+          PYBIND11_CMAKE_DIR=$(uv run python -c "import pybind11; print(pybind11.get_cmake_dir())")
+          echo "pybind11 found at: $PYBIND11_CMAKE_DIR"
+
+          # Build C++ Kernels
+          # Note: CMake determines target arch from generator or environment.
+          # For cross-compiling to ARM64 on x64 host, we might need specific flags.
+          echo "Building C++ Kernels..."
+          if [[ "${{ matrix.target }}" == "aarch64-pc-windows-msvc" ]]; then
+            # Attempt to configure for ARM64. 
+            # This is optimistic; usually requires -A ARM64 with Visual Studio generator
+            cmake -S . -B build -A ARM64 -DCMAKE_BUILD_TYPE=Release -Dpybind11_DIR="$PYBIND11_CMAKE_DIR"
+          else
+            cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -Dpybind11_DIR="$PYBIND11_CMAKE_DIR"
+          fi
+          cmake --build build --config Release
+
+      - name: Build Wheels with uv
+        shell: bash
+        run: |
+          uv sync --all-extras --group dev
+          # Use the Python from uv's venv
+          if [ "$RUNNER_OS" == "Windows" ]; then
+            uv run maturin build --release --out dist --manifest-path rust/core/Cargo.toml --target ${{ matrix.target }} --interpreter .venv/Scripts/python.exe
+          else
+            uv run maturin build --release --out dist --manifest-path rust/core/Cargo.toml --target ${{ matrix.target }} --interpreter .venv/bin/python
+          fi
 
       - uses: actions/upload-artifact@v4
         with:
-          name: wheels-${{ matrix.os }}-${{ strategy.job-index }}
+          name: wheels-${{ matrix.os }}-${{ matrix.python-version }}
           path: dist/*.whl
 
   build_sdist:
@@ -71,7 +205,7 @@ jobs:
 
   publish:
     name: Publish to PyPI
-    needs: [build_wheels, build_sdist]
+    needs: [linux_build, host_build, build_sdist]
     runs-on: ubuntu-latest
     environment:
       name: pypi

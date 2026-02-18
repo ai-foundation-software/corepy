@@ -1,10 +1,18 @@
+import csv
+import json
+import os
 
 import pytest
-import os
-import json
-import csv
+
 import corepy
-from corepy.profiler import export_profile, enable_profiling, disable_profiling, clear_profile, ProfileContext
+from corepy.profiler import (
+    ProfileContext,
+    clear_profile,
+    disable_profiling,
+    enable_profiling,
+    export_profile,
+)
+
 
 @pytest.fixture
 def clean_profiler():
@@ -14,30 +22,32 @@ def clean_profiler():
     clear_profile()
     disable_profiling()
 
+
 def test_export_json(tmp_path, clean_profiler):
     """Test exporting profile to JSON."""
     enable_profiling()
-    t = corepy.Tensor([1.0, 2.0])
+    t = corepy.array([1.0, 2.0])
     _ = t + t
-    
+
     out_file = tmp_path / "profile.json"
     export_profile(str(out_file), format="json")
-    
+
     assert out_file.exists()
     with open(out_file) as f:
         data = json.load(f)
         assert "operations" in data
         assert "add" in data["operations"]
 
+
 def test_export_csv(tmp_path, clean_profiler):
     """Test exporting profile to CSV."""
     enable_profiling()
-    t = corepy.Tensor([1.0, 2.0])
+    t = corepy.array([1.0, 2.0])
     _ = t + t
-    
+
     out_file = tmp_path / "profile.csv"
     export_profile(str(out_file), format="csv")
-    
+
     assert out_file.exists()
     with open(out_file) as f:
         reader = csv.DictReader(f)
@@ -45,15 +55,16 @@ def test_export_csv(tmp_path, clean_profiler):
         assert len(rows) >= 1
         assert rows[0]["operation"] == "add"
 
+
 def test_export_flamegraph_simple(tmp_path, clean_profiler):
     """Test exporting profile to speedscope JSON."""
     enable_profiling()
-    t = corepy.Tensor([1.0, 2.0])
+    t = corepy.array([1.0, 2.0])
     _ = t + t
-    
+
     out_file = tmp_path / "profile.speedscope.json"
     export_profile(str(out_file), format="flamegraph")
-    
+
     assert out_file.exists()
     with open(out_file) as f:
         data = json.load(f)

@@ -4,7 +4,7 @@ build-backend = "maturin"
 
 [project]
 name = "corepy"
-version = "0.2.3"
+version = "0.2.4"
 description = "A unified, high-performance core runtime for data, computation, and AI workflows."
 readme = "README.md"
 requires-python = ">=3.9"
@@ -28,8 +28,10 @@ classifiers = [
 ]
 dependencies = [
     "typing-extensions>=4.6.0",
-    "pydantic>=2.0.0",
-    "numpy>=2.0.2",
+    "pydantic==2.12.5",
+    "numpy==1.26.4; python_version < '3.13'",
+    "numpy>=2.1; python_version >= '3.13'",
+    "pybind11==3.0.1",
 ]
 
 [tool.maturin]
@@ -52,6 +54,27 @@ Repository = "https://github.com/ai-foundation-software/corepy.git"
 Issues = "https://github.com/ai-foundation-software/corepy/issues"
 
 
+
+
+[tool.coverage.run]
+disable_warnings = ["no-ctracer"]
+relative_files = true
+branch = true
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "if self.debug:",
+    "if settings.DEBUG",
+    "raise AssertionError",
+    "raise NotImplementedError",
+    "if 0:",
+    "if __name__ == .__main__.:",
+    "if TYPE_CHECKING:",
+    "class .*\\bProtocol\\):",
+    "@(abc\\.)?abstractmethod",
+]
 
 [tool.pytest.ini_options]
 minversion = "7.0"
@@ -91,4 +114,19 @@ dev = [
     "patchelf>=0.17.2; sys_platform == 'linux'",
 ]
 
+# UV Configuration
+# Fixes maturin + uv cache corruption issue by tracking Rust source changes
+# This ensures uv rebuilds when Rust code changes instead of using stale cached versions
+[tool.uv]
+cache-keys = [
+    "pyproject.toml",
+    "rust/core/Cargo.toml",
+    "rust/core/Cargo.lock",
+    "rust/core/build.rs",
+    "rust/core/**/*.rs",
+]
+
+[tool.uv.sources]
+# Ensure corepy is always installed from the local path in development
+corepy = { path = ".", editable = true }
 

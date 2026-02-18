@@ -41,8 +41,11 @@ class Dispatcher:
         Raises OperationNotSupportedError if not found.
         """
         key = (op_name, backend)
+        # print(f"DEBUG: get_kernel {key}. Registry keys: {list(cls._registry.keys())}")
         kernel = cls._registry.get(key)
         if not kernel:
+            # Fallback for debugging: check if generic implementation exists?
+            # print(f"DEBUG: No kernel found for {key}")
             raise OperationNotSupportedError(
                 f"No kernel registered for '{op_name}' on {backend.value}"
             )
@@ -53,6 +56,7 @@ class Dispatcher:
         """
         Finds and executes the appropriate kernel.
         """
+        # print(f"DEBUG: Dispatching {op_name} on {backend}")
         kernel = cls.get_kernel(op_name, backend)
         return kernel(*args, **kwargs)
 

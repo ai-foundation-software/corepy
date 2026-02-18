@@ -1,7 +1,7 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # =============================================================================
 # CorePy Build Script
-# Supports: Linux, macOS, Windows (Git Bash/WSL)
+# Usage: ./scripts/build.sh
 # =============================================================================
 set -e
 
@@ -11,13 +11,12 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 cd "$REPO_ROOT"
 
 echo "=== CorePy Build Script ==="
-echo ""
 
 # Check required tools
-command -v cmake >/dev/null 2>&1 || { echo "❌ cmake required"; exit 1; }
-command -v maturin >/dev/null 2>&1 || command -v uv >/dev/null 2>&1 || { echo "❌ maturin or uv required"; exit 1; }
+command -v uv >/dev/null 2>&1 || { echo "❌ 'uv' is required but not installed. Please install uv."; exit 1; }
+command -v cmake >/dev/null 2>&1 || { echo "❌ 'cmake' is required."; exit 1; }
 
-# Detect CPU count for parallel builds
+# Detect CPU count
 if command -v nproc >/dev/null 2>&1; then
     JOBS=$(nproc)
 elif command -v sysctl >/dev/null 2>&1; then
@@ -25,54 +24,50 @@ elif command -v sysctl >/dev/null 2>&1; then
 else
     JOBS=4
 fi
-echo "Using $JOBS parallel jobs"
+
+# Step 0: Sync dependencies
+echo "Step 0/3: Syncing dependencies..."
+uv sync --all-extras --group dev --no-install-project
 
 # Step 1: Build C++ kernels
 echo ""
-echo "Step 1/2: Building C++ kernels..."
-mkdir -p csrc/build
-cd csrc/build
+echo "Step 1/3: Building C++ kernels..."
+mkdir -p build
+# Use --no-sync to avoid triggering project install (which fails before kernels are built)
+python_cmake_dir=$(uv run --no-sync python -c "import pybind11; print(pybind11.get_cmake_dir())" 2>/dev/null)
+
+cd build
 
 if command -v ninja >/dev/null 2>&1; then
-    cmake .. -G Ninja -DCMAKE_BUILD_TYPE=Release
-    cmake --build . --config Release
+    GENERATOR="-G Ninja"
 else
-    cmake .. -DCMAKE_BUILD_TYPE=Release
-    cmake --build . --config Release -j $JOBS
+    GENERATOR=""
 fi
+
+uv run --no-sync cmake .. $GENERATOR -DCMAKE_BUILD_TYPE=Release -Dpybind11_DIR="$python_cmake_dir"
+uv run --no-sync cmake --build . --config Release --parallel "$JOBS"
+uv run --no-sync cmake --install . --prefix ..
+
+# Move Metal library if present (macOS specific)
+if [ -f "../default.metallib" ]; then
+    mv "../default.metallib" "../corepy/default.metallib"
+    echo "Moved default.metallib to corepy/ package"
+fi
+
 cd "$REPO_ROOT"
 echo "✅ C++ kernels built"
 
 # Step 2: Build Rust runtime
 echo ""
-echo "Step 2/2: Building Rust runtime..."
-if command -v uv >/dev/null 2>&1; then
-    echo "Using uv to sync and build..."
-    uv sync
-else
-    echo "Using maturin to build..."
-    maturin develop --release
-fi
+echo "Step 2/3: Building Rust runtime..."
+export COREPY_CSRC_DIR="$REPO_ROOT/build/csrc"
+uv run maturin develop --release --manifest-path rust/core/Cargo.toml
 echo "✅ Rust runtime built"
 
-# Verification
+# Step 3: Verification
 echo ""
 echo "=== Verification ==="
-if command -v uv >/dev/null 2>&1; then
-    uv run python -c "
-import corepy as cp
-print(f'✅ corepy {cp.__version__} loaded')
-print(f'✅ Backend: {cp.get_backend_policy()}')
-print(f'✅ Tensor test: {cp.Tensor([1.0, 2.0, 3.0])}')
-"
-else
-    python3 -c "
-import corepy as cp
-print(f'✅ corepy {cp.__version__} loaded')
-print(f'✅ Backend: {cp.get_backend_policy()}')
-print(f'✅ Tensor test: {cp.Tensor([1.0, 2.0, 3.0])}')
-"
-fi
+uv run python scripts/verify_install.py
 
 echo ""
 echo "=== Build Complete! ==="

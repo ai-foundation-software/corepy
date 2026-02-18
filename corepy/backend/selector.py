@@ -9,10 +9,13 @@ from .types import BackendType, OperationProperties, OperationType
 logger = logging.getLogger("corepy.backend.selector")
 
 # Thresholds (CONSTANTS)
-THRESHOLD_VECTOR_ELEMENTS = 100_000
-THRESHOLD_MATRIX_rows = 512
-THRESHOLD_MATRIX_COLS = 512
-THRESHOLD_BATCH_SIZE = 32
+# Thresholds (CONSTANTS)
+THRESHOLD_VECTOR_ELEMENTS = 1_000_000  # Increased to favor CPU for small/medium ops
+THRESHOLD_MATRIX_rows = (
+    2048  # Increased based on benchmarks (Metal overhead high for < 2048)
+)
+THRESHOLD_MATRIX_COLS = 2048
+THRESHOLD_BATCH_SIZE = 64
 
 
 def _get_forced_backend() -> Optional[BackendType]:
@@ -49,14 +52,14 @@ def select_backend(
     # 1. User Override (API argument)
     if requested_backend:
         logger.debug(f"User requested backend: {requested_backend}")
-        
+
         # Verify availability
         if requested_backend == BackendType.GPU and not device_info.has_gpu:
             logger.warning(
                 f"Requested backend {requested_backend} but no GPU/Accelerator detected. Falling back to CPU."
             )
             return BackendType.CPU
-            
+
         return requested_backend
 
     # 2. Environment Variable Override
@@ -80,7 +83,7 @@ def select_backend(
     if op_type in (
         OperationType.CONTROL,
         OperationType.SCALAR,
-        OperationType.MEMORY_BOUND,
+        # OperationType.MEMORY_BOUND,  # Allow large allocations to go to GPU if thresholds met
     ):
         logger.debug(f"Operation {op_type} is best suited for CPU.")
         return BackendType.CPU
@@ -124,6 +127,13 @@ def select_backend(
             logger.debug(
                 f"Batch size {op_props.batch_size} >= {THRESHOLD_BATCH_SIZE}. GPU Candidate."
             )
+
+        if op_type == OperationType.MEMORY_BOUND:
+            if op_props.element_count > THRESHOLD_VECTOR_ELEMENTS:
+                use_gpu = True
+                logger.debug(
+                    f"Memory bound size {op_props.element_count} > Threshold. GPU Candidate."
+                )
 
         if use_gpu:
             return BackendType.GPU

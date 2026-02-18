@@ -1,7 +1,7 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # =============================================================================
 # CorePy Developer Setup Script
-# Supports: Linux, macOS, Windows (Git Bash/WSL)
+# Usage: ./scripts/setup_dev.sh (or via `make install`)
 # =============================================================================
 set -e
 
@@ -26,79 +26,52 @@ echo "Detected OS: $OS"
 # Check required tools
 echo ""
 echo "Checking required tools..."
+command -v uv >/dev/null 2>&1 || { echo "❌ 'uv' is required. Visit https://docs.astral.sh/uv/ to install."; exit 1; }
+echo "✅ uv found"
+
 command -v cmake >/dev/null 2>&1 || { echo "❌ cmake required. Install: apt/brew install cmake"; exit 1; }
 command -v cargo >/dev/null 2>&1 || { echo "❌ cargo required. Install: https://rustup.rs"; exit 1; }
 
-if command -v uv >/dev/null 2>&1; then
-    echo "✅ uv found"
-    PKG_MGR="uv"
-else
-    echo "⚠️  uv not found, using pip"
-    PKG_MGR="pip"
-fi
-
 # Step 1: Install Python dependencies
 echo ""
-echo "Step 1/4: Installing Python dependencies..."
-if [ "$PKG_MGR" = "uv" ]; then
-    uv sync --all-extras --group dev
-else
-    pip install -e ".[dev]" maturin scikit-build-core pybind11 cmake ninja
-fi
+echo "Step 1/4: Syncing dependencies..."
+uv sync --all-extras --group dev --no-install-project
 
 # Step 2: Build C++ kernels
 echo ""
 echo "Step 2/4: Building C++ kernels..."
-mkdir -p csrc/build
-cd csrc/build
+mkdir -p build
+cd build
 
-# Use Ninja if available, otherwise default generator
+python_cmake_dir=$(uv run --no-sync python -c "import pybind11; print(pybind11.get_cmake_dir())" 2>/dev/null)
+
 if command -v ninja >/dev/null 2>&1; then
-    cmake .. -G Ninja -DCMAKE_BUILD_TYPE=Release
-    cmake --build . --config Release
+    GENERATOR="-G Ninja"
 else
-    cmake .. -DCMAKE_BUILD_TYPE=Release
-    cmake --build . --config Release
+    GENERATOR=""
 fi
+
+uv run --no-sync cmake .. $GENERATOR -DCMAKE_BUILD_TYPE=Release -Dpybind11_DIR="$python_cmake_dir"
+uv run --no-sync cmake --build . --config Release
+
 cd "$REPO_ROOT"
 echo "✅ C++ kernels built"
 
 # Step 3: Build Rust runtime
 echo ""
 echo "Step 3/4: Building Rust runtime..."
-if command -v uv >/dev/null 2>&1; then
-    echo "uv sync already handled the build in Step 1."
-    uv run maturin develop --release
-else
-    maturin develop --release
-fi
+uv run maturin develop --release --manifest-path rust/core/Cargo.toml
 echo "✅ Rust runtime built"
 
 # Step 4: Verify installation
 echo ""
 echo "Step 4/4: Verifying installation..."
-if [ "$PKG_MGR" = "uv" ]; then
-    uv run python -c "
-import corepy
-print(f'✅ corepy {corepy.__version__} loaded')
-print(f'✅ Backend: {corepy.get_backend_policy()}')
-t = corepy.Tensor([1.0, 2.0, 3.0])
-print(f'✅ Tensor: {t}')
-"
-else
-    python -c "
-import corepy
-print(f'✅ corepy {corepy.__version__} loaded')
-print(f'✅ Backend: {corepy.get_backend_policy()}')
-t = corepy.Tensor([1.0, 2.0, 3.0])
-print(f'✅ Tensor: {t}')
-"
-fi
+uv run python scripts/verify_install.py
 
 echo ""
 echo "=== Setup Complete! ==="
 echo ""
 echo "Next steps:"
-echo "  Run tests:  uv run pytest tests/"
-echo "  Build:      ./scripts/build.sh"
-echo "  Benchmark:  ./scripts/bench.sh"
+echo "  Run tests:  make test"
+echo "  Build:      make build"
+echo "  Benchmark:  make bench"

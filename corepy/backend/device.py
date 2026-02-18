@@ -212,18 +212,18 @@ def detect_devices() -> DeviceInfo:
         # This handles cases where system_profiler fails (CI) or Metal is unsupported
         try:
             from .. import _corepy_rust
-            
+
             if _corepy_rust.metal_is_available():
                 gpu_names, gpu_mems = _detect_metal_gpus()
                 # If system_profiler failed but Rust says yes, add a generic Metal GPU
                 if not gpu_names:
                     gpu_names = ["Metal GPU"]
-                    gpu_mems = [0] # Unknown memory
+                    gpu_mems = [0]  # Unknown memory
             else:
-                 gpu_names, gpu_mems = [], []
+                gpu_names, gpu_mems = [], []
         except ImportError:
-             # Fallback if Rust not loaded (shouldn't happen in installed pkg)
-             gpu_names, gpu_mems = [], []
+            # Fallback if Rust not loaded (shouldn't happen in installed pkg)
+            gpu_names, gpu_mems = [], []
     else:
         # CUDA Detection
         gpu_mems = _detect_cuda_gpus()

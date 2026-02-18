@@ -39,11 +39,11 @@ For detailed setup instructions, please see **[DEVELOPMENT.md](DEVELOPMENT.md)**
 # 1. Install dependencies
 ./scripts/setup_dev.sh
 
-# 2. Build Rust runtime
-cd rust/core && maturin develop --release
+# 2. Build project
+make build
 
-# 3. Run tests
-pytest tests/
+# 3. Verify installation
+make verify
 ```
 
 ---

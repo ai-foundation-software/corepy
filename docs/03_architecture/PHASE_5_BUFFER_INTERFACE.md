@@ -2,7 +2,7 @@
 
 ## Motivation
 
-Current limitations in `corepy/tensor.py`:
+Current limitations in `corepy/array.py`:
 1. **No stride support**: All non-contiguous arrays trigger copies
 2. **No device abstraction**: CPU-only, no path to GPU
 3. **Implicit copies**: Hidden `ascontiguousarray()` calls

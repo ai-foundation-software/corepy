@@ -1,5 +1,5 @@
+from corepy.array import Tensor
 from corepy.backend.types import BackendType
-from corepy.tensor import Tensor
 
 
 def test_cpu_matmul_dispatch():

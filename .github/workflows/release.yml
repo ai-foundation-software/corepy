@@ -38,15 +38,28 @@ jobs:
             if command -v dnf &> /dev/null; then
               dnf install -y openblas-devel cmake ninja-build libatomic
             elif command -v apt-get &> /dev/null; then
+              # Install cross-compiler for aarch64 if we are on an apt system (Ubuntu Jammy in cross image)
               apt-get update && apt-get install -y libopenblas-dev cmake ninja-build
+              if [ "${{ matrix.target }}" == "aarch64" ] && [ "$(uname -m)" != "aarch64" ]; then
+                 apt-get install -y g++-aarch64-linux-gnu gcc-aarch64-linux-gnu
+              fi
             elif command -v yum &> /dev/null; then
               yum install -y openblas-devel cmake ninja-build
             fi
             
+            # Install uv
+            curl -LsSf https://astral.sh/uv/install.sh | sh
+            source $HOME/.local/bin/env
+
             # Use a venv for build tools to avoid system pollution
-            python3 -m venv .build-venv
+            uv venv .build-venv
             source .build-venv/bin/activate
-            pip install pybind11 cmake ninja
+            
+            # Upgrade pip as requested
+            uv pip install --upgrade pip
+            
+            # Install build dependencies
+            uv pip install pybind11 cmake ninja
             
             PYBIND11_CMAKE_DIR=$(python3 -c "import pybind11; print(pybind11.get_cmake_dir())")
             
@@ -58,12 +71,31 @@ jobs:
             if [ "$HOST_ARCH" != "$TARGET_ARCH" ]; then
               echo "Cross-compiling C++ kernels: $HOST_ARCH -> $TARGET_ARCH"
               CMAKE_EXTRA_ARGS="-DCMAKE_SYSTEM_NAME=Linux -DCMAKE_SYSTEM_PROCESSOR=$TARGET_ARCH"
-              CMAKE_EXTRA_ARGS="$CMAKE_EXTRA_ARGS -DCMAKE_C_COMPILER=${TARGET_ARCH}-unknown-linux-gnu-gcc"
-              CMAKE_EXTRA_ARGS="$CMAKE_EXTRA_ARGS -DCMAKE_CXX_COMPILER=${TARGET_ARCH}-unknown-linux-gnu-g++"
+              
+              # For aarch64 on Ubuntu-based cross images (like manylinux_2_28-cross), 
+              # we likely have aarch64-linux-gnu-g++ which is newer (GCC 11+ on Jammy)
+              # The 'unknown' variant might be an older toolchain provided by the image
+              
+              if command -v aarch64-linux-gnu-g++ &> /dev/null; then
+                  echo "Found aarch64-linux-gnu-g++, using it."
+                  CMAKE_EXTRA_ARGS="$CMAKE_EXTRA_ARGS -DCMAKE_C_COMPILER=aarch64-linux-gnu-gcc"
+                  CMAKE_EXTRA_ARGS="$CMAKE_EXTRA_ARGS -DCMAKE_CXX_COMPILER=aarch64-linux-gnu-g++"
+              elif command -v ${TARGET_ARCH}-unknown-linux-gnu-g++ &> /dev/null; then
+                  echo "Found ${TARGET_ARCH}-unknown-linux-gnu-g++, using it."
+                  CMAKE_EXTRA_ARGS="$CMAKE_EXTRA_ARGS -DCMAKE_C_COMPILER=${TARGET_ARCH}-unknown-linux-gnu-gcc"
+                  CMAKE_EXTRA_ARGS="$CMAKE_EXTRA_ARGS -DCMAKE_CXX_COMPILER=${TARGET_ARCH}-unknown-linux-gnu-g++"
+              fi
+              
+              # Ensure libatomic is linked for aarch64 if needed (often required for C++20 atomic support on some platforms)
+              # But let's rely on standard detection first.
             fi
             
             # Build C++ Kernels
-            cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -Dpybind11_DIR="$PYBIND11_CMAKE_DIR" $CMAKE_EXTRA_ARGS
+            # Explicitly pass Python_EXECUTABLE to help CMake find the venv python
+            cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release \
+                -Dpybind11_DIR="$PYBIND11_CMAKE_DIR" \
+                -DPython_EXECUTABLE=$(pwd)/.build-venv/bin/python \
+                $CMAKE_EXTRA_ARGS
             cmake --build build --config Release
 
       - uses: actions/upload-artifact@v4

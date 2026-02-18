@@ -138,7 +138,12 @@ ci-cross-cpp:
 		echo "  ⚠️  Skipping aarch64 C++ cross-compilation (aarch64-linux-gnu-g++ not found)"; \
 	fi
 
-ci: check-compatibility lint rust-fmt rust-check rust-lint rust-cross-check ci-cross-cpp build test
+
+upgrade-pip:
+	@echo "Upgrading pip..."
+	uv pip install --upgrade pip
+
+ci: upgrade-pip check-compatibility lint rust-fmt rust-check rust-lint rust-cross-check ci-cross-cpp build test
 	@echo "✅ All CI checks passed!"
 
 # Cleanup

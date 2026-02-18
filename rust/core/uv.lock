@@ -4,5 +4,5 @@ requires-python = ">=3.9"
 
 [[package]]
 name = "corepy-runtime"
-version = "0.2.2"
+version = "0.2.4"
 source = { editable = "." }

@@ -80,8 +80,8 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "773648b94d0e5d620f64f280777445740e61fe701025087ec8b57f45c791888b"
 
 [[package]]
-name = "corepy-backend"
-version = "0.2.4"
+name = "corepy-ai"
+version = "0.2.6"
 dependencies = [
  "accelerate-src",
  "cblas-sys",

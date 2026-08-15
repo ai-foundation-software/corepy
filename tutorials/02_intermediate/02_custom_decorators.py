@@ -18,7 +18,7 @@ print("=" * 70)
 print("🤔 PROBLEM: Profiling Custom Functions")
 print("=" * 70)
 print("""
-You've profiled tensor operations, but what about YOUR code?
+You've profiled array operations, but what about YOUR code?
   - Custom data preprocessing functions
   - Feature engineering pipelines
   - Complex business logic
@@ -72,7 +72,7 @@ def apply_transformation(data):
 print("\nRunning custom functions...")
 cp.enable_profiling()
 
-data = cp.tensor([float(i) for i in range(1000)])
+data = cp.array([float(i) for i in range(1000)])
 processed = preprocess_data(data)
 features = compute_features(processed)
 final = apply_transformation(processed)
@@ -84,12 +84,12 @@ print(cp.profile_report())
 print("""
 💡 NOTICE:
 Your custom functions ('preprocess_data', 'compute_features', etc.)
-appear alongside corepy tensor operations!
+appear alongside corepy array operations!
 
 This lets you answer:
   - Which function is slowest overall?
   - Which function should I optimize first?
-  - Are tensor ops or my custom logic the bottleneck?
+  - Are array ops or my custom logic the bottleneck?
 """)
 
 cp.clear_profile()
@@ -121,7 +121,7 @@ def method_b_fused_ops(data):
 
 cp.enable_profiling()
 
-data = cp.tensor([float(i) for i in range(1000)])
+data = cp.array([float(i) for i in range(1000)])
 
 # Run both methods multiple times
 for _ in range(10):
@@ -158,7 +158,7 @@ print("=" * 70)
 def load_and_validate(filepath):
     """Simulated data loading"""
     # In real code: data = cp.read_csv(filepath)
-    data = cp.tensor([float(i) for i in range(500)])
+    data = cp.array([float(i) for i in range(500)])
     # Validation
     if data.sum() < 0:
         raise ValueError("Invalid data")
@@ -230,7 +230,7 @@ def training_step(data, epoch):
 cp.enable_profiling()
 
 # Profile just the training loop, not setup
-data = cp.tensor([float(i) for i in range(100)])  # Not profiled
+data = cp.array([float(i) for i in range(100)])  # Not profiled
 
 with ProfileContext("training"):
     # Only this loop is profiled
@@ -296,7 +296,7 @@ print("""
        ...
 
 2. BENEFITS:
-   - Track custom Python functions alongside tensor ops
+   - Track custom Python functions alongside array ops
    - Compare different implementations objectively
    - See function call hierarchies
    - Production monitoring
@@ -306,7 +306,7 @@ print("""
 
 4. VIEW RESULTS:
    cp.profile_report() shows ALL profiled operations
-   (both tensor ops and custom functions)
+   (both array ops and custom functions)
 
 WORKFLOW:
   1. Add @profile_operation to key functions
@@ -324,7 +324,7 @@ print("=" * 70)
 print("📚 NEXT TUTORIAL")
 print("=" * 70)
 print("""
-You can now profile both tensor operations AND custom functions.
+You can now profile both array operations AND custom functions.
 But how do you FIND bottlenecks automatically?
 
 👉 Run: python 03_bottleneck_detection.py

@@ -40,9 +40,13 @@ CorePy aims to provide a familiar API for NumPy users. This table tracks the par
 | Basic Indexing | - | 🚧 Planned | `arr[0]` not yet fully supported |
 | Slicing | - | 🚧 Planned | `arr[0:5]` not yet fully supported |
 | Boolean Indexing | - | 🚧 Planned | |
+| **Random** | | | |
+| `np.random.rand()` | `cp.rand()` | ✅ Supported | Uniform generator (Xoshiro256++) |
+| `np.random.randn()` | `cp.randn()` | ✅ Supported | Normal generator (PCG64) |
 
 ## Key Differences
 
-1.  **Backend Selection**: CorePy arrays automatically select the best backend (CPU/Metal) based on size and operation.
-2.  **Data Types**: CorePy uses `cp.DataType` enum (e.g., `cp.float32`) instead of numpy types, though numpy types are accepted in factory functions.
-3.  **In-Place Ops**: CorePy operations currently return new arrays (functional style). In-place mutation is planned.
+1.  **Backend Selection**: CorePy arrays automatically select the best backend (CPU/Metal) based on size and operation natively via Rust.
+2.  **Hardware & Cache Awareness**: CorePy aggressively detects L1/L2/L3 cache sizes natively to optimize operations like Matrix Multiplication, breaking matrices down automatically based on processor geometry.
+3.  **Data Types**: CorePy uses `cp.DataType` enum (e.g., `cp.float32`) instead of numpy types, though numpy types are accepted in factory functions.
+4.  **In-Place Ops**: CorePy operations currently return new arrays (functional style). In-place mutation is planned.

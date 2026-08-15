@@ -37,8 +37,8 @@ print("=" * 70)
 
 # This code runs but is NOT profiled
 print("\n1. Initialization (not profiled)...")
-data = cp.tensor([float(i) for i in range(1000)])
-print(f"   Created tensor with {len(data)} elements")
+data = cp.array([float(i) for i in range(1000)])
+print(f"   Created array with {len(data)} elements")
 
 # Enable profiling ONLY for this critical section
 print("\n2. Critical algorithm (PROFILED)...")
@@ -85,7 +85,7 @@ cp.clear_profile()
 
 # Profile preprocessing
 with ProfileContext("preprocessing"):
-    data = cp.tensor([1.0, 2.0, 3.0, 4.0, 5.0])
+    data = cp.array([1.0, 2.0, 3.0, 4.0, 5.0])
     processed = (data - data.mean()) / data.std()
 
 # Profile training (separate context!)
@@ -119,7 +119,7 @@ cp.clear_profile()
 
 # You can nest contexts to create hierarchical reports!
 with ProfileContext("outer_pipeline"):
-    data = cp.tensor([float(i) for i in range(100)])
+    data = cp.array([float(i) for i in range(100)])
 
     with ProfileContext("preprocessing"):
         normalized = data - data.mean()
@@ -152,7 +152,7 @@ print("=" * 70)
 
 cp.clear_profile()
 
-data = cp.tensor([float(i) for i in range(1000)])
+data = cp.array([float(i) for i in range(1000)])
 
 # Implementation A: Separate operations
 with ProfileContext("implementation_A"):

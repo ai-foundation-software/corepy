@@ -1,5 +1,5 @@
 """
-New Features Demonstration for Corepy 0.2.4
+New Features Demonstration for Corepy 0.3.0
 ===========================================
 
 This script demonstrates recently added features:
@@ -28,8 +28,8 @@ def main():
     a = cp.array([1.0, 2.0, 3.0])
     b = cp.array([4.0, 5.0, 6.0])
 
-    print(f"Array a: {a}")
-    print(f"Array b: {b}")
+    print(f"ndarray a: {a}")
+    print(f"ndarray b: {b}")
 
     # Concatenate 1D
     c = cp.concatenate((a, b))

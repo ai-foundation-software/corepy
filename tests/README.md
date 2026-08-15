@@ -12,7 +12,7 @@ uv run pytest
 uv run pytest --cov=corepy --cov-report=html
 
 # Run specific test file
-uv run pytest tests/test_tensor_integration.py
+uv run pytest tests/test_array_integration.py
 
 # Run specific test by name
 uv run pytest -k "test_buffer_protocol"
@@ -24,7 +24,7 @@ uv run pytest -v
 ## Test Organization
 
 ### Core Tests
-- `test_tensor_integration.py` - Tensor integration tests
+- `test_array_integration.py` - Array integration tests
 - `test_buffer_protocol.py` - Buffer protocol compliance
 - `test_gap_analysis.py` - SIMD operation tests
 
@@ -54,7 +54,7 @@ Current: **58%**
 Target: **>80%** for core execution paths
 
 Coverage by module:
-- `tensor.py`: 65% (core logic)
+- `array.py`: 65% (core logic)
 - `backend/`: 60% (dispatch)
 - `profiler/`: 21% (unused features)
 
@@ -62,7 +62,7 @@ Coverage by module:
 
 1. Use `pytest` fixtures from `conftest.py`
 2. Test both success and failure cases
-3. Include edge cases (empty tensors, large tensors, etc.)
+3. Include edge cases (empty arrays, large arrays, etc.)
 4. Use descriptive test names: `test_<feature>_<condition>_<expected>`
 5. Add docstrings for complex tests
 

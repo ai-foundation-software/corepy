@@ -3,7 +3,8 @@ Tutorial 04: Metal GPU Acceleration
 ================================
 
 This tutorial demonstrates how to use the Metal GPU backend on macOS devices (Apple Silicon).
-Corepy v0.2.4 introduces native Metal support for high-performance tensor operations.
+Corepy v0.3.0 introduces native Metal support for high-performance array operations.
+
 
 Prerequisites:
 - macOS 12.0+
@@ -22,13 +23,13 @@ import numpy as np
 import corepy as cp
 
 
-def benchmark_op(name, tensor_a, tensor_b, op_func, iterations=10):
+def benchmark_op(name, array_a, array_b, op_func, iterations=10):
     # Warmup
-    op_func(tensor_a, tensor_b)
+    op_func(array_a, array_b)
 
     start = time.perf_counter()
     for _ in range(iterations):
-        res = op_func(tensor_a, tensor_b)
+        res = op_func(array_a, array_b)
         # Force synchronization if needed (currently synchronous)
     end = time.perf_counter()
 
@@ -40,8 +41,10 @@ def main():
     print("=== Corepy Metal GPU Tutorial ===")
 
     # 1. Check Availability
-    # Ideally we'd have cp.is_metal_available(), but for now we try/except or check device
-    print("\n1. Initializing Tensors...")
+    caps = cp.get_system_capabilities()
+    has_metal = caps.get("gpu", {}).get("metal_available", False)
+
+    print("\n1. Initializing Arrays...")
 
     N = 2048
     print(f"Problem size: {N}x{N} matrix ({N * N * 4 / 1024**2:.2f} MB)")
@@ -51,21 +54,25 @@ def main():
 
     # 2. CPU Execution
     print("\n--- CPU Backend ---")
-    t_cpu_a = cp.Tensor(data)  # Default is CPU
-    t_cpu_b = cp.Tensor(data)
+    t_cpu_a = cp.array(data)  # Default is CPU
+    t_cpu_b = cp.array(data)
 
     benchmark_op("Matmul (CPU)", t_cpu_a, t_cpu_b, lambda x, y: x @ y, iterations=5)
 
     # 3. Metal GPU Execution
     print("\n--- Metal Backend ---")
+    if not has_metal:
+        print("Note: Metal is not available on this system. Skipping Metal benchmarks.")
+        return
+
     try:
-        # Create tensors directly on Metal device
-        t_metal_a = cp.Tensor(data, device="metal")
-        t_metal_b = cp.Tensor(data, device="metal")
+        # Create arrays directly on Metal device
+        t_metal_a = cp.array(data, device="metal")
+        t_metal_b = cp.array(data, device="metal")
 
         # Verify device
-        # Note: If Metal is unavailable, it might have fallen back to CPU (check valid warning)
-        print(f"Tensor device: {t_metal_a._backend_type}")  # 2 for Metal usually
+        # Note: If Metal is unavailable, it might have fallen back to CPU
+        print(f"ndarray device: {t_metal_a.backend.value}")
 
         benchmark_op(
             "Matmul (Metal)", t_metal_a, t_metal_b, lambda x, y: x @ y, iterations=20
@@ -73,7 +80,7 @@ def main():
 
         # 4. Mixed Operations
         print("\n--- Mixed Operations ---")
-        # Adding Metal tensor to CPU tensor -> Result is usually on Metal (or CPU depending on promotion rules)
+        # Adding Metal array to CPU array -> Result is usually on Metal (or CPU depending on promotion rules)
         # Currently Corepy might enforce same-device policies, so let's try strict
 
         res = t_metal_a + t_metal_b

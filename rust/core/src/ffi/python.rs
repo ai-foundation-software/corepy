@@ -3,38 +3,46 @@
 use pyo3::prelude::*;
 
 // Global profiler instance for this module (and the process)
-lazy_static::lazy_static! {
-    static ref GLOBAL_PROFILER: crate::profiler::Profiler = crate::profiler::Profiler::new();
+struct LazyProfiler;
+impl std::ops::Deref for LazyProfiler {
+    type Target = crate::profiler::Profiler;
+    fn deref(&self) -> &Self::Target {
+        static GLOBAL_PROFILER_INSTANCE: std::sync::OnceLock<crate::profiler::Profiler> =
+            std::sync::OnceLock::new();
+        GLOBAL_PROFILER_INSTANCE.get_or_init(crate::profiler::Profiler::new)
+    }
 }
+static GLOBAL_PROFILER: LazyProfiler = LazyProfiler;
 
 /// Export all FFI functions to Python
 pub fn register_functions(m: &Bound<'_, PyModule>) -> PyResult<()> {
     // Reduction operations (contiguous)
-    m.add_function(wrap_pyfunction!(tensor_all, m)?)?;
-    m.add_function(wrap_pyfunction!(tensor_any, m)?)?;
-    m.add_function(wrap_pyfunction!(tensor_sum_f32, m)?)?;
-    m.add_function(wrap_pyfunction!(tensor_sum_i32, m)?)?;
-    m.add_function(wrap_pyfunction!(tensor_mean_f32, m)?)?;
-    m.add_function(wrap_pyfunction!(tensor_matmul_f32, m)?)?;
-    m.add_function(wrap_pyfunction!(tensor_matmul_2d_f32, m)?)?;
-    m.add_function(wrap_pyfunction!(tensor_dot_product_f32, m)?)?;
+    m.add_function(wrap_pyfunction!(array_all, m)?)?;
+    m.add_function(wrap_pyfunction!(array_any, m)?)?;
+    m.add_function(wrap_pyfunction!(array_sum_f32, m)?)?;
+    m.add_function(wrap_pyfunction!(array_sum_i32, m)?)?;
+    m.add_function(wrap_pyfunction!(array_mean_f32, m)?)?;
+    m.add_function(wrap_pyfunction!(array_matmul_f32, m)?)?;
+    m.add_function(wrap_pyfunction!(array_matmul_2d_f32, m)?)?;
+    m.add_function(wrap_pyfunction!(array_dot_product_f32, m)?)?;
 
     // Strided reduction operations (zero-copy for non-contiguous arrays)
-    m.add_function(wrap_pyfunction!(tensor_sum_f32_strided, m)?)?;
-    m.add_function(wrap_pyfunction!(tensor_mean_f32_strided, m)?)?;
-    m.add_function(wrap_pyfunction!(tensor_max_f32_strided, m)?)?;
-    m.add_function(wrap_pyfunction!(tensor_min_f32_strided, m)?)?;
+    m.add_function(wrap_pyfunction!(array_sum_f32_strided, m)?)?;
+    m.add_function(wrap_pyfunction!(array_mean_f32_strided, m)?)?;
+    m.add_function(wrap_pyfunction!(array_max_f32_strided, m)?)?;
+    m.add_function(wrap_pyfunction!(array_min_f32_strided, m)?)?;
 
     // Backend control
     m.add_function(wrap_pyfunction!(set_backend_policy, m)?)?;
     m.add_function(wrap_pyfunction!(get_backend_policy, m)?)?;
     m.add_function(wrap_pyfunction!(explain_last_dispatch, m)?)?;
+    m.add_function(wrap_pyfunction!(get_math_backend_info, m)?)?;
 
     // Element-wise operations
-    m.add_function(wrap_pyfunction!(tensor_add_f32, m)?)?;
-    m.add_function(wrap_pyfunction!(tensor_sub_f32, m)?)?;
-    m.add_function(wrap_pyfunction!(tensor_mul_f32, m)?)?;
-    m.add_function(wrap_pyfunction!(tensor_div_f32, m)?)?;
+    m.add_function(wrap_pyfunction!(array_add_f32, m)?)?;
+    m.add_function(wrap_pyfunction!(array_sub_f32, m)?)?;
+    m.add_function(wrap_pyfunction!(array_mul_f32, m)?)?;
+    m.add_function(wrap_pyfunction!(array_div_f32, m)?)?;
 
     // Profiling functions
     m.add_function(wrap_pyfunction!(enable_profiling, m)?)?;
@@ -57,12 +65,28 @@ pub fn register_functions(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(metal_transpose_f32, m)?)?;
     m.add_function(wrap_pyfunction!(metal_broadcast_op, m)?)?;
 
+    // CUDA GPU operations
+    m.add_function(wrap_pyfunction!(cuda_is_available, m)?)?;
+    m.add_function(wrap_pyfunction!(cuda_add_f32, m)?)?;
+
     // System capabilities
     m.add_function(wrap_pyfunction!(get_system_capabilities, m)?)?;
     m.add_function(wrap_pyfunction!(get_capabilities_summary, m)?)?;
+    m.add_function(wrap_pyfunction!(recommend_backend, m)?)?;
+    m.add_function(wrap_pyfunction!(analyse_workload, m)?)?;
 
     // Demo functions (backward compatibility)
     m.add_function(wrap_pyfunction!(sum_as_string, m)?)?;
+
+    // Random Generation
+    m.add_function(wrap_pyfunction!(random_uniform_f32, m)?)?;
+    m.add_function(wrap_pyfunction!(random_normal_f32, m)?)?;
+
+    // DataFrame Functions
+    m.add_function(wrap_pyfunction!(crate::dataframe::csv::read_csv, m)?)?;
+
+    // Architectural Demo Workload
+    m.add_function(wrap_pyfunction!(process_workload, m)?)?;
 
     Ok(())
 }
@@ -116,16 +140,20 @@ fn get_system_capabilities(py: Python<'_>) -> PyResult<pyo3::Py<pyo3::types::PyD
 
     let caps = get_capabilities();
 
-    let cpu_dict = PyDict::new_bound(py);
+    let cpu_dict = PyDict::new(py);
     cpu_dict.set_item("arch", format!("{:?}", caps.cpu.arch))?;
     cpu_dict.set_item("cores", caps.cpu.core_count)?;
+    cpu_dict.set_item("physical_cores", caps.cpu.physical_core_count)?;
     cpu_dict.set_item("has_avx2", caps.cpu.has_avx2)?;
     cpu_dict.set_item("has_avx512", caps.cpu.has_avx512f)?;
     cpu_dict.set_item("has_fma", caps.cpu.has_fma)?;
     cpu_dict.set_item("has_neon", caps.cpu.has_neon)?;
+    cpu_dict.set_item("l1_cache", caps.cpu.l1_cache_size)?;
+    cpu_dict.set_item("l2_cache", caps.cpu.l2_cache_size)?;
+    cpu_dict.set_item("l3_cache", caps.cpu.l3_cache_size)?;
     cpu_dict.set_item("best_simd", caps.best_simd_backend())?;
 
-    let gpu_dict = PyDict::new_bound(py);
+    let gpu_dict = PyDict::new(py);
     gpu_dict.set_item("metal_available", caps.gpu.metal_available)?;
     gpu_dict.set_item("cuda_available", caps.gpu.cuda_available)?;
     gpu_dict.set_item("rocm_available", caps.gpu.rocm_available)?;
@@ -133,7 +161,7 @@ fn get_system_capabilities(py: Python<'_>) -> PyResult<pyo3::Py<pyo3::types::PyD
         gpu_dict.set_item("best_gpu", best)?;
     }
 
-    let result = PyDict::new_bound(py);
+    let result = PyDict::new(py);
     result.set_item("cpu", cpu_dict)?;
     result.set_item("gpu", gpu_dict)?;
 
@@ -146,17 +174,33 @@ fn get_capabilities_summary() -> String {
     crate::backend::get_capabilities().summary()
 }
 
+/// Recommend ideal backend using Hardware Scoring
+#[pyfunction]
+fn recommend_backend(flops: usize, memory_bytes: usize, is_batched: bool) -> PyResult<String> {
+    crate::backend::scoring::recommend_backend(flops, memory_bytes, is_batched)
+}
+
+/// Run the optimizer and return the analysis report
+#[pyfunction]
+fn analyse_workload(matrix_size: usize, small_threshold: usize, gpu_threshold: usize) -> String {
+    let config = crate::backend::optimizer::RuntimeConfig {
+        small_threshold,
+        gpu_threshold,
+        mkl_enabled: cfg!(feature = "mkl"),
+        openblas_enabled: cfg!(feature = "openblas"),
+    };
+    crate::backend::optimizer::analyse_workload(matrix_size, &config)
+}
+
 // ============================================================================
 // Reduction Operations
 // ============================================================================
 
 #[pyfunction]
-fn tensor_all(data_ptr: usize, count: usize) -> PyResult<bool> {
-    use crate::ops::reduce::all_bool_cpu_dispatch;
-
+fn array_all(data_ptr: usize, count: usize) -> PyResult<bool> {
     if data_ptr == 0 {
         return Err(pyo3::exceptions::PyValueError::new_err(
-            "Null pointer passed to tensor_all",
+            "Null pointer passed to array_all",
         ));
     }
 
@@ -172,18 +216,19 @@ fn tensor_all(data_ptr: usize, count: usize) -> PyResult<bool> {
         count,
     );
 
-    let result = unsafe { all_bool_cpu_dispatch(data_ptr as *const u8, count) };
+    let result = unsafe {
+        crate::backend::registry::dispatch_all_bool(data_ptr as *const u8, count)
+            .map_err(pyo3::exceptions::PyRuntimeError::new_err)?
+    };
 
     Ok(result)
 }
 
 #[pyfunction]
-fn tensor_any(data_ptr: usize, count: usize) -> PyResult<bool> {
-    use crate::ops::reduce::any_bool_cpu_dispatch;
-
+fn array_any(data_ptr: usize, count: usize) -> PyResult<bool> {
     if data_ptr == 0 {
         return Err(pyo3::exceptions::PyValueError::new_err(
-            "Null pointer passed to tensor_any",
+            "Null pointer passed to array_any",
         ));
     }
 
@@ -199,18 +244,19 @@ fn tensor_any(data_ptr: usize, count: usize) -> PyResult<bool> {
         count,
     );
 
-    let result = unsafe { any_bool_cpu_dispatch(data_ptr as *const u8, count) };
+    let result = unsafe {
+        crate::backend::registry::dispatch_any_bool(data_ptr as *const u8, count)
+            .map_err(pyo3::exceptions::PyRuntimeError::new_err)?
+    };
 
     Ok(result)
 }
 
 #[pyfunction]
-fn tensor_sum_f32(data_ptr: usize, count: usize) -> PyResult<f32> {
-    use crate::ops::reduce::sum_f32_cpu_dispatch;
-
+fn array_sum_f32(data_ptr: usize, count: usize) -> PyResult<f32> {
     if data_ptr == 0 {
         return Err(pyo3::exceptions::PyValueError::new_err(
-            "Null pointer passed to tensor_sum_f32",
+            "Null pointer passed to array_sum_f32",
         ));
     }
 
@@ -226,18 +272,19 @@ fn tensor_sum_f32(data_ptr: usize, count: usize) -> PyResult<f32> {
         count,
     );
 
-    let result = unsafe { sum_f32_cpu_dispatch(data_ptr as *const f32, count) };
+    let result = unsafe {
+        crate::backend::registry::dispatch_sum_f32(data_ptr as *const f32, count)
+            .map_err(pyo3::exceptions::PyRuntimeError::new_err)?
+    };
 
     Ok(result)
 }
 
 #[pyfunction]
-fn tensor_sum_i32(data_ptr: usize, count: usize) -> PyResult<i32> {
-    use crate::ops::reduce::sum_i32_cpu_dispatch;
-
+fn array_sum_i32(data_ptr: usize, count: usize) -> PyResult<i32> {
     if data_ptr == 0 {
         return Err(pyo3::exceptions::PyValueError::new_err(
-            "Null pointer passed to tensor_sum_i32",
+            "Null pointer passed to array_sum_i32",
         ));
     }
 
@@ -253,24 +300,25 @@ fn tensor_sum_i32(data_ptr: usize, count: usize) -> PyResult<i32> {
         count,
     );
 
-    let result = unsafe { sum_i32_cpu_dispatch(data_ptr as *const i32, count) };
+    let result = unsafe {
+        crate::backend::registry::dispatch_sum_i32(data_ptr as *const i32, count)
+            .map_err(pyo3::exceptions::PyRuntimeError::new_err)?
+    };
 
     Ok(result)
 }
 
 #[pyfunction]
-fn tensor_mean_f32(data_ptr: usize, count: usize) -> PyResult<f32> {
-    use crate::ops::reduce::mean_f32_cpu_dispatch;
-
+fn array_mean_f32(data_ptr: usize, count: usize) -> PyResult<f32> {
     if data_ptr == 0 {
         return Err(pyo3::exceptions::PyValueError::new_err(
-            "Null pointer passed to tensor_mean_f32",
+            "Null pointer passed to array_mean_f32",
         ));
     }
 
     if count == 0 {
         return Err(pyo3::exceptions::PyValueError::new_err(
-            "Cannot compute mean of empty tensor",
+            "Cannot compute mean of empty array",
         ));
     }
 
@@ -282,7 +330,10 @@ fn tensor_mean_f32(data_ptr: usize, count: usize) -> PyResult<f32> {
         count,
     );
 
-    let result = unsafe { mean_f32_cpu_dispatch(data_ptr as *const f32, count) };
+    let result = unsafe {
+        crate::backend::registry::dispatch_mean_f32(data_ptr as *const f32, count)
+            .map_err(pyo3::exceptions::PyRuntimeError::new_err)?
+    };
 
     Ok(result)
 }
@@ -292,12 +343,10 @@ fn tensor_mean_f32(data_ptr: usize, count: usize) -> PyResult<f32> {
 // ============================================================================
 
 #[pyfunction]
-fn tensor_sum_f32_strided(data_ptr: usize, shape: Vec<i64>, strides: Vec<i64>) -> PyResult<f32> {
-    use crate::ops::reduce::sum_f32_strided_dispatch;
-
+fn array_sum_f32_strided(data_ptr: usize, shape: Vec<i64>, strides: Vec<i64>) -> PyResult<f32> {
     if data_ptr == 0 {
         return Err(pyo3::exceptions::PyValueError::new_err(
-            "Null pointer passed to tensor_sum_f32_strided",
+            "Null pointer passed to array_sum_f32_strided",
         ));
     }
 
@@ -315,24 +364,25 @@ fn tensor_sum_f32_strided(data_ptr: usize, shape: Vec<i64>, strides: Vec<i64>) -
         count as usize,
     );
 
-    let result = unsafe { sum_f32_strided_dispatch(data_ptr as *const f32, &shape, &strides) };
+    let result = unsafe {
+        crate::backend::registry::dispatch_sum_f32_strided(data_ptr as *const f32, &shape, &strides)
+            .map_err(pyo3::exceptions::PyRuntimeError::new_err)?
+    };
 
     Ok(result)
 }
 
 #[pyfunction]
-fn tensor_mean_f32_strided(data_ptr: usize, shape: Vec<i64>, strides: Vec<i64>) -> PyResult<f32> {
-    use crate::ops::reduce::mean_f32_strided_dispatch;
-
+fn array_mean_f32_strided(data_ptr: usize, shape: Vec<i64>, strides: Vec<i64>) -> PyResult<f32> {
     if data_ptr == 0 {
         return Err(pyo3::exceptions::PyValueError::new_err(
-            "Null pointer passed to tensor_mean_f32_strided",
+            "Null pointer passed to array_mean_f32_strided",
         ));
     }
 
     if shape.is_empty() {
         return Err(pyo3::exceptions::PyValueError::new_err(
-            "Cannot compute mean of empty tensor",
+            "Cannot compute mean of empty array",
         ));
     }
 
@@ -346,24 +396,29 @@ fn tensor_mean_f32_strided(data_ptr: usize, shape: Vec<i64>, strides: Vec<i64>) 
         count as usize,
     );
 
-    let result = unsafe { mean_f32_strided_dispatch(data_ptr as *const f32, &shape, &strides) };
+    let result = unsafe {
+        crate::backend::registry::dispatch_mean_f32_strided(
+            data_ptr as *const f32,
+            &shape,
+            &strides,
+        )
+        .map_err(pyo3::exceptions::PyRuntimeError::new_err)?
+    };
 
     Ok(result)
 }
 
 #[pyfunction]
-fn tensor_max_f32_strided(data_ptr: usize, shape: Vec<i64>, strides: Vec<i64>) -> PyResult<f32> {
-    use crate::ops::reduce::max_f32_strided_dispatch;
-
+fn array_max_f32_strided(data_ptr: usize, shape: Vec<i64>, strides: Vec<i64>) -> PyResult<f32> {
     if data_ptr == 0 {
         return Err(pyo3::exceptions::PyValueError::new_err(
-            "Null pointer passed to tensor_max_f32_strided",
+            "Null pointer passed to array_max_f32_strided",
         ));
     }
 
     if shape.is_empty() {
         return Err(pyo3::exceptions::PyValueError::new_err(
-            "Cannot compute max of empty tensor",
+            "Cannot compute max of empty array",
         ));
     }
 
@@ -377,24 +432,25 @@ fn tensor_max_f32_strided(data_ptr: usize, shape: Vec<i64>, strides: Vec<i64>) -
         count as usize,
     );
 
-    let result = unsafe { max_f32_strided_dispatch(data_ptr as *const f32, &shape, &strides) };
+    let result = unsafe {
+        crate::backend::registry::dispatch_max_f32_strided(data_ptr as *const f32, &shape, &strides)
+            .map_err(pyo3::exceptions::PyRuntimeError::new_err)?
+    };
 
     Ok(result)
 }
 
 #[pyfunction]
-fn tensor_min_f32_strided(data_ptr: usize, shape: Vec<i64>, strides: Vec<i64>) -> PyResult<f32> {
-    use crate::ops::reduce::min_f32_strided_dispatch;
-
+fn array_min_f32_strided(data_ptr: usize, shape: Vec<i64>, strides: Vec<i64>) -> PyResult<f32> {
     if data_ptr == 0 {
         return Err(pyo3::exceptions::PyValueError::new_err(
-            "Null pointer passed to tensor_min_f32_strided",
+            "Null pointer passed to array_min_f32_strided",
         ));
     }
 
     if shape.is_empty() {
         return Err(pyo3::exceptions::PyValueError::new_err(
-            "Cannot compute min of empty tensor",
+            "Cannot compute min of empty array",
         ));
     }
 
@@ -408,18 +464,19 @@ fn tensor_min_f32_strided(data_ptr: usize, shape: Vec<i64>, strides: Vec<i64>) -
         count as usize,
     );
 
-    let result = unsafe { min_f32_strided_dispatch(data_ptr as *const f32, &shape, &strides) };
+    let result = unsafe {
+        crate::backend::registry::dispatch_min_f32_strided(data_ptr as *const f32, &shape, &strides)
+            .map_err(pyo3::exceptions::PyRuntimeError::new_err)?
+    };
 
     Ok(result)
 }
 
 #[pyfunction]
-fn tensor_dot_product_f32(a_ptr: usize, b_ptr: usize, count: usize) -> PyResult<f32> {
-    use crate::ops::matmul::dot_product_f32_cpu_dispatch;
-
+fn array_dot_product_f32(a_ptr: usize, b_ptr: usize, count: usize) -> PyResult<f32> {
     if a_ptr == 0 || b_ptr == 0 {
         return Err(pyo3::exceptions::PyValueError::new_err(
-            "Null pointer passed to tensor_dot_product_f32",
+            "Null pointer passed to array_dot_product_f32",
         ));
     }
 
@@ -435,14 +492,20 @@ fn tensor_dot_product_f32(a_ptr: usize, b_ptr: usize, count: usize) -> PyResult<
         count,
     );
 
-    let result =
-        unsafe { dot_product_f32_cpu_dispatch(a_ptr as *const f32, b_ptr as *const f32, count) };
+    let result = unsafe {
+        crate::backend::registry::dispatch_dot_product_f32(
+            a_ptr as *const f32,
+            b_ptr as *const f32,
+            count,
+        )
+        .map_err(pyo3::exceptions::PyRuntimeError::new_err)?
+    };
 
     Ok(result)
 }
 
 #[pyfunction]
-fn tensor_matmul_2d_f32(
+fn array_matmul_2d_f32(
     a_ptr: usize,
     b_ptr: usize,
     out_ptr: usize,
@@ -450,11 +513,9 @@ fn tensor_matmul_2d_f32(
     k: usize,
     n: usize,
 ) -> PyResult<()> {
-    use crate::ops::matmul::matmul_f32_cpu_dispatch;
-
     if a_ptr == 0 || b_ptr == 0 || out_ptr == 0 {
         return Err(pyo3::exceptions::PyValueError::new_err(
-            "Null pointer passed to tensor_matmul_2d_f32",
+            "Null pointer passed to array_matmul_2d_f32",
         ));
     }
 
@@ -467,23 +528,24 @@ fn tensor_matmul_2d_f32(
     );
 
     unsafe {
-        matmul_f32_cpu_dispatch(
+        crate::backend::registry::dispatch_matmul_f32(
             a_ptr as *const f32,
             b_ptr as *const f32,
             out_ptr as *mut f32,
             m,
             k,
             n,
-        );
+        )
+        .map_err(pyo3::exceptions::PyRuntimeError::new_err)?;
     }
 
     Ok(())
 }
 
 #[pyfunction]
-fn tensor_matmul_f32(a_ptr: usize, b_ptr: usize, count: usize) -> PyResult<f32> {
+fn array_matmul_f32(a_ptr: usize, b_ptr: usize, count: usize) -> PyResult<f32> {
     // Legacy/Existing wrapper that calls the same kernel
-    tensor_dot_product_f32(a_ptr, b_ptr, count)
+    array_dot_product_f32(a_ptr, b_ptr, count)
 }
 
 // ============================================================================
@@ -491,12 +553,10 @@ fn tensor_matmul_f32(a_ptr: usize, b_ptr: usize, count: usize) -> PyResult<f32> 
 // ============================================================================
 
 #[pyfunction]
-fn tensor_add_f32(a_ptr: usize, b_ptr: usize, out_ptr: usize, count: usize) -> PyResult<()> {
-    use crate::ops::elementwise::add_f32_cpu_dispatch;
-
+fn array_add_f32(a_ptr: usize, b_ptr: usize, out_ptr: usize, count: usize) -> PyResult<()> {
     if a_ptr == 0 || b_ptr == 0 || out_ptr == 0 {
         return Err(pyo3::exceptions::PyValueError::new_err(
-            "Null pointer passed to tensor_add_f32",
+            "Null pointer passed to array_add_f32",
         ));
     }
 
@@ -513,24 +573,23 @@ fn tensor_add_f32(a_ptr: usize, b_ptr: usize, out_ptr: usize, count: usize) -> P
     );
 
     unsafe {
-        add_f32_cpu_dispatch(
+        crate::backend::registry::dispatch_add_f32(
             a_ptr as *const f32,
             b_ptr as *const f32,
             out_ptr as *mut f32,
             count,
-        );
+        )
+        .map_err(pyo3::exceptions::PyRuntimeError::new_err)?;
     }
 
     Ok(())
 }
 
 #[pyfunction]
-fn tensor_sub_f32(a_ptr: usize, b_ptr: usize, out_ptr: usize, count: usize) -> PyResult<()> {
-    use crate::ops::elementwise::sub_f32_cpu_dispatch;
-
+fn array_sub_f32(a_ptr: usize, b_ptr: usize, out_ptr: usize, count: usize) -> PyResult<()> {
     if a_ptr == 0 || b_ptr == 0 || out_ptr == 0 {
         return Err(pyo3::exceptions::PyValueError::new_err(
-            "Null pointer passed to tensor_sub_f32",
+            "Null pointer passed to array_sub_f32",
         ));
     }
 
@@ -547,24 +606,23 @@ fn tensor_sub_f32(a_ptr: usize, b_ptr: usize, out_ptr: usize, count: usize) -> P
     );
 
     unsafe {
-        sub_f32_cpu_dispatch(
+        crate::backend::registry::dispatch_sub_f32(
             a_ptr as *const f32,
             b_ptr as *const f32,
             out_ptr as *mut f32,
             count,
-        );
+        )
+        .map_err(pyo3::exceptions::PyRuntimeError::new_err)?;
     }
 
     Ok(())
 }
 
 #[pyfunction]
-fn tensor_mul_f32(a_ptr: usize, b_ptr: usize, out_ptr: usize, count: usize) -> PyResult<()> {
-    use crate::ops::elementwise::mul_f32_cpu_dispatch;
-
+fn array_mul_f32(a_ptr: usize, b_ptr: usize, out_ptr: usize, count: usize) -> PyResult<()> {
     if a_ptr == 0 || b_ptr == 0 || out_ptr == 0 {
         return Err(pyo3::exceptions::PyValueError::new_err(
-            "Null pointer passed to tensor_mul_f32",
+            "Null pointer passed to array_mul_f32",
         ));
     }
 
@@ -581,24 +639,23 @@ fn tensor_mul_f32(a_ptr: usize, b_ptr: usize, out_ptr: usize, count: usize) -> P
     );
 
     unsafe {
-        mul_f32_cpu_dispatch(
+        crate::backend::registry::dispatch_mul_f32(
             a_ptr as *const f32,
             b_ptr as *const f32,
             out_ptr as *mut f32,
             count,
-        );
+        )
+        .map_err(pyo3::exceptions::PyRuntimeError::new_err)?;
     }
 
     Ok(())
 }
 
 #[pyfunction]
-fn tensor_div_f32(a_ptr: usize, b_ptr: usize, out_ptr: usize, count: usize) -> PyResult<()> {
-    use crate::ops::elementwise::div_f32_cpu_dispatch;
-
+fn array_div_f32(a_ptr: usize, b_ptr: usize, out_ptr: usize, count: usize) -> PyResult<()> {
     if a_ptr == 0 || b_ptr == 0 || out_ptr == 0 {
         return Err(pyo3::exceptions::PyValueError::new_err(
-            "Null pointer passed to tensor_div_f32",
+            "Null pointer passed to array_div_f32",
         ));
     }
 
@@ -615,12 +672,13 @@ fn tensor_div_f32(a_ptr: usize, b_ptr: usize, out_ptr: usize, count: usize) -> P
     );
 
     unsafe {
-        div_f32_cpu_dispatch(
+        crate::backend::registry::dispatch_div_f32(
             a_ptr as *const f32,
             b_ptr as *const f32,
             out_ptr as *mut f32,
             count,
-        );
+        )
+        .map_err(pyo3::exceptions::PyRuntimeError::new_err)?;
     }
 
     Ok(())
@@ -636,6 +694,12 @@ fn set_backend_policy(policy: u8) -> PyResult<()> {
     let p = match policy {
         1 => BackendPolicy::Openblas,
         2 => BackendPolicy::Blas,
+        3 => BackendPolicy::Cuda,
+        4 => BackendPolicy::Metal,
+        5 => BackendPolicy::Mkl,
+        6 => BackendPolicy::Aocl,
+        7 => BackendPolicy::Accelerate,
+        8 => BackendPolicy::RustParallel,
         _ => BackendPolicy::Default,
     };
     set_policy(p);
@@ -653,6 +717,36 @@ fn explain_last_dispatch() -> String {
     crate::backend::get_last_dispatch()
 }
 
+/// Return information about the currently selected math backend.
+///
+/// Returns a dict with keys:
+///   - backend (str): "MKL" | "AOCL" | "Accelerate" | "OpenBLAS" | "RustParallel"
+///   - vendor  (str): "Intel" | "AMD" | "Apple Silicon" | "Unknown"
+///   - threads (int): thread count for a 2048x2048 matmul
+///   - hyperthreading (bool): whether HT/SMT is active
+///   - brand   (str): CPU brand string
+#[pyfunction]
+fn get_math_backend_info(py: Python<'_>) -> PyResult<pyo3::Py<pyo3::types::PyDict>> {
+    use crate::backend::{
+        get_math_backend, thread_policy::compute_thread_plan, vendor::get_vendor_info,
+    };
+    use pyo3::types::PyDict;
+
+    let backend = get_math_backend();
+    let vendor_info = get_vendor_info();
+    let plan = compute_thread_plan(2048, backend);
+
+    let d = PyDict::new(py);
+    d.set_item("backend", backend.to_string())?;
+    d.set_item("vendor", vendor_info.vendor.to_string())?;
+    d.set_item("threads", plan.count)?;
+    d.set_item("hyperthreading", vendor_info.has_hyperthreading)?;
+    d.set_item("brand", vendor_info.brand.clone())?;
+    d.set_item("physical_cores", num_cpus::get_physical())?;
+    d.set_item("logical_cores", num_cpus::get())?;
+    Ok(d.into())
+}
+
 // ============================================================================
 // Demo Functions (Backward Compatibility)
 // ============================================================================
@@ -662,18 +756,55 @@ fn sum_as_string(a: usize, b: usize) -> PyResult<String> {
     Ok((a + b).to_string())
 }
 
+#[pyfunction]
+fn process_workload(data: Vec<f64>) -> PyResult<Vec<f64>> {
+    // Passes the Python List[float] directly into the Rust vector and triggers the pipeline
+    Ok(crate::ops::workload::process_workload(data))
+}
+
+// ============================================================================
+// Random Generation
+// ============================================================================
+
+#[pyfunction]
+#[pyo3(signature = (shape, seed, algo=crate::ops::random::RngAlgorithm::PCG64))]
+fn random_uniform_f32(
+    shape: Vec<usize>,
+    seed: u64,
+    algo: crate::ops::random::RngAlgorithm,
+) -> PyResult<crate::array::core_array::CoreArray> {
+    crate::ops::random::uniform_f32(shape, seed, algo)
+}
+
+#[pyfunction]
+#[pyo3(signature = (shape, seed, algo=crate::ops::random::RngAlgorithm::PCG64))]
+fn random_normal_f32(
+    shape: Vec<usize>,
+    seed: u64,
+    algo: crate::ops::random::RngAlgorithm,
+) -> PyResult<crate::array::core_array::CoreArray> {
+    crate::ops::random::normal_f32(shape, seed, algo)
+}
+
 // ============================================================================
 // Metal GPU Operations
 // ============================================================================
 
 #[pyfunction]
 fn metal_is_available() -> PyResult<bool> {
-    Ok(crate::ops::metal::is_available())
+    #[cfg(feature = "metal")]
+    {
+        Ok(crate::ops::metal::is_available())
+    }
+    #[cfg(not(feature = "metal"))]
+    {
+        Ok(false)
+    }
 }
 
 #[pyfunction]
 fn metal_sum_f32(data_ptr: usize, count: usize) -> PyResult<f32> {
-    #[cfg(target_os = "macos")]
+    #[cfg(all(target_os = "macos", feature = "metal"))]
     {
         use crate::ops::metal::sum_f32_metal_dispatch;
 
@@ -699,18 +830,18 @@ fn metal_sum_f32(data_ptr: usize, count: usize) -> PyResult<f32> {
         Ok(result)
     }
 
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(not(all(target_os = "macos", feature = "metal")))]
     {
         let _ = (data_ptr, count);
         Err(pyo3::exceptions::PyRuntimeError::new_err(
-            "Metal is only available on macOS",
+            "Metal is not available in this build or on this platform",
         ))
     }
 }
 
 #[pyfunction]
 fn metal_mean_f32(data_ptr: usize, count: usize) -> PyResult<f32> {
-    #[cfg(target_os = "macos")]
+    #[cfg(all(target_os = "macos", feature = "metal"))]
     {
         use crate::ops::metal::mean_f32_metal_dispatch;
 
@@ -722,7 +853,7 @@ fn metal_mean_f32(data_ptr: usize, count: usize) -> PyResult<f32> {
 
         if count == 0 {
             return Err(pyo3::exceptions::PyValueError::new_err(
-                "Cannot compute mean of empty tensor",
+                "Cannot compute mean of empty array",
             ));
         }
 
@@ -737,11 +868,11 @@ fn metal_mean_f32(data_ptr: usize, count: usize) -> PyResult<f32> {
         Ok(result)
     }
 
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(not(all(target_os = "macos", feature = "metal")))]
     {
         let _ = (data_ptr, count);
         Err(pyo3::exceptions::PyRuntimeError::new_err(
-            "Metal is only available on macOS",
+            "Metal is not available in this build or on this platform",
         ))
     }
 }
@@ -755,7 +886,7 @@ fn metal_matmul_f32(
     k: usize,
     n: usize,
 ) -> PyResult<()> {
-    #[cfg(target_os = "macos")]
+    #[cfg(all(target_os = "macos", feature = "metal"))]
     {
         use crate::ops::metal::matmul_f32_metal_dispatch;
 
@@ -785,11 +916,11 @@ fn metal_matmul_f32(
         Ok(())
     }
 
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(not(all(target_os = "macos", feature = "metal")))]
     {
         let _ = (a_ptr, b_ptr, c_ptr, m, k, n);
         Err(pyo3::exceptions::PyRuntimeError::new_err(
-            "Metal is only available on macOS",
+            "Metal is not available in this build or on this platform",
         ))
     }
 }
@@ -800,7 +931,7 @@ fn metal_matmul_f32(
 
 #[pyfunction]
 fn metal_max_f32(data_ptr: usize, count: usize) -> PyResult<f32> {
-    #[cfg(target_os = "macos")]
+    #[cfg(all(target_os = "macos", feature = "metal"))]
     {
         use crate::ops::metal::max_f32_metal_dispatch;
 
@@ -812,7 +943,7 @@ fn metal_max_f32(data_ptr: usize, count: usize) -> PyResult<f32> {
 
         if count == 0 {
             return Err(pyo3::exceptions::PyValueError::new_err(
-                "Cannot compute max of empty tensor",
+                "Cannot compute max of empty array",
             ));
         }
 
@@ -827,18 +958,18 @@ fn metal_max_f32(data_ptr: usize, count: usize) -> PyResult<f32> {
         Ok(result)
     }
 
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(not(all(target_os = "macos", feature = "metal")))]
     {
         let _ = (data_ptr, count);
         Err(pyo3::exceptions::PyRuntimeError::new_err(
-            "Metal is only available on macOS",
+            "Metal is not available in this build or on this platform",
         ))
     }
 }
 
 #[pyfunction]
 fn metal_min_f32(data_ptr: usize, count: usize) -> PyResult<f32> {
-    #[cfg(target_os = "macos")]
+    #[cfg(all(target_os = "macos", feature = "metal"))]
     {
         use crate::ops::metal::min_f32_metal_dispatch;
 
@@ -850,7 +981,7 @@ fn metal_min_f32(data_ptr: usize, count: usize) -> PyResult<f32> {
 
         if count == 0 {
             return Err(pyo3::exceptions::PyValueError::new_err(
-                "Cannot compute min of empty tensor",
+                "Cannot compute min of empty array",
             ));
         }
 
@@ -865,11 +996,11 @@ fn metal_min_f32(data_ptr: usize, count: usize) -> PyResult<f32> {
         Ok(result)
     }
 
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(not(all(target_os = "macos", feature = "metal")))]
     {
         let _ = (data_ptr, count);
         Err(pyo3::exceptions::PyRuntimeError::new_err(
-            "Metal is only available on macOS",
+            "Metal is not available in this build or on this platform",
         ))
     }
 }
@@ -880,7 +1011,7 @@ fn metal_min_f32(data_ptr: usize, count: usize) -> PyResult<f32> {
 
 #[pyfunction]
 fn metal_add_f32(a_ptr: usize, b_ptr: usize, result_ptr: usize, count: usize) -> PyResult<()> {
-    #[cfg(target_os = "macos")]
+    #[cfg(all(target_os = "macos", feature = "metal"))]
     {
         use crate::ops::metal::add_f32_metal_dispatch;
 
@@ -908,18 +1039,18 @@ fn metal_add_f32(a_ptr: usize, b_ptr: usize, result_ptr: usize, count: usize) ->
         Ok(())
     }
 
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(not(all(target_os = "macos", feature = "metal")))]
     {
         let _ = (a_ptr, b_ptr, result_ptr, count);
         Err(pyo3::exceptions::PyRuntimeError::new_err(
-            "Metal is only available on macOS",
+            "Metal is not available in this build or on this platform",
         ))
     }
 }
 
 #[pyfunction]
 fn metal_sub_f32(a_ptr: usize, b_ptr: usize, result_ptr: usize, count: usize) -> PyResult<()> {
-    #[cfg(target_os = "macos")]
+    #[cfg(all(target_os = "macos", feature = "metal"))]
     {
         use crate::ops::metal::sub_f32_metal_dispatch;
 
@@ -947,18 +1078,18 @@ fn metal_sub_f32(a_ptr: usize, b_ptr: usize, result_ptr: usize, count: usize) ->
         Ok(())
     }
 
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(not(all(target_os = "macos", feature = "metal")))]
     {
         let _ = (a_ptr, b_ptr, result_ptr, count);
         Err(pyo3::exceptions::PyRuntimeError::new_err(
-            "Metal is only available on macOS",
+            "Metal is not available in this build or on this platform",
         ))
     }
 }
 
 #[pyfunction]
 fn metal_mul_f32(a_ptr: usize, b_ptr: usize, result_ptr: usize, count: usize) -> PyResult<()> {
-    #[cfg(target_os = "macos")]
+    #[cfg(all(target_os = "macos", feature = "metal"))]
     {
         use crate::ops::metal::mul_f32_metal_dispatch;
 
@@ -986,18 +1117,18 @@ fn metal_mul_f32(a_ptr: usize, b_ptr: usize, result_ptr: usize, count: usize) ->
         Ok(())
     }
 
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(not(all(target_os = "macos", feature = "metal")))]
     {
         let _ = (a_ptr, b_ptr, result_ptr, count);
         Err(pyo3::exceptions::PyRuntimeError::new_err(
-            "Metal is only available on macOS",
+            "Metal is not available in this build or on this platform",
         ))
     }
 }
 
 #[pyfunction]
 fn metal_div_f32(a_ptr: usize, b_ptr: usize, result_ptr: usize, count: usize) -> PyResult<()> {
-    #[cfg(target_os = "macos")]
+    #[cfg(all(target_os = "macos", feature = "metal"))]
     {
         use crate::ops::metal::div_f32_metal_dispatch;
 
@@ -1025,11 +1156,11 @@ fn metal_div_f32(a_ptr: usize, b_ptr: usize, result_ptr: usize, count: usize) ->
         Ok(())
     }
 
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(not(all(target_os = "macos", feature = "metal")))]
     {
         let _ = (a_ptr, b_ptr, result_ptr, count);
         Err(pyo3::exceptions::PyRuntimeError::new_err(
-            "Metal is only available on macOS",
+            "Metal is not available in this build or on this platform",
         ))
     }
 }
@@ -1039,7 +1170,7 @@ fn metal_div_f32(a_ptr: usize, b_ptr: usize, result_ptr: usize, count: usize) ->
 
 #[pyfunction]
 fn metal_transpose_f32(in_ptr: usize, out_ptr: usize, m: usize, n: usize) -> PyResult<()> {
-    #[cfg(target_os = "macos")]
+    #[cfg(all(target_os = "macos", feature = "metal"))]
     {
         use crate::ops::metal::transpose_f32_metal_dispatch;
 
@@ -1062,11 +1193,11 @@ fn metal_transpose_f32(in_ptr: usize, out_ptr: usize, m: usize, n: usize) -> PyR
         Ok(())
     }
 
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(not(all(target_os = "macos", feature = "metal")))]
     {
         let _ = (in_ptr, out_ptr, m, n);
         Err(pyo3::exceptions::PyRuntimeError::new_err(
-            "Metal is only available on macOS",
+            "Metal is not available in this build or on this platform",
         ))
     }
 }
@@ -1084,7 +1215,7 @@ fn metal_broadcast_op(
     size_a: usize,
     size_b: usize,
 ) -> PyResult<()> {
-    #[cfg(target_os = "macos")]
+    #[cfg(all(target_os = "macos", feature = "metal"))]
     {
         use crate::ops::metal::broadcast_op;
 
@@ -1119,13 +1250,78 @@ fn metal_broadcast_op(
         Ok(())
     }
 
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(not(all(target_os = "macos", feature = "metal")))]
     {
         let _ = (
             op, a_ptr, b_ptr, out_ptr, shape, strides_a, strides_b, size, size_a, size_b,
         );
         Err(pyo3::exceptions::PyRuntimeError::new_err(
-            "Metal is only available on macOS",
+            "Metal is not available in this build or on this platform",
+        ))
+    }
+}
+// ============================================================================
+// CUDA GPU Operations
+// ============================================================================
+
+#[pyfunction]
+fn cuda_is_available() -> PyResult<bool> {
+    #[cfg(feature = "cuda")]
+    {
+        Ok(crate::ops::cuda::is_available())
+    }
+    #[cfg(not(feature = "cuda"))]
+    {
+        Ok(false)
+    }
+}
+
+#[pyfunction]
+fn cuda_add_f32(a_ptr: usize, b_ptr: usize, out_ptr: usize, count: usize) -> PyResult<()> {
+    #[cfg(feature = "cuda")]
+    {
+        use crate::ops::cuda::cuda_add_f32;
+
+        if a_ptr == 0 || b_ptr == 0 || out_ptr == 0 {
+            return Err(pyo3::exceptions::PyValueError::new_err(
+                "Null pointer passed to cuda_add_f32",
+            ));
+        }
+
+        if count == 0 {
+            return Ok(());
+        }
+
+        // PROFILING
+        let _scope = crate::profiler::ProfileScope::new(
+            GLOBAL_PROFILER.clone(),
+            "add".to_string(),
+            "CUDA".to_string(),
+            count,
+        );
+
+        let success = unsafe {
+            cuda_add_f32(
+                a_ptr as *const f32,
+                b_ptr as *const f32,
+                out_ptr as *mut f32,
+                count,
+            )
+        };
+
+        if !success {
+            return Err(pyo3::exceptions::PyRuntimeError::new_err(
+                "CUDA kernel execution failed",
+            ));
+        }
+
+        Ok(())
+    }
+    #[cfg(not(feature = "cuda"))]
+    {
+        let _ = (a_ptr, b_ptr, out_ptr, count);
+        Err(pyo3::exceptions::PyRuntimeError::new_err(
+            "CUDA is not enabled in this build",
         ))
     }
 }

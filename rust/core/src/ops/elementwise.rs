@@ -8,46 +8,55 @@
 // - Dispatch to appropriate C++ kernel or Rust fallback
 // - Handle different data types and backends
 
-// FFI declarations for C++ kernels (optional)
-#[cfg(feature = "cpp_kernels")]
-extern "C" {
-    pub fn add_f32_cpu(a: *const f32, b: *const f32, out: *mut f32, count: usize);
-    pub fn sub_f32_cpu(a: *const f32, b: *const f32, out: *mut f32, count: usize);
-    pub fn mul_f32_cpu(a: *const f32, b: *const f32, out: *mut f32, count: usize);
-    pub fn div_f32_cpu(a: *const f32, b: *const f32, out: *mut f32, count: usize);
-}
+use rayon::prelude::*;
 
-// Rust fallback implementations
-#[cfg(not(feature = "cpp_kernels"))]
+// Rust implementations
 #[inline]
 unsafe fn add_f32_cpu(a: *const f32, b: *const f32, out: *mut f32, count: usize) {
-    for i in 0..count {
-        *out.add(i) = *a.add(i) + *b.add(i);
-    }
+    let a_slice = std::slice::from_raw_parts(a, count);
+    let b_slice = std::slice::from_raw_parts(b, count);
+    let out_slice = std::slice::from_raw_parts_mut(out, count);
+    out_slice
+        .par_iter_mut()
+        .zip(a_slice.par_iter())
+        .zip(b_slice.par_iter())
+        .for_each(|((o, &x), &y)| *o = x + y);
 }
 
-#[cfg(not(feature = "cpp_kernels"))]
 #[inline]
 unsafe fn sub_f32_cpu(a: *const f32, b: *const f32, out: *mut f32, count: usize) {
-    for i in 0..count {
-        *out.add(i) = *a.add(i) - *b.add(i);
-    }
+    let a_slice = std::slice::from_raw_parts(a, count);
+    let b_slice = std::slice::from_raw_parts(b, count);
+    let out_slice = std::slice::from_raw_parts_mut(out, count);
+    out_slice
+        .par_iter_mut()
+        .zip(a_slice.par_iter())
+        .zip(b_slice.par_iter())
+        .for_each(|((o, &x), &y)| *o = x - y);
 }
 
-#[cfg(not(feature = "cpp_kernels"))]
 #[inline]
 unsafe fn mul_f32_cpu(a: *const f32, b: *const f32, out: *mut f32, count: usize) {
-    for i in 0..count {
-        *out.add(i) = *a.add(i) * *b.add(i);
-    }
+    let a_slice = std::slice::from_raw_parts(a, count);
+    let b_slice = std::slice::from_raw_parts(b, count);
+    let out_slice = std::slice::from_raw_parts_mut(out, count);
+    out_slice
+        .par_iter_mut()
+        .zip(a_slice.par_iter())
+        .zip(b_slice.par_iter())
+        .for_each(|((o, &x), &y)| *o = x * y);
 }
 
-#[cfg(not(feature = "cpp_kernels"))]
 #[inline]
 unsafe fn div_f32_cpu(a: *const f32, b: *const f32, out: *mut f32, count: usize) {
-    for i in 0..count {
-        *out.add(i) = *a.add(i) / *b.add(i);
-    }
+    let a_slice = std::slice::from_raw_parts(a, count);
+    let b_slice = std::slice::from_raw_parts(b, count);
+    let out_slice = std::slice::from_raw_parts_mut(out, count);
+    out_slice
+        .par_iter_mut()
+        .zip(a_slice.par_iter())
+        .zip(b_slice.par_iter())
+        .for_each(|((o, &x), &y)| *o = x / y);
 }
 
 /// Dispatch add operation to CPU kernel

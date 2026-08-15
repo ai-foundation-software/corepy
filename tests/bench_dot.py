@@ -3,7 +3,7 @@ import time
 import numpy as np
 
 # Import internal FFI function for direct testing
-from _corepy_rust import tensor_dot_product_f32
+from _corepy_rust import array_dot_product_f32
 
 import corepy as cp
 from corepy.backend import detect_devices
@@ -17,8 +17,8 @@ def bench_dot_product(size=1_000_000, iterations=1000):
 
     # Data Setup
     data_np = np.random.rand(size).astype(np.float32)
-    data_cp_a = cp.Tensor(data_np.tolist())
-    data_cp_b = cp.Tensor(data_np.tolist())
+    data_cp_a = cp.ndarray(data_np.tolist())
+    data_cp_b = cp.ndarray(data_np.tolist())
 
     # Pointers for direct FFI call
     ptr_a = data_np.ctypes.data
@@ -28,7 +28,7 @@ def bench_dot_product(size=1_000_000, iterations=1000):
 
     # 1. Warmup & Correctness Check
     res_np = np.dot(data_np, data_np)
-    res_cp = tensor_dot_product_f32(ptr_a, ptr_b, size)
+    res_cp = array_dot_product_f32(ptr_a, ptr_b, size)
 
     # Allow small FP error for different accumulation order/SIMD
     if not np.isclose(res_np, res_cp, rtol=1e-4):
@@ -46,7 +46,7 @@ def bench_dot_product(size=1_000_000, iterations=1000):
     # 3. Corepy Benchmark
     start = time.perf_counter()
     for _ in range(iterations):
-        tensor_dot_product_f32(ptr_a, ptr_b, size)
+        array_dot_product_f32(ptr_a, ptr_b, size)
     dt_cp = time.perf_counter() - start
 
     ops = size * 2 * iterations  # MAC = 2 ops

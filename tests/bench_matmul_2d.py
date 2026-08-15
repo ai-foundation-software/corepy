@@ -13,8 +13,8 @@ def benchmark_matmul(m: int, k: int, n: int, num_iters: int = 10):
     a_np = np.random.randn(m, k).astype(np.float32)
     b_np = np.random.randn(k, n).astype(np.float32)
 
-    a_cp = cp.Tensor(a_np)
-    b_cp = cp.Tensor(b_np)
+    a_cp = cp.ndarray(a_np)
+    b_cp = cp.ndarray(b_np)
 
     # Warmup
     _ = a_cp.matmul(b_cp)
@@ -37,13 +37,11 @@ def benchmark_matmul(m: int, k: int, n: int, num_iters: int = 10):
     cp_gflops = (2 * m * k * n) / (cp_time * 1e9)
 
     # Verification
-    if hasattr(res_cp, "_backing_data") and isinstance(
-        res_cp._backing_data, np.ndarray
-    ):
-        res_cp_np = res_cp._backing_data
+    if hasattr(res_cp, "to_list()") and isinstance(res_cp.to_list(), np.ndarray):
+        res_cp_np = res_cp.to_list()
     else:
-        # Fallback for list-backed tensors
-        res_cp_np = np.array(res_cp._backing_data).reshape(m, n)
+        # Fallback for list-backed arrays
+        res_cp_np = np.array(res_cp.to_list()).reshape(m, n)
 
     diff = np.abs(res_cp_np - res_np).max()
     is_correct = diff < 1e-4

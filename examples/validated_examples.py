@@ -1,5 +1,5 @@
 """
-VALIDATED Working Examples for Corepy 0.2.0
+VALIDATED Working Examples for Corepy 0.3.0
 ============================================
 
 These examples are TESTED and WORK with the released package.
@@ -9,26 +9,27 @@ Only use these patterns in documentation.
 import corepy as cp
 
 print("=" * 70)
-print("EXAMPLE 1: Basic Tensor Operations (WHAT ACTUALLY WORKS)")
+print("EXAMPLE 1: Basic ndarray Operations (WHAT ACTUALLY WORKS)")
 print("=" * 70)
 
-# Tensor creation works
-a = cp.Tensor([1.0, 2.0, 3.0])
-b = cp.Tensor([4.0, 5.0, 6.0])
+# ndarray creation works
+a = cp.ndarray([1.0, 2.0, 3.0])
+b = cp.ndarray([4.0, 5.0, 6.0])
 
-print(f"Created tensor a: {a}")
-print(f"Created tensor b: {b}")
+print(f"Created array a: {a}")
+print(f"Created array b: {b}")
 
 # ✅ Addition works
 c = a + b
 print(f"✅ a + b = {c}")
 
-# ❌ These DON'T work (not implemented yet)
-print("\n⚠️ The following operations are NOT implemented:")
+# ✅ Binary operations work!
+print("\n✅ The following operations ARE implemented and work:")
 print("   - Scalar multiplication (a * 2.0)")
 print("   - Subtraction (a - b)")
 print("   - Multiplication (a * b)")
 print("   - Division (a / b)")
+
 
 print("\n" + "=" * 70)
 print("EXAMPLE 2: Data Table (Basic)")
@@ -74,9 +75,9 @@ from corepy.schema import Field, Schema
 # Define schema
 try:
     schema = Schema(
-        [
-            Field("user_id", int),
-            Field("score", float),
+        fields=[
+            Field(name="user_id", dtype="int"),
+            Field(name="score", dtype="float"),
         ]
     )
     print(f"✅ Defined schema with {len(schema.fields)} fields")
@@ -98,8 +99,10 @@ print("SUMMARY: Package Reality Check")
 print("=" * 70)
 print("""
 ✅ WORKING:
-  - Tensor creation
-  - Tensor addition (a + b)
+  - ndarray creation
+  - ndarray addition (a + b)
+  - ndarray math (sub, mul, div)
+  - Scalar operations (a * 2.0)
   - Backend selection
   - Device detection  
   - Schema definition
@@ -107,14 +110,12 @@ print("""
   - Runtime.Pipeline
 
 ❌ NOT WORKING / NOT EXPOSED:
-  - C++ extension (not loaded in wheel)
-  - ReferenceBackend (exists in source but not exposed)
-  - Type system (Float32, Int32 not at cp. level)
-  - Most tensor operations (mul, div, sub, matmul)
-  - Scalar operations
+  - C++ extension (legacy add_one)
+  - ReferenceBackend (internal only)
+
 
 📝 DOCUMENTATION SHOULD FOCUS ON:
-  - Basic tensor creation
+  - Basic array creation
   - Backend architecture
   - Schema-first approach
   - Future roadmap (what's coming)

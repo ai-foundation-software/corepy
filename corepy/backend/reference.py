@@ -14,7 +14,7 @@ class ReferenceBackend:
 
     @staticmethod
     def add(a: Any, b: Any) -> Any:
-        # Recursive handle lists/tensors
+        # Recursive handle lists/arrays
         if isinstance(a, list) and isinstance(b, list):
             assert len(a) == len(b), "Shape mismatch in reference add"
             return [ReferenceBackend.add(x, y) for x, y in zip(a, b)]

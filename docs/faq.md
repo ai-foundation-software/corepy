@@ -9,7 +9,7 @@ We wanted a core runtime that was simpler than PyTorch but faster/safer than raw
 No.
 - Use **Pandas** for messy data cleaning, CSV parsing, and exploration.
 - Use **NumPy** for general scientific computing.
-- Use **Corepy** when you need a production-grade tensor runtime with strict typing, predictable memory usage, and built-in profiling.
+- Use **Corepy** when you need a production-grade array runtime with strict typing, predictable memory usage, and built-in profiling.
 
 ## Technical
 
@@ -17,7 +17,7 @@ No.
 That is a legacy test function from the initial skeleton. It will be removed in v1.0.
 
 ### Why is `read_csv` missing?
-In v0.2.2, we removed the experimental Python-based CSV reader to focus on the Tensor core. We recommend using `pandas.read_csv()` to load data, then converting to `corepy.Tensor(df.values)` for processing.
+In v0.2.2, we removed the experimental Python-based CSV reader to focus on the Array core. We recommend using `pandas.read_csv()` to load data, then converting to `corepy.Array(df.values)` for processing.
 
 ### Why strict Float32?
 Most AI and signal processing workloads do not need Double Precision (`Float64`), which consumes 2x memory and bandwidth. Defaults matter. You can explicitly use `DataType.FLOAT64` if needed.
@@ -30,5 +30,5 @@ This usually means the wheel was built without compiling the C++ component or th
 - **Dev**: Ensure `cmake` is in your PATH.
 
 ### Performance seems slow?
-- Check if you are running on a very small tensor. The overhead of crossing Python->Rust->C++ dominates for arrays smaller than ~1000 elements.
+- Check if you are running on a very small array. The overhead of crossing Python->Rust->C++ dominates for arrays smaller than ~1000 elements.
 - Use `cp.enable_profiling()` to see if `Python Fallback` is being triggered (which happens if the Rust extension fails to load).

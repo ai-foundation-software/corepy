@@ -13,7 +13,7 @@ import corepy as cp
 # ============================================================================
 # STEP 1: Enable Profiling
 # ============================================================================
-# This single line enables automatic tracking of ALL tensor operations.
+# This single line enables automatic tracking of ALL array operations.
 # There's no configuration needed - it just works!
 
 print("=" * 60)
@@ -38,9 +38,9 @@ print("=" * 60)
 print("STEP 2: Running Operations (Being Profiled)")
 print("=" * 60)
 
-# Create a simple tensor
-data = cp.tensor([1.0, 2.0, 3.0, 4.0, 5.0])
-print(f"Created tensor: {data}")
+# Create a simple array
+data = cp.array([1.0, 2.0, 3.0, 4.0, 5.0])
+print(f"Created array: {data}")
 
 # Perform an addition (this will be tracked!)
 result1 = data + 10.0
@@ -66,7 +66,7 @@ cp.disable_profiling()
 print("✅ Profiling disabled. Operations after this won't be tracked.\n")
 
 # Any operations here won't be profiled
-data2 = cp.tensor([6.0, 7.0, 8.0])
+data2 = cp.array([6.0, 7.0, 8.0])
 result3 = data2 + 1.0  # Not tracked!
 
 

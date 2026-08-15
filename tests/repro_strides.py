@@ -24,7 +24,7 @@ class TestSafety(unittest.TestCase):
         print(f"Input: {sliced_arr.tolist()}")
         print(f"Input Strides: {sliced_arr.strides}")
 
-        # 3. Create Tensor from slice
+        # 3. Create ndarray from slice
         # CURRENT BEHAVIOR:
         # - Extracts ptr to '0'
         # - Passes count=3
@@ -33,10 +33,10 @@ class TestSafety(unittest.TestCase):
         #
         # CORRECT BEHAVIOR:
         # - Result should be sum(0, 2, 4) = 6.0
-        t = cp.Tensor(sliced_arr, dtype=cp.DataType.FLOAT32)
+        t = cp.ndarray(sliced_arr, dtype=cp.DataType.FLOAT32)
 
-        result_tensor = t.sum()
-        result_val = result_tensor._backing_data[0]
+        result_array = t.sum()
+        result_val = result_array.to_list()[0]
 
         print(f"Computed Sum: {result_val}")
         print("Expected Sum: 6.0")

@@ -1,34 +1,111 @@
 [package]
 name = "corepy-ai"
-version = "0.2.4"
+version = "0.3.0"
 edition = "2021"
-description = "Rust backend for CorePy - High-performance tensor operations with Metal acceleration"
+description = "Rust backend for CorePy - High-performance array operations with multi-backend BLAS acceleration"
 license = "MIT"
-repository = "https://github.com/yourusername/corepy"
-homepage = "https://github.com/yourusername/corepy"
+repository = "https://github.com/ai-foundation-software/corepy"
+homepage = "https://github.com/ai-foundation-software/corepy"
+
+
 
 [lib]
 name = "_corepy_rust"
-crate-type = ["cdylib"]
+crate-type = ["cdylib", "rlib"]
+
+# ───────────────── Dependencies ─────────────────
 
 [dependencies]
-pyo3 = { version = "0.22", features = ["extension-module", "abi3-py39"] }
-rayon = "1.8"
-num_cpus = "1.16"
-serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0"
+
+# Python bindings
+pyo3 = { version = "0.28" }
+# Only include if you REALLY need low-level Python C API
+pyo3-ffi = { version = "0.28", optional = true }
+
+# Parallel compute
+rayon = "1"
+num_cpus = "1"
+
+# Serialization
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# System / utilities
 chrono = "0.4"
 parking_lot = "0.12"
-uuid = { version = "1.0", features = ["v4", "serde"] }
-lazy_static = "1.4"
-cblas-sys = "0.1.4"
+uuid = { version = "1", features = ["v4", "serde"] }
 
-# Platform-specific BLAS backends
+# CPU feature detection
+raw-cpuid = "11"
+sysinfo = "0.38"
+
+# Random generation
+rand = "0.10"
+rand_core = "0.10"
+rand_pcg = "0.10"
+rand_xoshiro = "0.8"
+rand_distr = "0.6"
+
+# Array math / GEMM
+# Cache-aware, auto-vectorised pure-Rust GEMM (AVX2/NEON, no BLAS required)
+matrixmultiply = "0.3"
+faer = { version = "0.24", optional = true }
+
+# BLAS interface
+cblas-sys = "0.3"
+
+# Fast memory casting (zero-copy array views)
+bytemuck = { version = "1", features = ["derive"] }
+
+# FP16 support (half-precision arrays)
+half = "2"
+
+# GPU compute
+
+# Apple Metal
+metal = { version = "0.33", optional = true }
+
+# Data IO
+csv = "1"
+libloading = "0.9.0"
+
+# ───────────────── Platform BLAS ─────────────────
+
 [target.'cfg(all(target_os = "macos", target_arch = "aarch64"))'.dependencies]
-accelerate-src = "0.3"  # Apple Accelerate framework (AMX support on M1/M2/M3)
+accelerate-src = "0.3"  # Apple Accelerate framework (AMX support on M1/M2/M3/M4)
 
-
-
+# ───────────────── Features ─────────────────
 [features]
-default = ["cpp_kernels"]
-cpp_kernels = []
+
+default = ["cpu", "faer"]
+
+# CPU backends
+cpu = []
+avx2 = []
+avx512 = []
+neon = []
+amx = []
+
+# SIMD optimization
+simd = ["nightly"]
+
+# GPU
+cuda = []
+metal = ["dep:metal"]
+
+# Linear algebra
+faer = ["dep:faer"]
+
+# Distributed compute
+distributed = []
+
+# Python extension
+extension-module = ["pyo3/extension-module"]
+
+# BLAS backends
+openblas = []
+mkl = []
+aocl = []
+
+# Compiler features
+nightly = []

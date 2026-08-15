@@ -1,6 +1,6 @@
 # Backend Architecture: Rust Runtime & Device Management
 
-**Version**: 0.2.0  
+**Version**: 0.3.0+
 **Focus**: CPU/GPU Backend Selection, Rust Runtime Design  
 **Audience**: Contributors, Advanced Users
 
@@ -14,40 +14,75 @@ Corepy uses a **multi-layered backend architecture** designed for:
 3. **Performance**: Zero-cost abstractions for backend dispatch
 4. **Extensibility**: Plugin system for custom backends
 
-```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                           Python API (corepy/)                              │
-│                    ┌──────────────────────────────────┐                    │
-│                    │   Tensor / Buffer / Operations   │                    │
-│                    └──────────────┬───────────────────┘                    │
-└───────────────────────────────────┼─────────────────────────────────────────┘
-                                    │
-┌───────────────────────────────────▼─────────────────────────────────────────┐
-│                         Rust Runtime (rust/core/)                           │
-│  ┌─────────────────────────────────────────────────────────────────────┐   │
-│  │                      Backend Dispatcher                              │   │
-│  │   ┌─────────────┐  ┌─────────────┐  ┌─────────────┐                 │   │
-│  │   │ Capabilities│  │   Policy    │  │  Feature    │                 │   │
-│  │   │  Detection  │──│  Selection  │──│  Detection  │                 │   │
-│  │   └─────────────┘  └─────────────┘  └─────────────┘                 │   │
-│  └─────────────────────────────────────────────────────────────────────┘   │
-│                                    │                                        │
-│         ┌──────────────┬───────────┼───────────┬──────────────┐            │
-│         ▼              ▼           ▼           ▼              ▼            │
-│  ┌───────────┐  ┌───────────┐ ┌─────────┐ ┌─────────┐  ┌───────────┐      │
-│  │  Scalar   │  │   SIMD    │ │ OpenBLAS│ │  Metal  │  │  Future   │      │
-│  │ Fallback  │  │AVX2/512   │ │  BLAS   │ │ (macOS) │  │CUDA/ROCm  │      │
-│  │           │  │  /NEON    │ │         │ │         │  │           │      │
-│  └─────┬─────┘  └─────┬─────┘ └────┬────┘ └────┬────┘  └─────┬─────┘      │
-└────────┼──────────────┼────────────┼───────────┼─────────────┼─────────────┘
-         │              │            │           │             │
-┌────────▼──────────────▼────────────▼───────────▼─────────────▼─────────────┐
-│                            Execution Layer                                  │
-│  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────────────┐     │
-│  │   C++ Kernels   │  │   Metal MSL     │  │   Future GPU Backends   │     │
-│  │ (csrc/src/cpu/) │  │ (csrc/src/metal)│  │   (CUDA/ROCm/Vulkan)    │     │
-│  └─────────────────┘  └─────────────────┘  └─────────────────────────┘     │
-└─────────────────────────────────────────────────────────────────────────────┘
+```mermaid
+graph TD
+
+%% =========================
+%% 1️⃣ Frontend Layer
+%% =========================
+subgraph L1["Frontend Layer"]
+    A["Python API (corepy)"]
+    A2["NumPy-like API (cp.array, cp.matmul)"]
+    A3["DataFrame API"]
+    A --> A2
+    A --> A3
+end
+
+%% =========================
+%% 2️⃣ FFI Boundary
+%% =========================
+subgraph L2["FFI Boundary"]
+    B["PyO3 / abi3 Stable ABI"]
+end
+
+%% =========================
+%% 3️⃣ Rust Runtime Core
+%% =========================
+subgraph L3["Rust Runtime Core"]
+    C["Tensor / NDArray Core"]
+    D["Memory Arena + Allocator"]
+    E["Execution Dispatcher"]
+    F["Device Manager"]
+    G["Autograd (Future)"]
+end
+
+%% =========================
+%% 4️⃣ Execution Backends
+%% =========================
+subgraph L4["Execution Backends"]
+    H["CPU Backend (SIMD AVX2/AVX512/NEON/AMX)"]
+    I["BLAS / Faer Linear Algebra"]
+    J["GPU Backend (Metal / CUDA Future)"]
+    K["Tabular Engine (Columnar Execution)"]
+end
+
+%% =========================
+%% 5️⃣ Hardware Layer
+%% =========================
+subgraph L5["Hardware Layer"]
+    M["Multi-Core CPU"]
+    N["Apple Silicon GPU"]
+    O["Discrete GPU (Future CUDA)"]
+end
+
+%% Connections
+
+A --> B
+B --> C
+
+C --> D
+C --> E
+C --> F
+
+E -->|Default Path| H
+E -->|Linear Algebra| I
+E -->|GPU Available?| J
+E -->|DataFrame Ops| K
+
+H --> M
+I --> M
+J --> N
+J --> O
 ```
 
 ---
@@ -274,43 +309,42 @@ The Rust runtime provides:
 ### Current Implementation Status (v1)
 
 ```rust
+```rust
 // rust/core/src/lib.rs
 use pyo3::prelude::*;
 
 #[pymodule]
 fn _corepy_rust(_py: Python, m: &PyModule) -> PyResult<()> {
-    // Active: Profiling, FFI safety, and initial Ops
+    // Active modules: Profiling, DataFrame, LinAlg, Array Ops
     ffi::python::register_functions(m)?;
     Ok(())
 }
 ```
 
 > [!NOTE]
-> **Current Status**: Hybrid Active
+> **Current Status**: Fully Active
 > 
-> The Rust runtime is **active** in v0.2.0+. It currently manages:
-> - **Profiling**: Low-overhead instrumentation via `corepy.profiler`.
-> - **FFI Safety**: Safe boundary between Python and C++.
-> - **Ops**: Selected operations are being migrated from C++.
+> The Rust runtime is **active** and manages the complete lifecycle of CorePy arrays:
+> - **Memory**: 64-byte aligned buffers managed by Rust allocators with an optional LRU Buffer Pool.
+> - **Parallelism**: A fully active `rayon` work-stealing scheduler is live for UFuncs and aggregations.
+> - **Tabular**: A zero-copy DataFrame engine pushes relational algebra deep into Rust.
+> - **Lazy**: The expression graph dynamically fuses operations to save memory bandwidth.
 
 ### Planned Features (v2+)
 
-#### 1. Task Scheduler
+#### 1. Task Scheduler (Implemented)
 ```rust
-// Planned implementation
+// Active implementation utilizing Rayon
 use rayon::prelude::*;
 
 pub struct TaskScheduler {
-    pool: rayon::ThreadPool,
-    max_workers: usize,
+    // Rayon manages the global threadpool intrinsically
 }
 
 impl TaskScheduler {
-    pub fn execute_graph(&self, graph: &ComputeGraph) -> Result<ndarray> {
-        // Work-stealing execution of compute graph
-        graph.nodes.par_iter()
-            .map(|node| self.execute_node(node))
-            .collect()
+    pub fn execute_parallel(&self, data: &[f32]) {
+        // Work-stealing execution over native slices
+        data.par_iter().map(|&x| x * 2.0).collect()
     }
 }
 ```
@@ -563,8 +597,9 @@ fn safe_process(data: &PyArray1<f32>) -> PyResult<Py<PyArray1<f32>>> {
 ### v1 (Current)
 - ✅ CPU backend architecture
 - ✅ Device detection
-- ✅ Basic backend selection
-- ⚠️ Hybrid Rust Runtime (Active for Profiling/FFI)
+- ✅ Complete Rayon task scheduler (work-stealing)
+- ✅ DataFrame engine with GroupBy/Pivot/CSV
+- ✅ Fast robust random numbers (multi-threaded)
 
 ### v1.5 (Next 3-6 months)
 - 🔨 Complete CPU SIMD kernels (all operations)
@@ -593,7 +628,7 @@ fn safe_process(data: &PyArray1<f32>) -> PyResult<Py<PyArray1<f32>>> {
 ```python
 # ✅ Recommended: Automatic selection
 import corepy as cp
-result = cp.Tensor([1, 2, 3]) + cp.Tensor([4, 5, 6])
+result = cp.Array([1, 2, 3]) + cp.Array([4, 5, 6])
 ```
 
 ### 2. Check Device Capabilities First
@@ -627,11 +662,11 @@ print(f"Operation took {elapsed:.3f}s")
 
 ```python
 # ❌ Bad: GPU for tiny operations
-tiny_data = cp.Tensor([1, 2, 3])  # 12 bytes
+tiny_data = cp.Array([1, 2, 3])  # 12 bytes
 tiny_data.to_device("gpu")  # Transfers take longer than compute!
 
 # ✅ Good: GPU for large operations
-large_data = cp.Tensor(range(1_000_000))  # 4MB
+large_data = cp.Array(range(1_000_000))  # 4MB
 large_data.to_device("gpu")  # Transfer cost amortized over compute
 ```
 
@@ -649,11 +684,11 @@ large_data.to_device("gpu")  # Transfer cost amortized over compute
 
 ## 📝 Design Decisions
 
-### Renaming `Tensor` to `ndarray` (v0.2.4)
+### Renaming `Array` to `ndarray` (v0.3.0)
 **Rationale**:
 - **NumPy Alignment**: Adoption is easier for users familiar with the standard scientific Python ecosystem (NumPy, SciPy).
-- **Semantics**: `Tensor` often implies deep learning features (autograd, computation graphs), while `ndarray` correctly implies a general-purpose n-dimensional array. CorePy provides the foundational array container.
-- **Future Proofing**: Reserves `Tensor` as a potential high-level wrapper for future autograd capabilities, distinct from the raw memory container `ndarray`.
+- **Semantics**: `Array` often implies deep learning features (autograd, computation graphs), while `ndarray` correctly implies a general-purpose n-dimensional array. CorePy provides the foundational array container.
+- **Future Proofing**: Reserves `Array` as a potential high-level wrapper for future autograd capabilities, distinct from the raw memory container `ndarray`.
 
 ---
 

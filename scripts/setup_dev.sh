@@ -29,43 +29,35 @@ echo "Checking required tools..."
 command -v uv >/dev/null 2>&1 || { echo "❌ 'uv' is required. Visit https://docs.astral.sh/uv/ to install."; exit 1; }
 echo "✅ uv found"
 
-command -v cmake >/dev/null 2>&1 || { echo "❌ cmake required. Install: apt/brew install cmake"; exit 1; }
-command -v cargo >/dev/null 2>&1 || { echo "❌ cargo required. Install: https://rustup.rs"; exit 1; }
-
-# Step 1: Install Python dependencies
-echo ""
-echo "Step 1/4: Syncing dependencies..."
-uv sync --all-extras --group dev --no-install-project
-
-# Step 2: Build C++ kernels
-echo ""
-echo "Step 2/4: Building C++ kernels..."
-mkdir -p build
-cd build
-
-python_cmake_dir=$(uv run --no-sync python -c "import pybind11; print(pybind11.get_cmake_dir())" 2>/dev/null)
-
-if command -v ninja >/dev/null 2>&1; then
-    GENERATOR="-G Ninja"
-else
-    GENERATOR=""
+# Detect GPU and set features
+GPU_FEATURE=""
+if [ "$OS" = "macOS" ]; then
+    if [ "$(uname -m)" = "arm64" ]; then
+        echo "🍎 Detected Apple Silicon (Metal)"
+        GPU_FEATURE="--features metal"
+    fi
+elif [ "$OS" = "Linux" ] || [ "$OS" = "Windows" ]; then
+    if command -v nvcc >/dev/null 2>&1 || command -v nvidia-smi >/dev/null 2>&1 || [ -n "$CUDA_PATH" ]; then
+        echo "🟩 Detected NVIDIA GPU"
+        GPU_FEATURE="--features cuda"
+    fi
 fi
 
-uv run --no-sync cmake .. $GENERATOR -DCMAKE_BUILD_TYPE=Release -Dpybind11_DIR="$python_cmake_dir"
-uv run --no-sync cmake --build . --config Release
-
-cd "$REPO_ROOT"
-echo "✅ C++ kernels built"
-
-# Step 3: Build Rust runtime
+# Step 2: Build Rust runtime
 echo ""
-echo "Step 3/4: Building Rust runtime..."
-uv run maturin develop --release --manifest-path rust/core/Cargo.toml
+echo "Step 2/3: Building Rust runtime..."
+if [ -n "$GPU_FEATURE" ]; then
+    echo "Using GPU features: $GPU_FEATURE"
+    uv run maturin develop --release --manifest-path rust/core/Cargo.toml $GPU_FEATURE
+else
+    echo "Using CPU only"
+    uv run maturin develop --release --manifest-path rust/core/Cargo.toml
+fi
 echo "✅ Rust runtime built"
 
-# Step 4: Verify installation
+# Step 3: Verify installation
 echo ""
-echo "Step 4/4: Verifying installation..."
+echo "Step 3/3: Verifying installation..."
 uv run python scripts/verify_install.py
 
 echo ""

@@ -9,7 +9,7 @@ Corepy is a research-grade, infrastructure-level runtime designed to unify data,
 The core purpose of Corepy is to provide a **safe, performant, and hardware-aware foundation** for high-performance Python applications.
 
 *   **Core Problem Solved**: The fragmentation and safety risks in existing high-performance Python libraries. Current tools often force users to choose between safety (pure Python/Rust) and raw speed (C++/CUDA), or struggle with the GIL in multi-threaded contexts.
-*   **Why Existing Tools fail**: NumPy is largely single-threaded and lacks native GPU support. PyTorch/TensorFlow are massive dependencies optimized for Deep Learning, not general-purpose computing, and are difficult to extend.
+*   **Why Existing Tools fail**: NumPy is largely single-threaded and lacks native GPU support. PyTorch/ArrayFlow are massive dependencies optimized for Deep Learning, not general-purpose computing, and are difficult to extend.
 *   **Guarantees**:
     *   **Memory Safety**: Enforced by the Rust runtime properties at the scheduler level.
     *   **Correctness**: Mathematical precision and rigorous testing (property-based) take precedence over speed.
@@ -46,7 +46,7 @@ The core purpose of Corepy is to provide a **safe, performant, and hardware-awar
 ### Secondary Use Cases (Possible)
 1.  **Scientific Simulation**:
     *   **User**: Physicists / Biologists.
-    *   **Workflow**: Grid-based simulations or tensor algebra that fits in memory.
+    *   **Workflow**: Grid-based simulations or array algebra that fits in memory.
     *   **Why Corepy**: Easier to write than C++, faster than NumPy.
 
 ### Non-Goals (Explicitly Unsupported)

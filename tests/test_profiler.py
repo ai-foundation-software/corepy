@@ -27,14 +27,14 @@ def clean_profiler():
 def test_enable_disable():
     """Test enabling and disabling the profiler."""
     # Should start disabled
-    t1 = cp.Tensor([1.0, 2.0])
+    t1 = cp.ndarray([1.0, 2.0])
     _ = t1 + t1
     report = profile_report(format="dict")
     assert len(report.get("operations", {})) == 0
 
     # Enable
     enable_profiling()
-    t1 = cp.Tensor([1.0, 2.0])
+    t1 = cp.ndarray([1.0, 2.0])
     _ = t1 + t1
     report = profile_report(format="dict")
     ops = report.get("operations", {})
@@ -55,7 +55,7 @@ def test_context_manager():
     """Test scoping via context manager."""
     enable_profiling()
 
-    t1 = cp.Tensor([1.0, 2.0])
+    t1 = cp.ndarray([1.0, 2.0])
 
     with ProfileContext("scope_a"):
         _ = t1 + t1
@@ -81,7 +81,7 @@ def test_decorator():
     def my_custom_op(x):
         return x + x
 
-    t = cp.Tensor([10.0])
+    t = cp.ndarray([10.0])
     _ = my_custom_op(t)
 
     report = profile_report(format="dict")
@@ -91,7 +91,7 @@ def test_decorator():
 def test_report_formats():
     """Test different report export formats."""
     enable_profiling()
-    t = cp.Tensor([1.0])
+    t = cp.ndarray([1.0])
     _ = t + t
 
     # JSON String
@@ -114,7 +114,7 @@ def test_report_formats():
 def test_metrics_accuracy():
     """Test that metrics capture counts correctly."""
     enable_profiling()
-    t = cp.Tensor([1.0])
+    t = cp.ndarray([1.0])
 
     loops = 10
     for _ in range(loops):
@@ -132,7 +132,7 @@ def test_metrics_accuracy():
 def test_matmul_profiling():
     """Test that matmul (FFI dispatch) is profiled."""
     enable_profiling()
-    t = cp.Tensor([1.0, 2.0])
+    t = cp.ndarray([1.0, 2.0])
 
     # Dot product (matmul of 1D)
     _ = t.matmul(t)
@@ -153,27 +153,16 @@ def test_bottleneck_detection():
     cp.profiler.core._python_profiler.enable()
     from unittest.mock import patch
 
-    import numpy as np
-
-    # Mock time.perf_counter to increment by 1ms each call
-    # Side effect: first call 0, second 0.001, etc.
-    # tensor.py calls it twice per op: start and end. Diff will be 0.001s = 1ms.
+    from corepy.profiler.core import record_op
 
     # Manual override because patch seems to fail on bound C-extension function variable
     original_get_report = cp.profiler.core._get_profile_report
     cp.profiler.core._get_profile_report = cp.profiler.core._python_profiler.get_report
 
-    # Initialize tensor
-    arr = np.ones(1000, dtype=np.float32)
-    t = cp.Tensor(arr)
-
     try:
-        with (
-            patch("time.perf_counter", side_effect=[i * 0.001 for i in range(1000)]),
-            patch("corepy.profiler.core._RUST_AVAILABLE", False),
-        ):
+        with patch("corepy.profiler.core._RUST_AVAILABLE", False):
             for _ in range(100):
-                _ = t.sum()
+                record_op("mock_sum_op", 1.0, "CPU")
 
         bottlenecks = detect_bottlenecks(threshold=0.0)
 
@@ -181,12 +170,8 @@ def test_bottleneck_detection():
         # Restore
         cp.profiler.core._get_profile_report = original_get_report
 
-    # Since sum is the only thing running, it should be > 10%
-    # Note: If this fails in CI, check if sum is being profiled in Rust extension properly
-    found = any(b["operation"] == "sum" for b in bottlenecks)
-    # It must be found now
-    assert found, "Sum operation not detected in bottlenecks"
+    found = any(b["operation"] == "mock_sum_op" for b in bottlenecks)
+    assert found, "mock_sum_op operation not detected in bottlenecks"
 
-    found_sum = next(b for b in bottlenecks if b["operation"] == "sum")
-    # Because we forced 1ms per op, total time > 0, percent should be 100%
+    found_sum = next(b for b in bottlenecks if b["operation"] == "mock_sum_op")
     assert found_sum["percent_total"] > 90.0

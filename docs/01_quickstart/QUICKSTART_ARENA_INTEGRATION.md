@@ -2,7 +2,7 @@
 
 **Estimated Time**: 4-6 hours  
 **Priority**: P0 (Critical)  
-**Expected Speedup**: 10-20% for small-medium tensors
+**Expected Speedup**: 10-20% for small-medium arrays
 
 ---
 
@@ -95,7 +95,7 @@ pub unsafe fn sum_f32_cpu_dispatch(data_ptr: *const f32, count: usize) -> f32 {
 ```python
 import numpy as np
 import time
-from _corepy_rust import tensor_sum_f32
+from _corepy_rust import array_sum_f32
 
 def bench_sum_with_arena(size=100_000, iterations=10_000):
     """
@@ -108,12 +108,12 @@ def bench_sum_with_arena(size=100_000, iterations=10_000):
     
     # Warmup
     for _ in range(100):
-        tensor_sum_f32(ptr, size)
+        array_sum_f32(ptr, size)
     
     # Timed run
     start = time.perf_counter()
     for _ in range(iterations):
-        result = tensor_sum_f32(ptr, size)
+        result = array_sum_f32(ptr, size)
     elapsed = time.perf_counter() - start
     
     ops_per_sec = iterations / elapsed

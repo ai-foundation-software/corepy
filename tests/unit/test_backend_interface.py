@@ -1,6 +1,6 @@
 import pytest
 
-from corepy.backend.backend import CPUBackend, GPUBackend
+from corepy.backend.backend import CPUBackend, CUDABackend
 from corepy.backend.types import BackendType, OperationType
 
 
@@ -11,10 +11,10 @@ class TestBackendInterface:
         assert backend.is_available() is True
         assert backend.supports_operation(OperationType.COMPUTE_VECTOR) is True
 
-    def test_gpu_backend_placeholder(self):
+    def test_cuda_backend_placeholder(self):
         # Even if not functional, we test the class defines
-        backend = GPUBackend()
-        assert backend.device_type == BackendType.GPU
+        backend = CUDABackend()
+        assert backend.device_type == BackendType.CUDA
         # Currently hardcoded to False in placeholder
         assert backend.is_available() is False
 

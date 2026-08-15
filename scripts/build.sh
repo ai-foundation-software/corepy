@@ -12,70 +12,54 @@ cd "$REPO_ROOT"
 
 echo "=== CorePy Build Script ==="
 
-# Check required tools
-command -v uv >/dev/null 2>&1 || { echo "❌ 'uv' is required but not installed. Please install uv."; exit 1; }
-command -v cmake >/dev/null 2>&1 || { echo "❌ 'cmake' is required."; exit 1; }
+# Detect OS
+case "$(uname -s)" in
+    Linux*)     OS=Linux;;
+    Darwin*)    OS=macOS;;
+    MINGW*|MSYS*|CYGWIN*) OS=Windows;;
+    *)          OS=Unknown;;
+esac
 
-# Detect CPU count
-if command -v nproc >/dev/null 2>&1; then
-    JOBS=$(nproc)
-elif command -v sysctl >/dev/null 2>&1; then
-    JOBS=$(sysctl -n hw.ncpu)
+# Detect GPU and set features
+GPU_FEATURE=""
+if [ "$OS" = "macOS" ]; then
+    if [ "$(uname -m)" = "arm64" ]; then
+        echo "🍎 Detected Apple Silicon (Metal)"
+        GPU_FEATURE="--features metal"
+    fi
+elif [ "$OS" = "Linux" ] || [ "$OS" = "Windows" ]; then
+    if command -v nvcc >/dev/null 2>&1 || command -v nvidia-smi >/dev/null 2>&1 || [ -n "$CUDA_PATH" ]; then
+        echo "🟩 Detected NVIDIA GPU"
+        GPU_FEATURE="--features cuda"
+    fi
+fi
+
+# Step 1: Build Rust runtime
+echo "Step 1/2: Building Rust runtime..."
+BUILD_CMD="develop"
+if [[ "$*" == *"--wheel"* ]]; then
+    BUILD_CMD="build"
+    echo "📦 Building distribution wheel (maturin build)"
+fi
+
+if [ -n "$GPU_FEATURE" ]; then
+    echo "Using GPU features: $GPU_FEATURE"
+    if [ "$BUILD_CMD" == "build" ]; then
+        uv run maturin build --release --manifest-path rust/core/Cargo.toml $GPU_FEATURE --out dist
+    else
+        uv run maturin develop --release --manifest-path rust/core/Cargo.toml $GPU_FEATURE
+    fi
 else
-    JOBS=4
+    echo "Using CPU only"
+    if [ "$BUILD_CMD" == "build" ]; then
+        uv run maturin build --release --manifest-path rust/core/Cargo.toml --out dist
+    else
+        uv run maturin develop --release --manifest-path rust/core/Cargo.toml
+    fi
 fi
-
-# Step 0: Sync dependencies
-echo "Step 0/3: Syncing dependencies..."
-uv sync --all-extras --group dev --no-install-project
-
-# Step 1: Build C++ kernels
-echo ""
-echo "Step 1/3: Building C++ kernels..."
-mkdir -p build
-# Use --no-sync to avoid triggering project install (which fails before kernels are built)
-# Manually activate venv to avoid uv triggering project install/build prematurely
-if [ -f ".venv/bin/activate" ]; then
-    source .venv/bin/activate
-elif [ -f ".venv/Scripts/activate" ]; then
-    source .venv/Scripts/activate
-else
-    echo "❌ Virtual environment not found. Run 'uv sync' first."
-    exit 1
-fi
-
-python_cmake_dir=$(python -c "import pybind11; print(pybind11.get_cmake_dir())")
-echo "PyBind11 CMake Dir: $python_cmake_dir"
-
-cd build
-
-if command -v ninja >/dev/null 2>&1; then
-    GENERATOR="-G Ninja"
-else
-    GENERATOR=""
-fi
-
-cmake .. $GENERATOR -DCMAKE_BUILD_TYPE=Release -Dpybind11_DIR="$python_cmake_dir"
-cmake --build . --config Release --parallel "$JOBS"
-cmake --install . --prefix ..
-
-# Move Metal library if present (macOS specific)
-if [ -f "../default.metallib" ]; then
-    mv "../default.metallib" "../corepy/default.metallib"
-    echo "Moved default.metallib to corepy/ package"
-fi
-
-cd "$REPO_ROOT"
-echo "✅ C++ kernels built"
-
-# Step 2: Build Rust runtime
-echo ""
-echo "Step 2/3: Building Rust runtime..."
-export COREPY_CSRC_DIR="$REPO_ROOT/build/csrc"
-uv run maturin develop --release --manifest-path rust/core/Cargo.toml
 echo "✅ Rust runtime built"
 
-# Step 3: Verification
+# Step 2: Verification
 echo ""
 echo "=== Verification ==="
 uv run python scripts/verify_install.py

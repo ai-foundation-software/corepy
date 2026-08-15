@@ -1,15 +1,13 @@
 """
 Buffer Pool for Memory Management
 
-Reuses allocated buffers to reduce allocation/deallocation overhead.
+Reuses allocated CoreArray buffers to reduce allocation/deallocation overhead.
 Thread-safe implementation with LRU eviction for memory control.
 """
 
 import threading
 from collections import defaultdict, deque
-from typing import Any, Dict, List, Optional, Tuple
-
-import numpy as np
+from typing import Any, Dict, Optional, Tuple
 
 
 class BufferPool:
@@ -30,7 +28,7 @@ class BufferPool:
         self._max_size = max_size_per_class
 
         # Separate pools for CPU and GPU
-        # Key: (size, dtype_str, device) -> List of buffers
+        # Key: (size, dtype_str, device) -> deque of buffers
         self._cpu_buffers: Dict[Tuple[int, str, str], deque] = defaultdict(deque)
         self._gpu_buffers: Dict[Tuple[int, str, str], deque] = defaultdict(deque)
 
@@ -42,26 +40,27 @@ class BufferPool:
         self._misses = 0
         self._evictions = 0
 
-    def get(self, size: int, dtype: Any, device: str = "cpu") -> Optional[np.ndarray]:
+    def get(
+        self, size: int, dtype: Any = "float32", device: str = "cpu"
+    ) -> Optional[Any]:
         """
         Get a buffer from the pool or None if unavailable.
 
         Args:
             size: Number of elements needed
-            dtype: NumPy dtype
+            dtype: Data type string
             device: Target device ('cpu', 'metal', 'cuda')
 
         Returns:
             Cached buffer or None if not available
         """
-        dtype_str = str(np.dtype(dtype))
+        dtype_str = str(dtype)
         key = (size, dtype_str, device)
 
         with self._lock:
             buffers = self._cpu_buffers if device == "cpu" else self._gpu_buffers
 
             if key in buffers and buffers[key]:
-                # Reuse from pool (LIFO for cache locality)
                 buffer = buffers[key].pop()
                 self._hits += 1
                 return buffer
@@ -69,58 +68,54 @@ class BufferPool:
                 self._misses += 1
                 return None
 
-    def release(self, buffer: np.ndarray, size: int, dtype: Any, device: str = "cpu"):
+    def release(
+        self, buffer: Any, size: int, dtype: Any = "float32", device: str = "cpu"
+    ):
         """
         Return a buffer to the pool for reuse.
 
         Args:
-            buffer: NumPy array to return to pool
+            buffer: CoreArray or list buffer to return to pool
             size: Number of elements in buffer
-            dtype: NumPy dtype
+            dtype: Data type string
             device: Device where buffer resides
         """
-        dtype_str = str(np.dtype(dtype))
+        dtype_str = str(dtype)
         key = (size, dtype_str, device)
 
         with self._lock:
             buffers = self._cpu_buffers if device == "cpu" else self._gpu_buffers
 
-            # Check if pool is full
             if len(buffers[key]) >= self._max_size:
-                # Evict oldest (FIFO eviction)
                 buffers[key].popleft()
                 self._evictions += 1
 
-            # Add to pool
             buffers[key].append(buffer)
 
-    def allocate(
-        self, size: int, dtype: Any = np.float32, device: str = "cpu"
-    ) -> np.ndarray:
+    def allocate(self, size: int, dtype: Any = "float32", device: str = "cpu") -> Any:
         """
         Allocate a buffer, reusing from pool if available.
 
         Args:
             size: Number of elements needed
-            dtype: NumPy dtype (default: float32)
+            dtype: Data type string (default: 'float32')
             device: Target device
 
         Returns:
-            NumPy array (either from pool or newly allocated)
+            CoreArray or list buffer
         """
-        # Try to get from pool first
         buffer = self.get(size, dtype, device)
 
         if buffer is not None:
             return buffer
 
-        # Allocate new buffer
-        if device == "cpu":
-            return np.empty(size, dtype=dtype)
-        else:
-            # For GPU, would need device-specific allocation
-            # For now, just allocate on CPU
-            return np.empty(size, dtype=dtype)
+        # Allocate new buffer via CoreArray if available
+        try:
+            from ._corepy_rust import _RustCoreArray as CoreArray
+
+            return CoreArray.zeros([size])
+        except ImportError:
+            return [0.0] * size
 
     def clear(self, device: Optional[str] = None):
         """
@@ -140,12 +135,7 @@ class BufferPool:
                 self._gpu_buffers.clear()
 
     def stats(self) -> Dict[str, int]:
-        """
-        Get pool statistics.
-
-        Returns:
-            Dictionary with hits, misses, hit_rate, and evictions
-        """
+        """Get pool statistics."""
         with self._lock:
             total = self._hits + self._misses
             hit_rate = (self._hits / total * 100) if total > 0 else 0.0
@@ -159,20 +149,15 @@ class BufferPool:
             }
 
     def memory_usage(self) -> Dict[str, int]:
-        """
-        Estimate total memory used by pooled buffers.
-
-        Returns:
-            Dictionary with memory usage in bytes for CPU and GPU
-        """
+        """Estimate total memory used by pooled buffers."""
         with self._lock:
             cpu_bytes = sum(
-                sum(buf.nbytes for buf in buffers)
+                sum(getattr(buf, "nbytes", 0) for buf in buffers)
                 for buffers in self._cpu_buffers.values()
             )
 
             gpu_bytes = sum(
-                sum(buf.nbytes for buf in buffers)
+                sum(getattr(buf, "nbytes", 0) for buf in buffers)
                 for buffers in self._gpu_buffers.values()
             )
 

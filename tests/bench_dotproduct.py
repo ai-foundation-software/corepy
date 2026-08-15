@@ -8,7 +8,7 @@ Expected speedup: 8-16x (AVX2 processes 8x f32 per instruction)
 import time
 
 import numpy as np
-from _corepy_rust import tensor_dot_product_f32
+from _corepy_rust import array_dot_product_f32
 
 
 def bench_dot_product(size, iterations=1000):
@@ -28,12 +28,12 @@ def bench_dot_product(size, iterations=1000):
 
     # Warmup
     for _ in range(10):
-        tensor_dot_product_f32(a.ctypes.data, b.ctypes.data, size)
+        array_dot_product_f32(a.ctypes.data, b.ctypes.data, size)
 
     # Benchmark Corepy (AVX2)
     start = time.perf_counter()
     for _ in range(iterations):
-        cp_result = tensor_dot_product_f32(a.ctypes.data, b.ctypes.data, size)
+        cp_result = array_dot_product_f32(a.ctypes.data, b.ctypes.data, size)
     cp_time = time.perf_counter() - start
 
     # Benchmark NumPy (reference)

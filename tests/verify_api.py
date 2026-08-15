@@ -9,8 +9,8 @@ def verify_api():
     a_np = np.array([1.0, 2.0, 3.0], dtype=np.float32)
     b_np = np.array([4.0, 5.0, 6.0], dtype=np.float32)
 
-    a_cp = cp.Tensor(a_np)
-    b_cp = cp.Tensor(b_np)
+    a_cp = cp.ndarray(a_np)
+    b_cp = cp.ndarray(b_np)
 
     expected = 32.0  # 1*4 + 2*5 + 3*6 = 4+10+18 = 32
 

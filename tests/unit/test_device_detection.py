@@ -32,10 +32,10 @@ class TestDeviceTypes:
         assert dev.memory_free > 0
 
     def test_gpu_device(self):
-        dev = GPUDevice(0, "Test GPU", 1024)
-        assert dev.type == BackendType.GPU
+        dev = GPUDevice(0, "Test GPU", 1024, 512)
+        assert dev.type == BackendType.CUDA
         assert dev.name == "GPU:0 (Test GPU)"
-        assert dev.memory_free == 1024
+        assert dev.memory_free == 512
 
 
 class TestDetectionLogic:
@@ -43,19 +43,25 @@ class TestDetectionLogic:
     def test_cpu_features_x86(self, mock_machine):
         mock_machine.return_value = "x86_64"
         with patch("platform.system", return_value="Linux"):
-            with patch("corepy.backend.device._detect_cuda_gpus", return_value=[]):
-                info = detect_devices()
-                assert info.has_avx2 is True
-                assert info.has_neon is False
+            with patch(
+                "corepy.backend.device._detect_cuda_gpus", return_value=([], [])
+            ):
+                with patch("corepy._corepy_rust", None):
+                    info = detect_devices()
+                    assert info.has_avx2 is True
+                    assert info.has_neon is False
 
     @patch("platform.machine")
     def test_cpu_features_arm(self, mock_machine):
         mock_machine.return_value = "aarch64"
         with patch("platform.system", return_value="Linux"):
-            with patch("corepy.backend.device._detect_cuda_gpus", return_value=[]):
-                info = detect_devices()
-                assert info.has_neon is True
-                assert info.has_avx2 is False
+            with patch(
+                "corepy.backend.device._detect_cuda_gpus", return_value=([], [])
+            ):
+                with patch("corepy._corepy_rust", None):
+                    info = detect_devices()
+                    assert info.has_neon is True
+                    assert info.has_avx2 is False
 
     @patch("platform.system", return_value="Darwin")
     def test_metal_detection_mock(self, mock_system):
@@ -83,10 +89,14 @@ class TestDetectionLogic:
                     assert info.gpu_count == 1
                     assert info.gpu_names == ["Apple M1"]
 
+    @patch("sys.platform", "linux")
     @patch("platform.system", return_value="Linux")
     @patch("corepy.backend.device._detect_cuda_gpus")
     def test_cuda_detection_mock(self, mock_detect, mock_system):
-        mock_detect.return_value = [8 * 1024**3, 8 * 1024**3]
+        mock_detect.return_value = (
+            [8 * 1024**3, 8 * 1024**3],
+            [8 * 1024**3, 8 * 1024**3],
+        )
 
         info = detect_devices()
         assert info.gpu_count == 2

@@ -193,8 +193,8 @@ import time
 
 # Create large matrices
 size = 4096
-a = cp.Tensor(np.random.rand(size, size))
-b = cp.Tensor(np.random.rand(size, size))
+a = cp.Array(np.random.rand(size, size))
+b = cp.Array(np.random.rand(size, size))
 
 # Force GPU backend
 cp.set_backend_policy('gpu')
@@ -243,7 +243,7 @@ Add these lines to your `~/.bashrc` to make them permanent.
 
 **Solution:**
 - Your GPU doesn't have enough VRAM for the operation
-- Reduce matrix/tensor sizes
+- Reduce matrix/array sizes
 - Use smaller batch sizes
 
 ---

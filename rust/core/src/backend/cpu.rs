@@ -76,7 +76,7 @@ impl ComputeBackend for CpuBackend {
                 DataType::I64,
                 DataType::Bool,
             ],
-            max_tensor_bytes: None, // Limited by system memory
+            max_array_bytes: None, // Limited by system memory
             supports_async: false,
             supports_inplace: true,
             properties,

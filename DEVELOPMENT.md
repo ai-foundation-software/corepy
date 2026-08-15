@@ -1,11 +1,16 @@
 # Development Guide
 
 ## 1. Project Overview
-Corepy is a high-performance hybrid tensor library combining **Python** usability with **Rust** safety and **C++** kernels for raw speed. It uses a custom dispatcher to route operations to CPU (OpenBLAS/AVX2) or GPU (Metal on macOS) backends. The project uses `uv` for Python dependency management and `maturin` to build the Rust extension that binds everything together.
+Corepy-ai is a high-performance unified runtime for data, computation, and AI workflows. It combines the ease of **Python** with the safety and speed of **Rust**. The architecture consists of a Rust core (`_corepy_rust`) built with `maturin`, which provides high-performance tensor operations and dynamically selects the optimal CPU math backend (MKL, AOCL, Accelerate, or OpenBLAS).
+
+The project uses `uv` for lightning-fast Python dependency management and `cargo` for the Rust toolchain.
 
 ## 2. Prerequisites
 
 ### Linux (Ubuntu/Debian)
+
+Install the required system packages, including Python development headers and build essentials for the Rust extensions.
+
 ```bash
 sudo apt update
 sudo apt install -y \
@@ -14,76 +19,77 @@ sudo apt install -y \
     python3-venv \
     build-essential \
     gcc \
-    g++ \
     make \
-    cmake \
-    ninja-build \
     git \
-    libopenblas-dev
+    libopenblas-dev \
+    gcc-aarch64-linux-gnu \
+    curl
+```
 
-# Install Rust
+**Install Rust Toolchain:**
+```bash
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 source $HOME/.cargo/env
+```
 
-# Install uv
+**Install uv:**
+```bash
 curl -LsSf https://astral.sh/uv/install.sh | sh
+```
 
-# Setup Environment
+**Setup Environment:**
+```bash
 uv sync --all-extras --group dev --no-install-project
 source .venv/bin/activate
 ```
 
 ### macOS
+
+**Install Homebrew:**
 ```bash
-# Install Homebrew (if not installed)
 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+```
 
-# Install Python and Build Tools
-brew install python cmake ninja openblas
-
-# Install Xcode Command Line Tools
+**Install Python and Build Tools:**
+```bash
+brew install python openblas
 xcode-select --install
+```
 
-# Install Rust
+**Install Rust Toolchain:**
+```bash
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 source $HOME/.cargo/env
+```
 
-# Install uv
+**Install uv:**
+```bash
 curl -LsSf https://astral.sh/uv/install.sh | sh
+```
 
-# Setup Environment
+**Setup Environment:**
+```bash
 uv sync --all-extras --group dev --no-install-project
 source .venv/bin/activate
 ```
 
-### Windows (Minimal Setup)
+### Windows
 
-To build native extensions on Windows without installing the full Visual Studio IDE, we use the standalone **Visual Studio Build Tools**.
+**1. Install Python & Tools:**
+- Download and install Python from [python.org](https://www.python.org/downloads/windows/) (ensure "Add Python to PATH" is checked).
+- Install Git for Windows.
+- Install Rust via [rustup.rs](https://rustup.rs/).
 
-#### Option A: Chocolatey (Recommended / Automated)
-This command installs the compiler and tools without manual GUI steps.
-
-```powershell
-# Run as Administrator
-choco install git python rust visualstudio2022buildtools visualstudio2022-workload-vctools -y
-```
-
-#### Option B: Winget + CLI
-Allows installation without the Chocolatey package manager.
+**2. Install Visual Studio Build Tools:**
+To build the Rust native extensions, you need the C++ build tools.
 
 ```powershell
-# 1. Install Tools
-winget install --id Git.Git -e --source winget
-winget install --id Python.Python.3.11 -e --source winget
-winget install --id Rustlang.Rustup -e --source winget
-
-# 2. Install Build Tools (Headless / No IDE)
-# This installs only the compiler components needed for Python extensions
+# Using winget (Recommended)
 winget install --id Microsoft.VisualStudio.2022.BuildTools --override "--add Microsoft.VisualStudio.Workload.VCTools --includeRecommended --passive --norestart"
 ```
 
-#### Final Configuration
-Open a new PowerShell window (non-Admin) to setup `uv`:
+**3. Setup Environment:**
+Open a new PowerShell window and run:
 
 ```powershell
 Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
@@ -91,7 +97,7 @@ Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
 # Install uv
 powershell -c "irm https://astral.sh/uv/install.ps1 | iex"
 
-# Setup Environment
+# Setup project
 uv sync --all-extras --group dev --no-install-project
 .venv\Scripts\activate
 ```
@@ -99,66 +105,75 @@ uv sync --all-extras --group dev --no-install-project
 ## 3. Development Workflow
 
 ### Running the Project
-The project is a library, so "running" usually means running scripts or the REPL with the library loaded.
-```bash
-# Activate environment
-source .venv/bin/activate  # Linux/macOS
-.venv\Scripts\activate     # Windows
+Since Corepy is a library, you can run examples or verify the installation using the provided scripts.
 
-# Run a script
-python examples/demo.py
+```bash
+# Build the Rust extension in development mode
+make build
+# OR
+uv run maturin develop --manifest-path rust/core/Cargo.toml
+
+# Run an example
+uv run python examples/hello_corepy.py
 ```
 
 ### Running Tests
-We use `pytest` for the Python test suite.
-```bash
-# Run all tests
-uv run pytest
+We use `pytest` for testing both Python logic and Rust integration.
 
-# Run specific test
-uv run pytest tests/test_tensor.py
+```bash
+make test
+# OR
+uv run pytest tests/
 ```
 
-### Linting & Formatting
-We use `ruff` for both linting and formatting.
+### Linting
+We use `ruff` for fast linting.
 
 ```bash
-# Format code
+make lint
+# OR
+uv run ruff check .
+```
+
+### Formatting
+We use `ruff` to maintain a consistent code style.
+
+```bash
 make format
 # OR
 uv run ruff format .
-
-# Check for linting errors
-make lint
-# OR
-uv run --no-sync ruff check .
 ```
 
-### Debug Mode
-To build with debug symbols (slower, but debuggable):
-1.  Modify `scripts/build.sh`: change `-DCMAKE_BUILD_TYPE=Release` to `Debug`.
-2.  Run `make build`.
-
 ### Environment Variables
-The build system respects standard environment variables:
-- `CC` / `CXX`: Specify C/C++ compiler.
-- `RUSTFLAGS`: Pass flags to `cargo`.
+Corepy uses environment variables to control backend selection and threading:
+- `COREPY_BACKEND`: Override the math backend (`mkl`, `aocl`, `openblas`, `rust`, `accelerate`).
+- `RUSTFLAGS`: Pass additional flags to the Rust compiler.
+- `MKL_NUM_THREADS`, `OPENBLAS_NUM_THREADS`: Control threading for specific BLAS backends.
+- `RAYON_NUM_THREADS`: Control threading for the pure-Rust backend.
 
-### Database & Docker
-*Currently, Corepy does not require a database or Docker containers for core development.*
+### Database Setup
+Currently, Corepy does not require a database for development.
 
-## 4. Project Structure
+### Docker
+*No Dockerfile detected in the core repository. Core development is performed directly on the host or in a virtualized Linux environment.*
 
-- `corepy/`: Python source code (user-facing API).
-- `rust/`: Rust runtime and compute kernels (the engine).
-  - `rust/core/`: Main Rust crate.
-- `csrc/`: Legacy C++ kernels (being migrated to Rust).
-- `tests/`: Python test suite (`pytest`).
-- `scripts/`: Build and setup scripts.
-- `docs/`: Project documentation.
+## 4. CPU Backend & BLAS Setup
 
-## 5. Troubleshooting
+Corepy automatically selects the best available BLAS at startup based on your CPU architecture.
 
-**"uv not found"**: Ensure `~/.cargo/bin` or `~/.local/bin` is in your PATH.
-**Build fails (missing CMake)**: Ensure CMake 3.15+ is installed.
-**Linker errors**: Try `make clean && make build` to remove stale artifacts.
+### Backend Priority
+
+| Priority | Backend | Condition |
+|----------|---------|----------|
+| 1 | Intel MKL | `GenuineIntel` CPU + `libmkl_rt.so` found |
+| 2 | AMD AOCL | `AuthenticAMD` CPU + `libblis-mt.so` found |
+| 3 | Apple Accelerate | macOS aarch64 (M1/M2/M3/M4) |
+| 4 | OpenBLAS | `libopenblas.so` found anywhere |
+| 5 | Pure-Rust | Always available (built-in fallback) |
+
+### Verification
+Verify which backend is being used:
+
+```bash
+uv run python -c "import corepy.matmul as cm; print(cm.backend_info())"
+```

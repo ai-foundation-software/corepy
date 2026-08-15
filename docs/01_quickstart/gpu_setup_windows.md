@@ -241,8 +241,8 @@ import time
 
 # Create large matrices
 size = 4096
-a = cp.Tensor(np.random.rand(size, size))
-b = cp.Tensor(np.random.rand(size, size))
+a = cp.Array(np.random.rand(size, size))
+b = cp.Array(np.random.rand(size, size))
 
 # Force GPU backend
 cp.set_backend_policy('gpu')

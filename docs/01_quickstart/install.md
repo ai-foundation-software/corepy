@@ -20,14 +20,14 @@ Expected output: `Python 3.10.x` (or higher).
 We recommend `uv` for modern, fast Python package management.
 
 ```bash
-uv pip install corepy
+uv pip install corepy-ai
 ```
 
 ### Option 2: Universal (pip)
 Standard pip installation is fully supported on all platforms (Linux, macOS, Windows).
 
 ```bash
-pip install corepy
+pip install corepy-ai
 ```
 
 ### Verifying Installation

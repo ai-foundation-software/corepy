@@ -2,8 +2,9 @@
 Tutorial 05: Profiler & Export
 ==============================
 
-This tutorial showcases the new Profiler Export features in Corepy v0.2.4.
+This tutorial showcases the new Profiler Export features in Corepy v0.3.0.
 You can now export performance traces to Google Chrome's tracing tool.
+
 
 Steps:
 1. Enable profiling
@@ -26,15 +27,17 @@ def heavy_computation():
     a_np = np.full((N, N), 1.0, dtype=np.float32)
     b_np = np.full((N, N), 2.0, dtype=np.float32)
 
-    a = cp.Tensor(a_np)
-    b = cp.Tensor(b_np)
+    a = cp.array(a_np)
+    b = cp.array(b_np)
 
     # Matmul is heavy
     c = a @ b
 
     # Element-wise is bound by memory
     d = c + a
-    e = d / 2.0
+
+    # Simulate a heavy memory division across same shape logic
+    e = d / b
 
     return e.sum()
 
@@ -60,7 +63,8 @@ def main():
     output_file = "corepy_trace.json"
     print(f"\n--- Exporting Trace to {output_file} ---")
 
-    # This API is new in v0.2.4
+    # This API is new in v0.3.0
+
     try:
         path = cp.profiler.export_chrome_trace(output_file)
         print(f"✅ Trace exported successfully to: {path}")
@@ -70,7 +74,8 @@ def main():
         print("3. Click 'Load' and select the file.")
         print("OR visit https://ui.perfetto.dev/ and drop the file there.")
     except AttributeError:
-        print("❌ `export_chrome_trace` not found. Are you on v0.2.4?")
+        print("❌ `export_chrome_trace` not found. Are you on v0.3.0?")
+
     except Exception as e:
         print(f"❌ Export failed: {e}")
 

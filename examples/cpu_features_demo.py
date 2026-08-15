@@ -1,5 +1,5 @@
 """
-Comprehensive CPU Features Demonstration for Corepy 0.2.0
+Comprehensive CPU Features Demonstration for Corepy 0.3.0
 ==========================================================
 
 This script demonstrates ALL available CPU-optimized features in Corepy,
@@ -9,7 +9,7 @@ Features Covered:
 1. Element-wise Operations (add, sub, mul, div) - SIMD optimized
 2. Reduction Operations (sum, mean) - SIMD optimized
 3. Matrix Operations (dot product, matmul) - SIMD optimized
-4. Tensor API
+4. ndarray API
 5. Backend System
 6. Data Types
 7. Profiling/Performance Analysis
@@ -25,29 +25,29 @@ print("=" * 80)
 print(f"Corepy Version: {cp.__version__}\n")
 
 # ============================================================================
-# SECTION 1: BASIC TENSOR CREATION
+# SECTION 1: BASIC ARRAY CREATION
 # ============================================================================
 print("\n" + "=" * 80)
-print("SECTION 1: TENSOR CREATION and DATA TYPES")
+print("SECTION 1: ARRAY CREATION and DATA TYPES")
 print("=" * 80)
 
-# Create tensors with different data types
-print("\n1.1 Creating tensors with different data types:")
-tensor_f32 = cp.Tensor([1.0, 2.0, 3.0, 4.0, 5.0], dtype=cp.Float32)
-tensor_f64 = cp.Tensor([1.0, 2.0, 3.0], dtype=cp.Float64)
-tensor_i32 = cp.Tensor([1, 2, 3, 4, 5], dtype=cp.Int32)
-tensor_i64 = cp.Tensor([10, 20, 30], dtype=cp.Int64)
-tensor_bool = cp.Tensor([True, True, False, True], dtype=cp.Bool)
+# Create arrays with different data types
+print("\n1.1 Creating arrays with different data types:")
+array_f32 = cp.ndarray([1.0, 2.0, 3.0, 4.0, 5.0], dtype=cp.Float32)
+array_f64 = cp.ndarray([1.0, 2.0, 3.0], dtype=cp.Float64)
+array_i32 = cp.ndarray([1, 2, 3, 4, 5], dtype=cp.Int32)
+array_i64 = cp.ndarray([10, 20, 30], dtype=cp.Int64)
+array_bool = cp.ndarray([True, True, False, True], dtype=cp.Bool)
 
-print(f"✅ Float32 Tensor: {tensor_f32}")
-print(f"✅ Float64 Tensor: {tensor_f64}")
-print(f"✅ Int32 Tensor: {tensor_i32}")
-print(f"✅ Int64 Tensor: {tensor_i64}")
-print(f"✅ Bool Tensor: {tensor_bool}")
+print(f"✅ Float32 ndarray: {array_f32}")
+print(f"✅ Float64 ndarray: {array_f64}")
+print(f"✅ Int32 ndarray: {array_i32}")
+print(f"✅ Int64 ndarray: {array_i64}")
+print(f"✅ Bool ndarray: {array_bool}")
 
-print("\n1.2 Accessing tensor properties:")
-print(f"✅ Shape of tensor_f32: {tensor_f32.shape}")
-print(f"✅ Backend of tensor_f32: {tensor_f32.backend}")
+print("\n1.2 Accessing array properties:")
+print(f"✅ Shape of array_f32: {array_f32.shape}")
+print(f"✅ Backend of array_f32: {array_f32.backend}")
 
 # ============================================================================
 # SECTION 2: ELEMENT-WISE OPERATIONS (SIMD Optimized with AVX2)
@@ -57,11 +57,11 @@ print("SECTION 2: ELEMENT-WISE OPERATIONS (SIMD Optimized)")
 print("=" * 80)
 print("These operations use AVX2 instructions to process 8 floats at once")
 
-a = cp.Tensor([1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0])
-b = cp.Tensor([8.0, 7.0, 6.0, 5.0, 4.0, 3.0, 2.0, 1.0])
+a = cp.ndarray([1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0])
+b = cp.ndarray([8.0, 7.0, 6.0, 5.0, 4.0, 3.0, 2.0, 1.0])
 
-print(f"\nTensor a: {a}")
-print(f"Tensor b: {b}")
+print(f"\nArray a: {a}")
+print(f"ndarray b: {b}")
 
 print("\n2.1 Addition (a + b):")
 result_add = a + b
@@ -86,8 +86,8 @@ print("\n" + "=" * 80)
 print("SECTION 3: REDUCTION OPERATIONS (SIMD Optimized)")
 print("=" * 80)
 
-data = cp.Tensor([1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0])
-print(f"\nData tensor: {data}")
+data = cp.ndarray([1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0])
+print(f"\nData array: {data}")
 
 print("\n3.1 Sum reduction:")
 sum_result = data.sum()
@@ -109,8 +109,8 @@ print("SECTION 4: MATRIX OPERATIONS (SIMD Optimized)")
 print("=" * 80)
 
 print("\n4.1 Dot Product (1D vectors):")
-vec1 = cp.Tensor([1.0, 2.0, 3.0, 4.0])
-vec2 = cp.Tensor([5.0, 6.0, 7.0, 8.0])
+vec1 = cp.ndarray([1.0, 2.0, 3.0, 4.0])
+vec2 = cp.ndarray([5.0, 6.0, 7.0, 8.0])
 print(f"Vector 1: {vec1}")
 print(f"Vector 2: {vec2}")
 try:
@@ -125,9 +125,9 @@ except Exception as e:
 print("\n4.2 Matrix-Matrix Multiplication:")
 try:
     # Create 2x3 matrix
-    mat_a = cp.Tensor([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]])
+    mat_a = cp.ndarray([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]])
     # Create 3x2 matrix
-    mat_b = cp.Tensor([[7.0, 8.0], [9.0, 10.0], [11.0, 12.0]])
+    mat_b = cp.ndarray([[7.0, 8.0], [9.0, 10.0], [11.0, 12.0]])
     print(f"Matrix A (2x3):\n{mat_a}")
     print(f"Matrix B (3x2):\n{mat_b}")
     mat_result = mat_a.matmul(mat_b)
@@ -153,10 +153,10 @@ except Exception as e:
 
 print("\n5.2 Selecting backend explicitly:")
 try:
-    # Create tensor with explicit CPU backend
-    cpu_tensor = cp.Tensor([1.0, 2.0, 3.0], backend="cpu")
-    print(f"✅ CPU Tensor: {cpu_tensor}")
-    print(f"✅ Backend: {cpu_tensor.backend}")
+    # Create array with explicit CPU backend
+    cpu_array = cp.ndarray([1.0, 2.0, 3.0], backend="cpu")
+    print(f"✅ CPU ndarray: {cpu_array}")
+    print(f"✅ Backend: {cpu_array.backend}")
 except Exception as e:
     print(f"❌ Backend selection: {e}")
 
@@ -186,9 +186,9 @@ except Exception as e:
     print(f"❌ Profiling enable: {e}")
 
 print("\n6.2 Running operations with profiling:")
-# Create large tensors for meaningful profiling
-large_a = cp.Tensor([float(i) for i in range(10000)])
-large_b = cp.Tensor([float(i) for i in range(10000)])
+# Create large arrays for meaningful profiling
+large_a = cp.ndarray([float(i) for i in range(10000)])
+large_b = cp.ndarray([float(i) for i in range(10000)])
 
 # Perform operations
 start = time.perf_counter()
@@ -250,7 +250,7 @@ print("SECTION 7: PRACTICAL EXAMPLES")
 print("=" * 80)
 
 print("\n7.1 Computing statistics on a dataset:")
-dataset = cp.Tensor([23.5, 25.1, 22.8, 26.3, 24.7, 25.9, 23.2, 24.5])
+dataset = cp.ndarray([23.5, 25.1, 22.8, 26.3, 24.7, 25.9, 23.2, 24.5])
 print(f"Dataset: {dataset}")
 mean_val = dataset.mean()
 sum_val = dataset.sum()
@@ -258,8 +258,8 @@ print(f"✅ Mean: {mean_val}")
 print(f"✅ Sum: {sum_val}")
 
 print("\n7.2 Weighted sum calculation:")
-values = cp.Tensor([10.0, 20.0, 30.0, 40.0])
-weights = cp.Tensor([0.1, 0.2, 0.3, 0.4])
+values = cp.ndarray([10.0, 20.0, 30.0, 40.0])
+weights = cp.ndarray([0.1, 0.2, 0.3, 0.4])
 print(f"Values: {values}")
 print(f"Weights: {weights}")
 weighted = values * weights
@@ -268,8 +268,8 @@ print(f"✅ Weighted products: {weighted}")
 print(f"✅ Weighted sum: {weighted_sum}")
 
 print("\n7.3 Distance calculation (for ML/AI):")
-point_a = cp.Tensor([1.0, 2.0, 3.0])
-point_b = cp.Tensor([4.0, 5.0, 6.0])
+point_a = cp.ndarray([1.0, 2.0, 3.0])
+point_b = cp.ndarray([4.0, 5.0, 6.0])
 print(f"Point A: {point_a}")
 print(f"Point B: {point_b}")
 diff = point_a - point_b
@@ -292,8 +292,8 @@ print(f"{'Size':<10} {'Add (ms)':<15} {'Mul (ms)':<15} {'Sum (ms)':<15}")
 print("-" * 60)
 
 for size in sizes:
-    x = cp.Tensor([float(i) for i in range(size)])
-    y = cp.Tensor([float(i) for i in range(size)])
+    x = cp.ndarray([float(i) for i in range(size)])
+    y = cp.ndarray([float(i) for i in range(size)])
 
     # Addition
     start = time.perf_counter()
@@ -320,7 +320,7 @@ print("SUMMARY: ALL CPU FEATURES DEMONSTRATED")
 print("=" * 80)
 print("""
 ✅ WORKING CPU-OPTIMIZED FEATURES:
-  1. Tensor creation with multiple data types (Float32, Float64, Int32, Int64, Bool)
+  1. ndarray creation with multiple data types (Float32, Float64, Int32, Int64, Bool)
   2. Element-wise operations (add, sub, mul, div) - AVX2 SIMD optimized
   3. Reduction operations:
      - sum() - AVX2 SIMD optimized with Kahan summation

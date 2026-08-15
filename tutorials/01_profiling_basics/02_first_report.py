@@ -31,7 +31,8 @@ print("-" * 70)
 cp.enable_profiling()
 
 # Simulate a real data pipeline
-raw_data = cp.tensor([10.0, 20.0, 30.0, 40.0, 50.0, 60.0, 70.0, 80.0])
+raw_data = cp.array([10.0, 20.0, 30.0, 40.0, 50.0, 60.0, 70.0, 80.0])
+
 print(f"Raw data: {raw_data}")
 
 # Step 1: Normalize the data (subtract mean)

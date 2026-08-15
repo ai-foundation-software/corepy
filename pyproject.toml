@@ -4,10 +4,10 @@ build-backend = "maturin"
 
 [project]
 name = "corepy-ai"
-version = "0.2.4"
+version = "0.3.0"
 description = "A unified, high-performance core runtime for data, computation, and AI workflows."
 readme = "README.md"
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 license = { file = "LICENSE" }
 authors = [
   { name = "Corepy Team", email = "ai.foundation.software@gmail.com" },
@@ -18,29 +18,27 @@ classifiers = [
     "Intended Audience :: Science/Research",
     "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
     "Topic :: Scientific/Engineering",
     "Topic :: Software Development :: Libraries :: Python Modules",
 ]
-dependencies = [
-    "typing-extensions>=4.6.0",
-    "pydantic==2.12.5",
-    "numpy==1.26.4; python_version < '3.13'",
-    "numpy>=2.1; python_version >= '3.13'",
-    "pybind11==3.0.1",
-]
+dependencies = []
 
 [tool.maturin]
 manifest-path = "rust/core/Cargo.toml"
 module-name = "corepy._corepy_rust"
 python-source = "."
+features = ["extension-module"]
 
 [project.optional-dependencies]
-
+bench = [
+    "numpy>=1.26.4",
+]
+cuda = []
 docs = [
     "sphinx>=7.0",
     "sphinx-rtd-theme>=1.3.0",
@@ -50,7 +48,7 @@ docs = [
 [project.urls]
 Homepage = "https://github.com/ai-foundation-software/corepy"
 Documentation = "https://github.com/ai-foundation-software/corepy/docs/"
-Repository = "https://github.com/ai-foundation-software/corepy.git"
+Repository = "https://github.com/ai-foundation-software/corepy"
 Issues = "https://github.com/ai-foundation-software/corepy/issues"
 
 
@@ -78,10 +76,9 @@ exclude_lines = [
 
 [tool.pytest.ini_options]
 minversion = "7.0"
-addopts = "-ra -q --cov=corepy"
+addopts = "-ra -q"
 testpaths = [
     "tests",
-
 ]
 python_files = "test_*.py"
 python_classes = "Test*"
@@ -107,21 +104,29 @@ dev = [
     "sphinx>=7.0",
     "sphinx-rtd-theme>=1.3.0",
     "myst-parser>=2.0.0",
-    "cmake>=3.15",
-    "ninja",
-    "pybind11",
-    "scikit-build-core>=0.4.3",
     "patchelf>=0.17.2; sys_platform == 'linux'",
+    "numpy>=2.2.6",
+    "typing-extensions>=4.6.0",
+    "pydantic>=2.12.5",
+    "psutil>=7.2.2",
+    "make>=0.1.6.post2",
 ]
 
 # UV Configuration
 # Fixes maturin + uv cache corruption issue by tracking Rust source changes
 # This ensures uv rebuilds when Rust code changes instead of using stale cached versions
 [tool.uv]
+required-environments = [
+    "sys_platform == 'linux' and platform_machine == 'x86_64'",    # Linux (Intel/AMD)
+    "sys_platform == 'linux' and platform_machine == 'aarch64'",   # Linux (ARM)
+    "sys_platform == 'win32' and platform_machine == 'AMD64'",     # Windows (Intel/AMD)
+    "sys_platform == 'darwin' and platform_machine == 'arm64'",    # macOS (Apple Silicon)
+    "sys_platform == 'darwin' and platform_machine == 'x86_64'",   # macOS (Intel)
+]
 cache-keys = [
     "pyproject.toml",
     "rust/core/Cargo.toml",
-    "rust/core/Cargo.lock",
+    "rust/Cargo.lock",
     "rust/core/build.rs",
     "rust/core/**/*.rs",
 ]

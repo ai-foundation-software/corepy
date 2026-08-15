@@ -76,11 +76,12 @@ import corepy as cp
 cp.enable_profiling()
 
 # 2. Run your code
-data = cp.tensor([1.0, 2.0, 3.0, 4.0, 5.0])
-result = data * 2 + data
+data = cp.array([1.0, 2.0, 3.0, 4.0, 5.0])
+result = data.mean()
 
-# 3. See the results
-print(cp.profile_report())
+# 3. Generate report
+report = cp.profile_report()
+print(report)
 ```
 
 Now work through the tutorials to understand the details!

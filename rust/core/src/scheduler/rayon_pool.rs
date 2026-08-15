@@ -28,7 +28,7 @@ static INIT: Once = Once::new();
 /// 2. num_cpus::get() (default)
 ///
 /// This sets up the work-stealing scheduler that will be used
-/// for all parallel tensor operations.
+/// for all parallel array operations.
 #[allow(dead_code)]
 pub fn init_thread_pool() {
     INIT.call_once(|| {
@@ -37,25 +37,31 @@ pub fn init_thread_pool() {
             .and_then(|s| s.parse().ok())
             .unwrap_or_else(num_cpus::get);
 
-        rayon::ThreadPoolBuilder::new()
+        match rayon::ThreadPoolBuilder::new()
             .num_threads(num_threads)
             .thread_name(|idx| format!("corepy-worker-{}", idx))
             .panic_handler(|_| {
                 eprintln!("Corepy worker thread panicked!");
             })
             .build_global()
-            .expect("Failed to initialize Rayon thread pool");
-
-        eprintln!(
-            "Corepy: Initialized thread pool with {} workers",
-            num_threads
-        );
+        {
+            Ok(_) => {
+                eprintln!(
+                    "Corepy: Initialized thread pool with {} workers",
+                    num_threads
+                );
+            }
+            Err(_) => {
+                // Global pool might already be initialized by another test or part of the app.
+                // We ignore this as the pool exists.
+            }
+        }
     });
 }
 
 /// Execute a parallel operation with GIL released
 ///
-/// This is the core dispatch function for multi-threaded tensor operations.
+/// This is the core dispatch function for multi-threaded array operations.
 /// It releases Python's GIL during execution to allow true parallelism.
 ///
 /// # Safety
@@ -63,7 +69,7 @@ pub fn init_thread_pool() {
 /// - The closure must be Send + Sync
 ///
 /// # Example
-/// ```
+/// ```rust,ignore
 /// let result = execute_parallel(py, || {
 ///     // This runs in parallel with GIL released
 ///     rayon::join(
@@ -82,16 +88,16 @@ where
     init_thread_pool();
 
     // Release GIL and execute
-    py.allow_threads(f)
+    py.detach(f)
 }
 
 /// Execute parallel iterator operation
 ///
-/// Common pattern for data-parallel operations on tensors.
+/// Common pattern for data-parallel operations on arrays.
 /// Automatically chunks work across available threads.
 ///
 /// # Example
-/// ```
+/// ```rust,ignore
 /// execute_parallel_iter(py, data, |chunk| {
 ///     // Process chunk in parallel
 ///     process_chunk(chunk)
@@ -105,7 +111,7 @@ where
 {
     init_thread_pool();
 
-    py.allow_threads(|| {
+    py.detach(|| {
         use rayon::prelude::*;
         data.par_iter().for_each(f);
     });
@@ -116,7 +122,7 @@ where
 /// Maps function over data in parallel, returning collected results.
 ///
 /// # Example
-/// ```
+/// ```rust,ignore
 /// let results = execute_parallel_map(py, &input_array, |x| x * 2);
 /// ```
 #[allow(dead_code)]
@@ -128,7 +134,7 @@ where
 {
     init_thread_pool();
 
-    py.allow_threads(|| {
+    py.detach(|| {
         use rayon::prelude::*;
         data.par_iter().map(f).collect()
     })

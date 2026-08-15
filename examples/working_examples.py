@@ -1,6 +1,7 @@
 """
-Working Examples for Corepy (Validated against released package)
-Based on testing corepy 0.2.2 from PyPI
+Corepy 0.3.0 Working Examples
+==============================
+Based on testing corepy 0.3.0
 
 These examples all work with the released package.
 """
@@ -8,15 +9,15 @@ These examples all work with the released package.
 import corepy as cp
 
 print("=" * 60)
-print("EXAMPLE 1: Basic Tensor Creation and Operations")
+print("EXAMPLE 1: Basic ndarray Creation and Operations")
 print("=" * 60)
 
-# Create tensors
-a = cp.Tensor([1.0, 2.0, 3.0])
-b = cp.Tensor([4.0, 5.0, 6.0])
+# Create arrays
+a = cp.ndarray([1.0, 2.0, 3.0])
+b = cp.ndarray([4.0, 5.0, 6.0])
 
-print(f"Tensor a: {a}")
-print(f"Tensor b: {b}")
+print(f"ndarray a: {a}")
+print(f"ndarray b: {b}")
 
 # Element-wise addition
 c = a + b
@@ -25,6 +26,13 @@ print(f"a + b = {c}")
 # Element-wise subtraction
 d = a - b
 print(f"a - b = {d}")
+
+# Element-wise multiplication and division
+e = a * b
+f = a / b
+print(f"a * b = {e}")
+print(f"a / b = {f}")
+
 
 print("\n" + "=" * 60)
 print("EXAMPLE 2: Working with Data Table")

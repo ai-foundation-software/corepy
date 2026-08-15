@@ -3,7 +3,7 @@
 // ============================================================================
 //
 // RESPONSIBILITIES:
-// - Provide fast, thread-local memory allocation for temporary tensors
+// - Provide fast, thread-local memory allocation for temporary arrays
 // - Reduce allocator contention in multi-threaded workloads
 // - Automatic cleanup when thread exits
 //
@@ -28,7 +28,7 @@ const DEFAULT_ARENA_SIZE: usize = 1024 * 1024;
 /// Thread-local arena for temporary allocations
 ///
 /// Uses bump allocation: allocations are O(1), all freed at once when arena resets.
-/// Perfect for temporary buffers needed during tensor operations.
+/// Perfect for temporary buffers needed during array operations.
 #[allow(dead_code)]
 pub struct ThreadArena {
     #[allow(dead_code)]
@@ -131,7 +131,7 @@ thread_local! {
 /// Arena is automatically reset after the function completes.
 ///
 /// # Example
-/// ```
+/// ```rust,ignore
 /// with_arena(|arena| {
 ///     let temp_buffer = unsafe { arena.alloc::<f32>(1000) };
 ///     // ... use buffer ...

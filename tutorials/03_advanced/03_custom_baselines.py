@@ -51,7 +51,7 @@ print("=" * 70)
 @profile_operation
 def data_processing_pipeline(data_size):
     """Standard data processing workflow"""
-    data = cp.tensor([float(i) for i in range(data_size)])
+    data = cp.array([float(i) for i in range(data_size)])
     normalized = (data - data.mean()) / data.std()
     scaled = normalized * 100.0
     result = scaled.sum()
@@ -121,7 +121,7 @@ print("=" * 70)
 @profile_operation
 def data_processing_pipeline_v2(data_size):
     """New version with accidental regression"""
-    data = cp.tensor([float(i) for i in range(data_size)])
+    data = cp.array([float(i) for i in range(data_size)])
 
     # BUG: Computing mean twice (should be once!)
     normalized = (data - data.mean()) / data.std()
@@ -187,6 +187,7 @@ if improvements:
     print("\n🎉 PERFORMANCE IMPROVEMENTS:")
     for imp in improvements:
         print(f"  {imp['operation']}: {imp['speedup']:.1f}x faster")
+
 
 print("""
 💡 REGRESSION DETECTION LOGIC:

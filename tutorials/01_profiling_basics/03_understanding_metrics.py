@@ -36,12 +36,12 @@ print("=" * 70)
 cp.enable_profiling()
 
 # Small data (fast)
-small_data = cp.tensor([1.0, 2.0, 3.0, 4.0, 5.0])  # 5 elements
+small_data = cp.array([1.0, 2.0, 3.0, 4.0, 5.0])  # 5 elements
 result_small = small_data.sum()
 print(f"Small data sum: {result_small}")
 
 # Large data (slower, but that's expected)
-large_data = cp.tensor([float(i) for i in range(10000)])  # 10,000 elements
+large_data = cp.array([float(i) for i in range(10000)])  # 10,000 elements
 result_large = large_data.sum()
 print(f"Large data sum: {result_large}")
 
@@ -70,7 +70,7 @@ print("=" * 70)
 
 cp.enable_profiling()
 
-data = cp.tensor([float(i) for i in range(1000)])
+data = cp.array([float(i) for i in range(1000)])
 
 # Quick operations
 for _ in range(100):
@@ -184,7 +184,7 @@ print("=" * 70)
 cp.enable_profiling()
 
 # Simulate a buggy implementation with unnecessary work
-data = cp.tensor([float(i) for i in range(500)])
+data = cp.array([float(i) for i in range(500)])
 
 # BUG: Accidentally computing mean inside a loop instead of once!
 results = []

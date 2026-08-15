@@ -8,7 +8,7 @@ Expected: <1% overhead from arena.reset() calls
 import time
 
 import numpy as np
-from _corepy_rust import tensor_any, tensor_mean_f32, tensor_sum_f32
+from _corepy_rust import array_any, array_mean_f32, array_sum_f32
 
 
 def bench_operation(op_name, op_func, data, iterations=10_000):
@@ -91,7 +91,7 @@ def main():
         data = np.random.rand(size).astype(np.float32)
         result = bench_operation(
             "sum_f32",
-            tensor_sum_f32,
+            array_sum_f32,
             data,
             iterations=10_000 if size < 100_000 else 1_000,
         )
@@ -105,7 +105,7 @@ def main():
         data = np.random.rand(size).astype(np.float32)
         result = bench_operation(
             "mean_f32",
-            tensor_mean_f32,
+            array_mean_f32,
             data,
             iterations=10_000 if size < 100_000 else 1_000,
         )
@@ -120,7 +120,7 @@ def main():
         data = np.zeros(size, dtype=np.uint8)
         data[-1] = 1  # True at end (must scan entire array)
         result = bench_operation(
-            "any", tensor_any, data, iterations=10_000 if size < 100_000 else 1_000
+            "any", array_any, data, iterations=10_000 if size < 100_000 else 1_000
         )
         any_results.append(result)
     print_results("any", any_results)

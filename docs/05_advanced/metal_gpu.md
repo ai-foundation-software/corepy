@@ -1,6 +1,6 @@
 # Metal GPU Acceleration (macOS)
 
-Corepy provides native support for Apple Silicon GPU acceleration using the **Metal** API. This allows for significantly faster tensor operations on M1, M2, and M3 chips compared to CPU execution.
+Corepy provides native support for Apple Silicon GPU acceleration using the **Metal** API. This allows for significantly faster array operations on M1, M2, and M3 chips compared to CPU execution.
 
 ## Requirements
 
@@ -29,7 +29,7 @@ If you request `device="metal"` on a non-Mac or an Intel Mac without Metal suppo
 
 ## Supported Operations
 
-As of v0.2.4, the following operations are optimized for Metal:
+As of v0.3.0, the following operations are optimized for Metal:
 
 *   **Reduction**: `sum`, `mean`, `max`, `min`
 *   **Matrix Multiplication**: `matmul` (@) for 2D arrays

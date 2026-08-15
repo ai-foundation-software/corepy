@@ -2,26 +2,29 @@
 
 This document outlines the development milestones for Corepy.
 
-## 🏆 Current Status: v0.2.0 (Released)
-- **Feature Focus**: Performance Profiling & Foundation
+## 🏆 Current Status: v0.3.0 (Current)
+- **Feature Focus**: Backend Dispatch & Hardware Awareness
 - **Key Deliverables**:
+  - ✅ Hardware-aware Rust Backend (`optimizer.rs`, `device.rs`)
+  - ✅ Intel/AMD specific optimized dispatch logic
+  - ✅ Professional workload analysis (`cp.analyse_workload`)
   - ✅ Hybrid Python/Rust/C++ Architecture
   - ✅ Zero-config Profiling System (`corepy.profiler`)
-  - ✅ Basic Tensor Operations (add, sub, mul, matmul)
-  - ✅ Rust FFI Integration (`corepy-runtime`) - **Active**
-  - ✅ Python API (`corepy.array`, explicit Backend selection)
+  - ✅ Array Operations (add, sub, mul, div, sum, mean, matmul, max, min)
+  - ✅ Rust FFI Integration with PyO3
+
 
 ---
 
 ## 📅 Milestones
 
-### v0.3.0: The "Tensor Completeness" Release (Q2 2026)
+### v0.3.0: The "Array Completeness" Release (Q2 2026)
 **Goal**: Make Corepy usable for basic ML algorithms.
 - **Features**:
   - [ ] Full Broadcast support for binary operations
   - [ ] Advanced Reduction ops (`max`, `min`, `argmax`)
-  - [ ] Slicing and Indexing support (`tensor[0:5]`)
-  - [ ] Save/Load tensors to disk
+  - [ ] Slicing and Indexing support (`array[0:5]`)
+  - [ ] Save/Load arrays to disk
 - **Tech Stack**: 
   - Migrate C++ fallback kernels to Rust/SIMD (Active).
 
@@ -47,9 +50,10 @@ This document outlines the development milestones for Corepy.
 
 ### v2.0.0: Distributed & Advanced (Future)
 - **Features**:
-  - [ ] Distributed Tensors (Multi-node)
+  - [ ] Distributed Arrays (Multi-node)
   - [ ] Lazy Evaluation Graph
   - [ ] Auto-differentiation (Autograd)
+  - [ ] **Investigation**: Optional Polars integration for zero-copy data loading.
 
 ---
 

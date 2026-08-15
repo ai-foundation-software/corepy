@@ -2,12 +2,12 @@
 
 This document explains the mental model you should have when working with Corepy.
 
-## 1. The Tensor
+## 1. The Array
 
-The atom of Corepy is the `Tensor`.
+The atom of Corepy is the `Array`.
 
 ### Mental Model
-Think of a Tensor not just as a container for numbers, but as a **handle** to memory that might live anywhere (Main RAM, GPU, Accelerator).
+Think of a Array not just as a container for numbers, but as a **handle** to memory that might live anywhere (Main RAM, GPU, Accelerator).
 
 - **Data**: The actual numbers.
 - **Shape**: Dimensions (e.g., `(3, 4)`).
@@ -23,7 +23,7 @@ import corepy as cp
 
 # Zero-copy if data is contiguous and typed correctly
 np_array = np.array([1, 2, 3], dtype=np.float32)
-tensor = cp.Tensor(np_array) 
+array = cp.Array(np_array) 
 ```
 
 ## 2. Backends & Policies
@@ -40,14 +40,39 @@ You can control how Corepy dispatches operations.
 ```python
 from corepy.backend import set_backend_policy, BackendPolicy
 
-# Default: Checks for AVX2, then falls back to generic
+# Default: Checks for AVX2/NEON, detects Cache sizes, falls back to generic
 set_backend_policy(BackendPolicy.DEFAULT)
 
-# Force OpenBLAS (good for huge matrices)
-set_backend_policy(BackendPolicy.OPENBLAS)
+# Force Reference Backend (educational)
+set_backend_policy(BackendPolicy.REFERENCE)
 ```
 
-## 3. Profiling
+## 3. Advanced Features (DataFrames & Random Ops)
+
+Corepy is not just numbers; it includes higher-level structures and probability functions deeply integrated with Rust.
+
+### High-Performance Random Numbers
+Corepy includes multi-threaded PRNG implementations such as **PCG64** and **Xoshiro256++** for uniform and normal distribution generation directly into Arrays without GIL overhead.
+
+```python
+import corepy as cp
+# Generates 10 million random floats instantly across all cores
+uniform_data = cp.rand(10_000_000, algo="xoshiro")
+```
+
+### Relational Engine (DataFrame)
+Corepy includes a `pandas`-like columnar DataFrame engine optimized for data processing prior to array execution.
+
+```python
+import corepy as cp
+df = cp.DataFrame()
+df.add_int_column("id", [1, 2, 3])
+df.add_float_column("score", [99.5, 45.0, 88.0])
+
+good_scores = df.filter("score", ">", 50.0)
+```
+
+## 4. Profiling
 
 Performance is opacity's enemy. Corepy treats observability as a first-class feature.
 
@@ -67,7 +92,7 @@ print(cp.profile_report())
 - **Memory Bandwidth**: Operations that are simple math but huge data (linear scan).
 - **Backend Thrashing**: Moving data between devices (CPU <-> GPU) too often.
 
-## 4. Correctness First
+## 5. Correctness First
 
 Corepy prefers to crash (safely) rather than give a wrong answer.
 

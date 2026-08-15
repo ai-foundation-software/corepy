@@ -26,47 +26,48 @@ else
 fi
 
 # Phase 1: Clean
-echo "Phase 1/4: Cleaning..."
+echo "Phase 1/3: Cleaning..."
 rm -rf build
-rm -rf rust/core/target
+rm -rf rust/target
 
-# Phase 2: Build C++ kernels
-echo ""
-echo "Phase 2/4: Building C++ Kernels..."
-mkdir -p build
-# Check if build dir exists and has CMakeCache.txt to avoid re-config if possible? 
-# Actually bench.sh does a clean build usually.
-cd build
+# Detect OS
+case "$(uname -s)" in
+    Linux*)     OS=Linux;;
+    Darwin*)    OS=macOS;;
+    MINGW*|MSYS*|CYGWIN*) OS=Windows;;
+    *)          OS=Unknown;;
+esac
 
-python_cmake_dir=$(uv run --no-sync python -c "import pybind11; print(pybind11.get_cmake_dir())" 2>/dev/null)
-
-if command -v ninja >/dev/null 2>&1; then
-    GENERATOR="-G Ninja"
-else
-    GENERATOR=""
+# Detect GPU and set features
+GPU_FEATURE=""
+if [ "$OS" = "macOS" ]; then
+    if [ "$(uname -m)" = "arm64" ]; then
+        echo "🍎 Detected Apple Silicon (Metal)"
+        GPU_FEATURE="--features metal"
+    fi
+elif [ "$OS" = "Linux" ] || [ "$OS" = "Windows" ]; then
+    if command -v nvcc >/dev/null 2>&1 || command -v nvidia-smi >/dev/null 2>&1 || [ -n "$CUDA_PATH" ]; then
+        echo "🟩 Detected NVIDIA GPU"
+        GPU_FEATURE="--features cuda"
+    fi
 fi
 
-uv run --no-sync cmake .. $GENERATOR -DCMAKE_BUILD_TYPE=Release -Dpybind11_DIR="$python_cmake_dir"
-uv run --no-sync cmake --build . --config Release --parallel "$JOBS"
-
-cd "$REPO_ROOT"
-echo "✅ C++ kernels built"
-
-# Phase 3: Build Rust runtime
+# Phase 2: Build Rust runtime
 echo ""
-echo "Phase 3/4: Building Rust Runtime..."
-uv run maturin develop --release --manifest-path rust/core/Cargo.toml
+echo "Phase 2/3: Building Rust Runtime..."
+if [ -n "$GPU_FEATURE" ]; then
+    echo "Using GPU features: $GPU_FEATURE"
+    uv run maturin develop --release --manifest-path rust/core/Cargo.toml $GPU_FEATURE
+else
+    echo "Using CPU only"
+    uv run maturin develop --release --manifest-path rust/core/Cargo.toml
+fi
 echo "✅ Rust runtime built"
 
-# Phase 4: Performance tests
+# Phase 3: Performance tests
 echo ""
-echo "Phase 4/4: Performance Verification..."
+echo "Phase 3/3: Performance Verification..."
 uv run python scripts/benchmark.py
-
-# Cleanup object files (optional)
-echo ""
-echo "Cleanup..."
-find csrc/build -name "*.o" -type f -delete 2>/dev/null || true
 
 echo ""
 echo "=== Benchmark Complete ==="

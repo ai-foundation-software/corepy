@@ -55,7 +55,7 @@ print("=" * 70)
 @profile_operation
 def load_data():
     """Data loading"""
-    return cp.tensor([float(i) for i in range(1000)])
+    return cp.array([float(i) for i in range(1000)])
 
 
 @profile_operation
@@ -166,7 +166,7 @@ def mixed_pipeline(data):
     return step3
 
 
-data = cp.tensor([float(i) for i in range(500)])
+data = cp.array([float(i) for i in range(500)])
 result = mixed_pipeline(data)
 
 cp.export_profile("/tmp/bottleneck_flamegraph.json", format="flamegraph")
@@ -212,7 +212,7 @@ cp.clear_profile()
 cp.enable_profiling()
 
 with ProfileContext("before_optimization"):
-    data = cp.tensor([float(i) for i in range(1000)])
+    data = cp.array([float(i) for i in range(1000)])
 
     # Inefficient: multiple passes over data
     mean_val = data.mean()
@@ -229,7 +229,7 @@ cp.clear_profile()
 cp.enable_profiling()
 
 with ProfileContext("after_optimization"):
-    data = cp.tensor([float(i) for i in range(1000)])
+    data = cp.array([float(i) for i in range(1000)])
 
     # Efficient: compute stats in one pass
     stats = cp.compute_stats(data, ["mean", "std", "sum"])

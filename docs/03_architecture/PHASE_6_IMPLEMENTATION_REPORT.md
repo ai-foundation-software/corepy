@@ -12,7 +12,7 @@ Successfully implemented **Phase 6.1 (Arena Integration)** and **Phase 6.2 (Para
 
 **Key Achievements**:
 - ✅ Arena allocators integrated into all reduction dispatch paths
-- ✅ Parallel dispatch with Rayon for large tensors (>100K elements)
+- ✅ Parallel dispatch with Rayon for large arrays (>100K elements)
 - ✅ All 8/8 tests passing (correctness preserved)
 - ✅ Comprehensive benchmarks (`bench_arena.py`, `bench_parallel.py`)
 

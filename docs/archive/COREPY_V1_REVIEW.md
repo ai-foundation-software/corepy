@@ -63,7 +63,7 @@ The project follows a modern hybrid Python/Rust/C++ structure.
 For every operator, the following **Validation Loop** applies:
 
 1.  **Property-Based Testing (Hypothesis)**:
-    *   Generate inputs: `Infinity`, `NaN`, `Empty Tensor`, `Non-Contiguous Memory`.
+    *   Generate inputs: `Infinity`, `NaN`, `Empty Array`, `Non-Contiguous Memory`.
     *   Assert: `No Segfaults`.
 2.  **The "Oracle" Test**:
     *   Compare `Corepy(x)` vs `NumPy(x)` (or `Reference(x)`).

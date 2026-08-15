@@ -52,16 +52,19 @@ class FusedKernel:
             right = self._execute_node(node.right._expr)  # type: ignore[arg-type]
 
             # Execute the operation
-            if node.op == "add":
-                return left + right
-            elif node.op == "sub":
-                return left - right
-            elif node.op == "mul":
-                return left * right
-            elif node.op == "div":
-                return left / right
-            else:
-                raise ValueError(f"Unknown binary op: {node.op}")
+            op_map = {
+                "add": lambda lhs, r: lhs + r,
+                "sub": lambda lhs, r: lhs - r,
+                "mul": lambda lhs, r: lhs * r,
+                "div": lambda lhs, r: lhs / r,
+                "power": lambda lhs, r: lhs**r,
+                "mod": lambda lhs, r: lhs % r,
+                "floor_div": lambda lhs, r: lhs // r,
+            }
+            fn = op_map.get(node.op)
+            if fn is not None:
+                return fn(left, right)
+            raise ValueError(f"Unknown binary op: {node.op}")
 
         elif isinstance(node, UnaryOp):
             operand = self._execute_node(node.operand._expr)  # type: ignore[arg-type]
@@ -74,14 +77,19 @@ class FusedKernel:
                 raise ValueError(f"Unknown unary op: {node.op}")
 
         elif isinstance(node, Reduction):
-            array = self._execute_node(node.array._expr)  # type: ignore[arg-type]
+            array = self._execute_node(node.array._expr)
 
-            if node.op == "sum":
-                return array.sum()
-            elif node.op == "mean":
-                return array.mean()
-            else:
-                raise ValueError(f"Unknown reduction: {node.op}")
+            reduction_map = {
+                "sum": lambda a: a.sum(),
+                "mean": lambda a: a.mean(),
+                "max": lambda a: a.max(),
+                "min": lambda a: a.min(),
+                "prod": lambda a: a.prod() if hasattr(a, "prod") else None,
+            }
+            fn = reduction_map.get(node.op)
+            if fn is not None:
+                return fn(array)
+            raise ValueError(f"Unknown reduction: {node.op}")
 
         else:
             raise TypeError(f"Unknown node type: {type(node)}")
@@ -99,14 +107,37 @@ class ExpressionCompiler:
         """
         Compile an expression tree into an executable kernel.
 
-        Args:
-            expr: Root of the expression tree
-
-        Returns:
-            FusedKernel ready for execution
+        Performs elementwise fusion: chains of elementwise ops are
+        collected into a single fused kernel for single-pass execution.
         """
-        # For now, just wrap the expression in a kernel
-        # Future: analyze tree, fuse operations, generate optimized code
-
-        operations = [expr]
+        operations = self._collect_ops(expr)
         return FusedKernel(operations)
+
+    def _collect_ops(self, node: ExprNode) -> List[ExprNode]:
+        """Collect operations in topological order for fusion."""
+        ops = []
+        self._visit(node, ops, set())
+        return ops
+
+    def _visit(self, node: ExprNode, ops: List[ExprNode], visited: set):
+        """DFS visit for topological ordering."""
+        node_id = id(node)
+        if node_id in visited:
+            return
+        visited.add(node_id)
+
+        if isinstance(node, Constant):
+            pass  # leaf node
+        elif isinstance(node, BinaryOp):
+            if node.left._expr is not None:
+                self._visit(node.left._expr, ops, visited)
+            if node.right._expr is not None:
+                self._visit(node.right._expr, ops, visited)
+        elif isinstance(node, UnaryOp):
+            if node.operand._expr is not None:
+                self._visit(node.operand._expr, ops, visited)
+        elif isinstance(node, Reduction):
+            if node.array._expr is not None:
+                self._visit(node.array._expr, ops, visited)
+
+        ops.append(node)

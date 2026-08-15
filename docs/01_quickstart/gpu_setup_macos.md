@@ -4,7 +4,7 @@ This guide covers setting up **Corepy** on macOS for both **Apple Silicon (M-ser
 
 > [!NOTE]
 > **Metal GPU Acceleration:**
-> Corepy v0.2.4+ supports **Metal** acceleration on Apple Silicon.
+> Corepy v0.3.0+ supports **Metal** acceleration on Apple Silicon.
 
 ---
 
@@ -54,8 +54,8 @@ Run this Python script to verify your GPU is accessible:
 import corepy as cp
 
 try:
-    # Allocate a tensor on Metal
-    t = cp.Tensor([1.0, 2.0], device="metal")
+    # Allocate a array on Metal
+    t = cp.Array([1.0, 2.0], device="metal")
     print("✅ Metal GPU is ACTIVE and working!")
 except Exception as e:
     print(f"❌ Metal GPU unavailable: {e}")

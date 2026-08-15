@@ -2,270 +2,705 @@
 // Operations: Metal GPU Backend
 // ============================================================================
 // This module provides Metal GPU acceleration for macOS/Apple Silicon.
-// All functions are conditionally compiled only on macOS.
-//
-// Note: Some functions are reserved for future API exposure and may appear unused.
+
 #![allow(dead_code, clippy::too_many_arguments)]
 
-/// Metal FFI declarations - only available with C++ kernels on macOS
-#[cfg(all(feature = "cpp_kernels", target_os = "macos"))]
-mod ffi {
-    extern "C" {
-        pub fn metal_is_available() -> bool;
-        pub fn metal_init();
-        pub fn metal_cleanup();
-        pub fn metal_sum_f32(data: *const f32, size: i32) -> f32;
-        pub fn metal_mean_f32(data: *const f32, size: i32) -> f32;
-        pub fn metal_max_f32(data: *const f32, size: i32) -> f32;
-        pub fn metal_min_f32(data: *const f32, size: i32) -> f32;
-        pub fn metal_add(a: *const f32, b: *const f32, result: *mut f32, size: i32);
-        pub fn metal_sub(a: *const f32, b: *const f32, result: *mut f32, size: i32);
-        pub fn metal_mul(a: *const f32, b: *const f32, result: *mut f32, size: i32);
-        pub fn metal_div(a: *const f32, b: *const f32, result: *mut f32, size: i32);
-        pub fn metal_matmul_f32(a: *const f32, b: *const f32, c: *mut f32, m: i32, k: i32, n: i32);
-        pub fn metal_transpose_f32(in_ptr: *const f32, out_ptr: *mut f32, m: i32, n: i32);
-        pub fn metal_broadcast_op(
-            op: i32,
-            a: *const f32,
-            b: *const f32,
-            result: *mut f32,
-            shape: *const i32,
-            stridesA: *const i32,
-            stridesB: *const i32,
-            rank: i32,
-            size: i32,
-            sizeA: i32,
-            sizeB: i32,
-        );
+use crate::backend::traits::{
+    BackendCapabilities, BackendError, BackendResult, ComputeBackend, DataType,
+};
+#[cfg(feature = "metal")]
+use metal::*;
+
+#[cfg(feature = "metal")]
+struct LazyMetalDevice;
+#[cfg(feature = "metal")]
+impl std::ops::Deref for LazyMetalDevice {
+    type Target = Option<Device>;
+    fn deref(&self) -> &Self::Target {
+        static INSTANCE: std::sync::OnceLock<Option<Device>> = std::sync::OnceLock::new();
+        INSTANCE.get_or_init(|| Device::system_default())
+    }
+}
+#[cfg(feature = "metal")]
+static METAL_DEVICE: LazyMetalDevice = LazyMetalDevice;
+
+#[cfg(feature = "metal")]
+struct LazyMetalQueue;
+#[cfg(feature = "metal")]
+impl std::ops::Deref for LazyMetalQueue {
+    type Target = Option<CommandQueue>;
+    fn deref(&self) -> &Self::Target {
+        static INSTANCE: std::sync::OnceLock<Option<CommandQueue>> = std::sync::OnceLock::new();
+        INSTANCE.get_or_init(|| METAL_DEVICE.as_ref().map(|d| d.new_command_queue()))
+    }
+}
+#[cfg(feature = "metal")]
+static METAL_QUEUE: LazyMetalQueue = LazyMetalQueue;
+
+#[cfg(feature = "metal")]
+const SHADER_SOURCE: &str = r#"
+#include <metal_stdlib>
+using namespace metal;
+
+kernel void add_f32(
+    device const float* a [[ buffer(0) ]],
+    device const float* b [[ buffer(1) ]],
+    device float* result [[ buffer(2) ]],
+    uint id [[ thread_position_in_grid ]]
+) {
+    result[id] = a[id] + b[id];
+}
+
+kernel void matmul_f32(
+    device const float* a [[ buffer(0) ]],
+    device const float* b [[ buffer(1) ]],
+    device float* result [[ buffer(2) ]],
+    constant uint3& dims [[ buffer(3) ]],
+    uint2 id [[ thread_position_in_grid ]]
+) {
+    uint row = id.y;
+    uint col = id.x;
+    uint M = dims.x;
+    uint K = dims.y;
+    uint N = dims.z;
+
+    if (row < M && col < N) {
+        float sum = 0.0f;
+        for (uint i = 0; i < K; ++i) {
+            sum += a[row * K + i] * b[i * N + col];
+        }
+        result[row * N + col] = sum;
     }
 }
 
-/// Rust fallbacks when C++ kernels not available OR not on macOS
-#[cfg(any(not(feature = "cpp_kernels"), not(target_os = "macos")))]
-mod ffi {
-    pub unsafe fn metal_is_available() -> bool {
-        false
-    }
-    pub unsafe fn metal_init() {}
-    pub unsafe fn metal_cleanup() {}
+kernel void sub_f32(
+    device const float* a [[ buffer(0) ]],
+    device const float* b [[ buffer(1) ]],
+    device float* result [[ buffer(2) ]],
+    uint id [[ thread_position_in_grid ]]
+) {
+    result[id] = a[id] - b[id];
+}
 
-    pub unsafe fn metal_sum_f32(data: *const f32, size: i32) -> f32 {
-        (0..size as usize).map(|i| *data.add(i)).sum()
-    }
+kernel void mul_f32(
+    device const float* a [[ buffer(0) ]],
+    device const float* b [[ buffer(1) ]],
+    device float* result [[ buffer(2) ]],
+    uint id [[ thread_position_in_grid ]]
+) {
+    result[id] = a[id] * b[id];
+}
 
-    pub unsafe fn metal_mean_f32(data: *const f32, size: i32) -> f32 {
-        if size == 0 {
-            return 0.0;
+kernel void div_f32(
+    device const float* a [[ buffer(0) ]],
+    device const float* b [[ buffer(1) ]],
+    device float* result [[ buffer(2) ]],
+    uint id [[ thread_position_in_grid ]]
+) {
+    result[id] = a[id] / b[id];
+}
+
+kernel void sum_f32(
+    device const float* data [[ buffer(0) ]],
+    device float* result [[ buffer(1) ]],
+    constant uint& count [[ buffer(2) ]],
+    uint id [[ thread_position_in_grid ]]
+) {
+    if (id == 0) {
+        float sum = 0.0f;
+        for (uint i = 0; i < count; ++i) {
+            sum += data[i];
         }
-        metal_sum_f32(data, size) / (size as f32)
+        result[0] = sum;
     }
+}
 
-    pub unsafe fn metal_max_f32(data: *const f32, size: i32) -> f32 {
-        (0..size as usize)
-            .map(|i| *data.add(i))
-            .fold(f32::NEG_INFINITY, f32::max)
+kernel void max_f32(
+    device const float* data [[ buffer(0) ]],
+    device float* result [[ buffer(1) ]],
+    constant uint& count [[ buffer(2) ]],
+    uint id [[ thread_position_in_grid ]]
+) {
+    if (id == 0) {
+        float max_val = count > 0 ? data[0] : 0.0f;
+        for (uint i = 1; i < count; ++i) {
+            if (data[i] > max_val) {
+                max_val = data[i];
+            }
+        }
+        result[0] = max_val;
     }
+}
 
-    pub unsafe fn metal_min_f32(data: *const f32, size: i32) -> f32 {
-        (0..size as usize)
-            .map(|i| *data.add(i))
-            .fold(f32::INFINITY, f32::min)
+kernel void min_f32(
+    device const float* data [[ buffer(0) ]],
+    device float* result [[ buffer(1) ]],
+    constant uint& count [[ buffer(2) ]],
+    uint id [[ thread_position_in_grid ]]
+) {
+    if (id == 0) {
+        float min_val = count > 0 ? data[0] : 0.0f;
+        for (uint i = 1; i < count; ++i) {
+            if (data[i] < min_val) {
+                min_val = data[i];
+            }
+        }
+        result[0] = min_val;
     }
+}
 
-    pub unsafe fn metal_add(a: *const f32, b: *const f32, result: *mut f32, size: i32) {
-        for i in 0..size as usize {
-            *result.add(i) = *a.add(i) + *b.add(i);
+kernel void transpose_f32(
+    device const float* a [[ buffer(0) ]],
+    device float* result [[ buffer(1) ]],
+    constant uint2& dims [[ buffer(2) ]],
+    uint2 id [[ thread_position_in_grid ]]
+) {
+    uint row = id.y;
+    uint col = id.x;
+    uint M = dims.x;
+    uint N = dims.y;
+
+    if (row < M && col < N) {
+        result[col * M + row] = a[row * N + col];
+    }
+}
+"#;
+
+pub struct MetalBackend {
+    #[cfg(feature = "metal")]
+    _device: Device,
+    #[cfg(feature = "metal")]
+    _queue: CommandQueue,
+}
+
+impl MetalBackend {
+    pub fn new() -> Option<Self> {
+        #[cfg(feature = "metal")]
+        {
+            if let (Some(device), Some(queue)) = (METAL_DEVICE.clone(), METAL_QUEUE.clone()) {
+                return Some(Self {
+                    _device: device,
+                    _queue: queue,
+                });
+            }
+        }
+        None
+    }
+}
+
+impl ComputeBackend for MetalBackend {
+    fn name(&self) -> &'static str {
+        "Metal"
+    }
+    fn backend_id(&self) -> u8 {
+        4
+    }
+    fn is_available(&self) -> bool {
+        #[cfg(feature = "metal")]
+        {
+            METAL_DEVICE.is_some()
+        }
+        #[cfg(not(feature = "metal"))]
+        {
+            false
         }
     }
 
-    pub unsafe fn metal_sub(a: *const f32, b: *const f32, result: *mut f32, size: i32) {
-        for i in 0..size as usize {
-            *result.add(i) = *a.add(i) - *b.add(i);
+    fn capabilities(&self) -> BackendCapabilities {
+        BackendCapabilities {
+            supported_dtypes: vec![DataType::F32],
+            ..Default::default()
         }
     }
 
-    pub unsafe fn metal_mul(a: *const f32, b: *const f32, result: *mut f32, size: i32) {
-        for i in 0..size as usize {
-            *result.add(i) = *a.add(i) * *b.add(i);
+    unsafe fn add_f32(
+        &self,
+        a: *const f32,
+        b: *const f32,
+        result: *mut f32,
+        count: usize,
+    ) -> BackendResult<()> {
+        if unsafe { metal_add(a, b, result, count) } {
+            Ok(())
+        } else {
+            Err(BackendError::ExecutionError(
+                "Metal add_f32 failed".to_string(),
+            ))
         }
     }
 
-    pub unsafe fn metal_div(a: *const f32, b: *const f32, result: *mut f32, size: i32) {
-        for i in 0..size as usize {
-            *result.add(i) = *a.add(i) / *b.add(i);
-        }
-    }
-
-    pub unsafe fn metal_matmul_f32(
+    unsafe fn matmul_f32(
+        &self,
         a: *const f32,
         b: *const f32,
         c: *mut f32,
-        m: i32,
-        k: i32,
-        n: i32,
-    ) {
-        for i in 0..m as usize {
-            for j in 0..n as usize {
-                let mut sum = 0.0;
-                for p in 0..k as usize {
-                    sum += *a.add(i * k as usize + p) * *b.add(p * n as usize + j);
-                }
-                *c.add(i * n as usize + j) = sum;
-            }
+        m: usize,
+        k: usize,
+        n: usize,
+    ) -> BackendResult<()> {
+        if unsafe { metal_matmul(a, b, c, m, k, n) } {
+            Ok(())
+        } else {
+            Err(BackendError::ExecutionError(
+                "Metal matmul_f32 failed".to_string(),
+            ))
         }
     }
 
-    pub unsafe fn metal_transpose_f32(in_ptr: *const f32, out_ptr: *mut f32, m: i32, n: i32) {
-        for i in 0..m as usize {
-            for j in 0..n as usize {
-                *out_ptr.add(j * m as usize + i) = *in_ptr.add(i * n as usize + j);
-            }
+    unsafe fn sum_f32(&self, data: *const f32, count: usize) -> BackendResult<f32> {
+        let mut result = 0.0f32;
+        if unsafe { metal_sum(data, &mut result, count) } {
+            Ok(result)
+        } else {
+            Err(BackendError::ExecutionError(
+                "Metal sum_f32 failed".to_string(),
+            ))
+        }
+    }
+    unsafe fn max_f32(&self, data: *const f32, count: usize) -> BackendResult<f32> {
+        let mut result = 0.0f32;
+        if unsafe { metal_max(data, &mut result, count) } {
+            Ok(result)
+        } else {
+            Err(BackendError::ExecutionError(
+                "Metal max_f32 failed".to_string(),
+            ))
+        }
+    }
+    unsafe fn min_f32(&self, data: *const f32, count: usize) -> BackendResult<f32> {
+        let mut result = 0.0f32;
+        if unsafe { metal_min(data, &mut result, count) } {
+            Ok(result)
+        } else {
+            Err(BackendError::ExecutionError(
+                "Metal min_f32 failed".to_string(),
+            ))
+        }
+    }
+    unsafe fn sub_f32(
+        &self,
+        a: *const f32,
+        b: *const f32,
+        result: *mut f32,
+        count: usize,
+    ) -> BackendResult<()> {
+        if unsafe { metal_sub(a, b, result, count) } {
+            Ok(())
+        } else {
+            Err(BackendError::ExecutionError(
+                "Metal sub_f32 failed".to_string(),
+            ))
+        }
+    }
+    unsafe fn mul_f32(
+        &self,
+        a: *const f32,
+        b: *const f32,
+        result: *mut f32,
+        count: usize,
+    ) -> BackendResult<()> {
+        if unsafe { metal_mul(a, b, result, count) } {
+            Ok(())
+        } else {
+            Err(BackendError::ExecutionError(
+                "Metal mul_f32 failed".to_string(),
+            ))
+        }
+    }
+    unsafe fn div_f32(
+        &self,
+        a: *const f32,
+        b: *const f32,
+        result: *mut f32,
+        count: usize,
+    ) -> BackendResult<()> {
+        if unsafe { metal_div(a, b, result, count) } {
+            Ok(())
+        } else {
+            Err(BackendError::ExecutionError(
+                "Metal div_f32 failed".to_string(),
+            ))
         }
     }
 
-    pub unsafe fn metal_broadcast_op(
-        _op: i32,
-        _a: *const f32,
-        _b: *const f32,
-        _result: *mut f32,
-        _shape: *const i32,
-        _strides_a: *const i32,
-        _strides_b: *const i32,
-        _rank: i32,
-        _size: i32,
-        _size_a: i32,
-        _size_b: i32,
-    ) {
-        // Fallback or no-op
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
     }
 }
 
-// ============================================================================
-// Public API
-// ============================================================================
+#[cfg(feature = "metal")]
+pub unsafe fn metal_add(a: *const f32, b: *const f32, result: *mut f32, size: usize) -> bool {
+    if let (Some(device), Some(queue)) = (METAL_DEVICE.as_ref(), METAL_QUEUE.as_ref()) {
+        let options = CompileOptions::new();
+        let library = match device.new_library_with_source(SHADER_SOURCE, &options) {
+            Ok(lib) => lib,
+            Err(_) => return false,
+        };
+        let function = match library.get_function("add_f32", None) {
+            Ok(func) => func,
+            Err(_) => return false,
+        };
+        let pipeline = match device.new_compute_pipeline_state_with_function(&function) {
+            Ok(p) => p,
+            Err(_) => return false,
+        };
 
-pub fn is_available() -> bool {
-    unsafe { ffi::metal_is_available() }
+        let data_size = (size * 4) as u64;
+        let buf_a = device.new_buffer_with_data(
+            a as *const _,
+            data_size,
+            MTLResourceOptions::StorageModeShared,
+        );
+        let buf_b = device.new_buffer_with_data(
+            b as *const _,
+            data_size,
+            MTLResourceOptions::StorageModeShared,
+        );
+        let buf_res = device.new_buffer(data_size, MTLResourceOptions::StorageModeShared);
+
+        let command_buffer = queue.new_command_buffer();
+        let encoder = command_buffer.new_compute_command_encoder();
+        encoder.set_compute_pipeline_state(&pipeline);
+        encoder.set_buffer(0, Some(&buf_a), 0);
+        encoder.set_buffer(1, Some(&buf_b), 0);
+        encoder.set_buffer(2, Some(&buf_res), 0);
+
+        let threads_per_grid = MTLSize::new(size as u64, 1, 1);
+        let threads_per_threadgroup = MTLSize::new(std::cmp::min(size as u64, 256), 1, 1);
+
+        encoder.dispatch_threads(threads_per_grid, threads_per_threadgroup);
+        encoder.end_encoding();
+        command_buffer.commit();
+        command_buffer.wait_until_completed();
+
+        std::ptr::copy_nonoverlapping(buf_res.contents() as *const f32, result, size);
+        return true;
+    }
+    false
 }
 
-pub fn init() {
-    unsafe { ffi::metal_init() }
+#[cfg(not(feature = "metal"))]
+pub unsafe fn metal_add(_a: *const f32, _b: *const f32, _result: *mut f32, _size: usize) -> bool {
+    false
 }
 
-pub fn cleanup() {
-    unsafe { ffi::metal_cleanup() }
-}
-
-pub unsafe fn sum_f32(data: *const f32, size: i32) -> f32 {
-    ffi::metal_sum_f32(data, size)
-}
-
-pub unsafe fn mean_f32(data: *const f32, size: i32) -> f32 {
-    ffi::metal_mean_f32(data, size)
-}
-
-pub unsafe fn max_f32(data: *const f32, size: i32) -> f32 {
-    ffi::metal_max_f32(data, size)
-}
-
-pub unsafe fn min_f32(data: *const f32, size: i32) -> f32 {
-    ffi::metal_min_f32(data, size)
-}
-
-pub unsafe fn add(a: *const f32, b: *const f32, result: *mut f32, size: i32) {
-    ffi::metal_add(a, b, result, size)
-}
-
-pub unsafe fn sub(a: *const f32, b: *const f32, result: *mut f32, size: i32) {
-    ffi::metal_sub(a, b, result, size)
-}
-
-pub unsafe fn mul(a: *const f32, b: *const f32, result: *mut f32, size: i32) {
-    ffi::metal_mul(a, b, result, size)
-}
-
-pub unsafe fn div(a: *const f32, b: *const f32, result: *mut f32, size: i32) {
-    ffi::metal_div(a, b, result, size)
-}
-
-pub unsafe fn matmul_f32(a: *const f32, b: *const f32, c: *mut f32, m: i32, k: i32, n: i32) {
-    ffi::metal_matmul_f32(a, b, c, m, k, n)
-}
-
-pub unsafe fn transpose_f32(in_ptr: *const f32, out_ptr: *mut f32, m: i32, n: i32) {
-    ffi::metal_transpose_f32(in_ptr, out_ptr, m, n)
-}
-
-pub unsafe fn broadcast_op(
-    op: i32,
+#[cfg(feature = "metal")]
+pub unsafe fn metal_matmul(
     a: *const f32,
     b: *const f32,
     result: *mut f32,
-    shape: *const i32,
-    strides_a: *const i32,
-    strides_b: *const i32,
-    rank: i32,
-    size: i32,
-    size_a: i32,
-    size_b: i32,
-) {
-    ffi::metal_broadcast_op(
-        op, a, b, result, shape, strides_a, strides_b, rank, size, size_a, size_b,
-    )
+    m: usize,
+    k: usize,
+    n: usize,
+) -> bool {
+    if let (Some(device), Some(queue)) = (METAL_DEVICE.as_ref(), METAL_QUEUE.as_ref()) {
+        let options = CompileOptions::new();
+        let library = match device.new_library_with_source(SHADER_SOURCE, &options) {
+            Ok(lib) => lib,
+            Err(_) => return false,
+        };
+        let function = match library.get_function("matmul_f32", None) {
+            Ok(func) => func,
+            Err(_) => return false,
+        };
+        let pipeline = match device.new_compute_pipeline_state_with_function(&function) {
+            Ok(p) => p,
+            Err(_) => return false,
+        };
+
+        let buf_a = device.new_buffer_with_data(
+            a as *const _,
+            (m * k * 4) as u64,
+            MTLResourceOptions::StorageModeShared,
+        );
+        let buf_b = device.new_buffer_with_data(
+            b as *const _,
+            (k * n * 4) as u64,
+            MTLResourceOptions::StorageModeShared,
+        );
+        let buf_res = device.new_buffer((m * n * 4) as u64, MTLResourceOptions::StorageModeShared);
+
+        let dims = [m as u32, k as u32, n as u32];
+        let buf_dims = device.new_buffer_with_data(
+            dims.as_ptr() as *const _,
+            12,
+            MTLResourceOptions::StorageModeShared,
+        );
+
+        let command_buffer = queue.new_command_buffer();
+        let encoder = command_buffer.new_compute_command_encoder();
+        encoder.set_compute_pipeline_state(&pipeline);
+        encoder.set_buffer(0, Some(&buf_a), 0);
+        encoder.set_buffer(1, Some(&buf_b), 0);
+        encoder.set_buffer(2, Some(&buf_res), 0);
+        encoder.set_buffer(3, Some(&buf_dims), 0);
+
+        let threads_per_grid = MTLSize::new(n as u64, m as u64, 1);
+        let threads_per_threadgroup = MTLSize::new(8, 8, 1);
+
+        encoder.dispatch_threads(threads_per_grid, threads_per_threadgroup);
+        encoder.end_encoding();
+        command_buffer.commit();
+        command_buffer.wait_until_completed();
+
+        std::ptr::copy_nonoverlapping(buf_res.contents() as *const f32, result, m * n);
+        return true;
+    }
+    false
 }
 
-// ============================================================================
-// Dispatch Functions (for Python FFI compatibility)
-// ============================================================================
+#[cfg(feature = "metal")]
+macro_rules! define_metal_binop {
+    ($name:ident, $func_name:expr) => {
+        pub unsafe fn $name(a: *const f32, b: *const f32, result: *mut f32, size: usize) -> bool {
+            if let (Some(device), Some(queue)) = (METAL_DEVICE.as_ref(), METAL_QUEUE.as_ref()) {
+                let options = CompileOptions::new();
+                let library = match device.new_library_with_source(SHADER_SOURCE, &options) {
+                    Ok(lib) => lib,
+                    Err(_) => return false,
+                };
+                let function = match library.get_function($func_name, None) {
+                    Ok(func) => func,
+                    Err(_) => return false,
+                };
+                let pipeline = match device.new_compute_pipeline_state_with_function(&function) {
+                    Ok(p) => p,
+                    Err(_) => return false,
+                };
 
-pub unsafe fn sum_f32_metal_dispatch(data: *const f32, count: usize) -> f32 {
-    sum_f32(data, count as i32)
+                let data_size = (size * 4) as u64;
+                let buf_a = device.new_buffer_with_data(
+                    a as *const _,
+                    data_size,
+                    MTLResourceOptions::StorageModeShared,
+                );
+                let buf_b = device.new_buffer_with_data(
+                    b as *const _,
+                    data_size,
+                    MTLResourceOptions::StorageModeShared,
+                );
+                let buf_res = device.new_buffer(data_size, MTLResourceOptions::StorageModeShared);
+
+                let command_buffer = queue.new_command_buffer();
+                let encoder = command_buffer.new_compute_command_encoder();
+                encoder.set_compute_pipeline_state(&pipeline);
+                encoder.set_buffer(0, Some(&buf_a), 0);
+                encoder.set_buffer(1, Some(&buf_b), 0);
+                encoder.set_buffer(2, Some(&buf_res), 0);
+
+                let threads_per_grid = MTLSize::new(size as u64, 1, 1);
+                let threads_per_threadgroup = MTLSize::new(std::cmp::min(size as u64, 256), 1, 1);
+
+                encoder.dispatch_threads(threads_per_grid, threads_per_threadgroup);
+                encoder.end_encoding();
+                command_buffer.commit();
+                command_buffer.wait_until_completed();
+
+                std::ptr::copy_nonoverlapping(buf_res.contents() as *const f32, result, size);
+                return true;
+            }
+            false
+        }
+    };
 }
 
-pub unsafe fn mean_f32_metal_dispatch(data: *const f32, count: usize) -> f32 {
-    mean_f32(data, count as i32)
+#[cfg(feature = "metal")]
+define_metal_binop!(metal_sub, "sub_f32");
+#[cfg(feature = "metal")]
+define_metal_binop!(metal_mul, "mul_f32");
+#[cfg(feature = "metal")]
+define_metal_binop!(metal_div, "div_f32");
+
+#[cfg(feature = "metal")]
+macro_rules! define_metal_reduce {
+    ($name:ident, $func_name:expr) => {
+        pub unsafe fn $name(data: *const f32, result: *mut f32, size: usize) -> bool {
+            if let (Some(device), Some(queue)) = (METAL_DEVICE.as_ref(), METAL_QUEUE.as_ref()) {
+                let options = CompileOptions::new();
+                let library = match device.new_library_with_source(SHADER_SOURCE, &options) {
+                    Ok(lib) => lib,
+                    Err(_) => return false,
+                };
+                let function = match library.get_function($func_name, None) {
+                    Ok(func) => func,
+                    Err(_) => return false,
+                };
+                let pipeline = match device.new_compute_pipeline_state_with_function(&function) {
+                    Ok(p) => p,
+                    Err(_) => return false,
+                };
+
+                let data_size = (size * 4) as u64;
+                let buf_data = device.new_buffer_with_data(
+                    data as *const _,
+                    data_size,
+                    MTLResourceOptions::StorageModeShared,
+                );
+                let buf_res = device.new_buffer(4, MTLResourceOptions::StorageModeShared);
+                let count_val = size as u32;
+                let buf_count = device.new_buffer_with_data(
+                    &count_val as *const _ as *const _,
+                    4,
+                    MTLResourceOptions::StorageModeShared,
+                );
+
+                let command_buffer = queue.new_command_buffer();
+                let encoder = command_buffer.new_compute_command_encoder();
+                encoder.set_compute_pipeline_state(&pipeline);
+                encoder.set_buffer(0, Some(&buf_data), 0);
+                encoder.set_buffer(1, Some(&buf_res), 0);
+                encoder.set_buffer(2, Some(&buf_count), 0);
+
+                let threads_per_grid = MTLSize::new(1, 1, 1);
+                let threads_per_threadgroup = MTLSize::new(1, 1, 1);
+
+                encoder.dispatch_threads(threads_per_grid, threads_per_threadgroup);
+                encoder.end_encoding();
+                command_buffer.commit();
+                command_buffer.wait_until_completed();
+
+                std::ptr::copy_nonoverlapping(buf_res.contents() as *const f32, result, 1);
+                return true;
+            }
+            false
+        }
+    };
 }
 
-pub unsafe fn max_f32_metal_dispatch(data: *const f32, count: usize) -> f32 {
-    max_f32(data, count as i32)
+#[cfg(feature = "metal")]
+define_metal_reduce!(metal_sum, "sum_f32");
+#[cfg(feature = "metal")]
+define_metal_reduce!(metal_max, "max_f32");
+#[cfg(feature = "metal")]
+define_metal_reduce!(metal_min, "min_f32");
+
+#[cfg(not(feature = "metal"))]
+pub unsafe fn metal_matmul(
+    _a: *const f32,
+    _b: *const f32,
+    _result: *mut f32,
+    _m: usize,
+    _k: usize,
+    _n: usize,
+) -> bool {
+    false
 }
 
-pub unsafe fn min_f32_metal_dispatch(data: *const f32, count: usize) -> f32 {
-    min_f32(data, count as i32)
+#[cfg(not(feature = "metal"))]
+pub unsafe fn metal_sub(_a: *const f32, _b: *const f32, _result: *mut f32, _size: usize) -> bool {
+    false
+}
+#[cfg(not(feature = "metal"))]
+pub unsafe fn metal_mul(_a: *const f32, _b: *const f32, _result: *mut f32, _size: usize) -> bool {
+    false
+}
+#[cfg(not(feature = "metal"))]
+pub unsafe fn metal_div(_a: *const f32, _b: *const f32, _result: *mut f32, _size: usize) -> bool {
+    false
+}
+
+#[cfg(not(feature = "metal"))]
+pub unsafe fn metal_sum(_data: *const f32, _result: *mut f32, _size: usize) -> bool {
+    false
+}
+#[cfg(not(feature = "metal"))]
+pub unsafe fn metal_max(_data: *const f32, _result: *mut f32, _size: usize) -> bool {
+    false
+}
+#[cfg(not(feature = "metal"))]
+pub unsafe fn metal_min(_data: *const f32, _result: *mut f32, _size: usize) -> bool {
+    false
+}
+
+// FFI compatibility functions
+pub fn is_available() -> bool {
+    #[cfg(feature = "metal")]
+    {
+        METAL_DEVICE.is_some()
+    }
+    #[cfg(not(feature = "metal"))]
+    {
+        false
+    }
 }
 
 pub unsafe fn add_f32_metal_dispatch(a: *const f32, b: *const f32, result: *mut f32, size: usize) {
-    add(a, b, result, size as i32)
-}
-
-pub unsafe fn sub_f32_metal_dispatch(a: *const f32, b: *const f32, result: *mut f32, size: usize) {
-    sub(a, b, result, size as i32)
-}
-
-pub unsafe fn mul_f32_metal_dispatch(a: *const f32, b: *const f32, result: *mut f32, size: usize) {
-    mul(a, b, result, size as i32)
-}
-
-pub unsafe fn div_f32_metal_dispatch(a: *const f32, b: *const f32, result: *mut f32, size: usize) {
-    div(a, b, result, size as i32)
+    unsafe { metal_add(a, b, result, size) };
 }
 
 pub unsafe fn matmul_f32_metal_dispatch(
     a: *const f32,
     b: *const f32,
-    c: *mut f32,
+    result: *mut f32,
     m: usize,
     k: usize,
     n: usize,
 ) {
-    matmul_f32(a, b, c, m as i32, k as i32, n as i32)
+    unsafe { metal_matmul(a, b, result, m, k, n) };
+}
+
+pub unsafe fn sum_f32_metal_dispatch(_a: *const f32, _size: usize) -> f32 {
+    let mut res = 0.0f32;
+    unsafe { metal_sum(_a, &mut res, _size) };
+    res
+}
+pub unsafe fn mean_f32_metal_dispatch(_a: *const f32, _size: usize) -> f32 {
+    if _size == 0 {
+        return 0.0;
+    }
+    let mut res = 0.0f32;
+    unsafe { metal_sum(_a, &mut res, _size) };
+    res / (_size as f32)
+}
+pub unsafe fn max_f32_metal_dispatch(_a: *const f32, _size: usize) -> f32 {
+    let mut res = 0.0f32;
+    unsafe { metal_max(_a, &mut res, _size) };
+    res
+}
+pub unsafe fn min_f32_metal_dispatch(_a: *const f32, _size: usize) -> f32 {
+    let mut res = 0.0f32;
+    unsafe { metal_min(_a, &mut res, _size) };
+    res
+}
+
+pub unsafe fn sub_f32_metal_dispatch(_a: *const f32, _b: *const f32, _res: *mut f32, _size: usize) {
+    unsafe { metal_sub(_a, _b, _res, _size) };
+}
+pub unsafe fn mul_f32_metal_dispatch(_a: *const f32, _b: *const f32, _res: *mut f32, _size: usize) {
+    unsafe { metal_mul(_a, _b, _res, _size) };
+}
+pub unsafe fn div_f32_metal_dispatch(_a: *const f32, _b: *const f32, _res: *mut f32, _size: usize) {
+    unsafe { metal_div(_a, _b, _res, _size) };
 }
 
 pub unsafe fn transpose_f32_metal_dispatch(
-    in_ptr: *const f32,
-    out_ptr: *mut f32,
-    m: usize,
-    n: usize,
+    _in_ptr: *const f32,
+    _out_ptr: *mut f32,
+    _m: usize,
+    _n: usize,
 ) {
-    transpose_f32(in_ptr, out_ptr, m as i32, n as i32)
+    // Basic CPU fallback for transpose until shader exists
+    let src = std::slice::from_raw_parts(_in_ptr, _m * _n);
+    let dst = std::slice::from_raw_parts_mut(_out_ptr, _m * _n);
+    for r in 0.._m {
+        for c in 0.._n {
+            dst[c * _m + r] = src[r * _n + c];
+        }
+    }
+}
+
+pub unsafe fn broadcast_op(
+    _op: i32,
+    _a: *const f32,
+    _b: *const f32,
+    _out: *mut f32,
+    _shape: *const i32,
+    _strides_a: *const i32,
+    _strides_b: *const i32,
+    _rank: i32,
+    _size: i32,
+    _size_a: i32,
+    _size_b: i32,
+) {
+    unimplemented!("Metal broadcast_op not implemented")
 }

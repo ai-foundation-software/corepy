@@ -1,5 +1,5 @@
 """
-Test suite for tensor.all() reduction operation.
+Test suite for array.all() reduction operation.
 
 Tests the complete 3-layer execution: Python → Rust → C++
 """
@@ -12,57 +12,57 @@ def test_all_true():
     """All elements are True."""
     t = array([True, True, True], dtype=DataType.BOOL)
     result = t.all()
-    assert result._backing_data == [True]
+    assert result.to_list() == [True]
 
 
 def test_all_false():
     """All elements are False."""
     t = array([False, False, False], dtype=DataType.BOOL)
     result = t.all()
-    assert result._backing_data == [False]
+    assert result.to_list() == [False]
 
 
 def test_mixed_values():
     """Mixed True/False returns False."""
     t = array([True, False, True], dtype=DataType.BOOL)
     result = t.all()
-    assert result._backing_data == [False]
+    assert result.to_list() == [False]
 
 
 def test_single_false():
     """Single False among many True values."""
     t = array([True] * 100 + [False], dtype=DataType.BOOL)
     result = t.all()
-    assert result._backing_data == [False]
+    assert result.to_list() == [False]
 
 
 def test_single_true():
     """Single True value."""
     t = array([True], dtype=DataType.BOOL)
     result = t.all()
-    assert result._backing_data == [True]
+    assert result.to_list() == [True]
 
 
-def test_empty_tensor():
-    """Empty tensor returns True (vacuous truth)."""
+def test_empty_array():
+    """Empty array returns True (vacuous truth)."""
     t = array([], dtype=DataType.BOOL)
     result = t.all()
-    assert result._backing_data == [True]
+    assert result.to_list() == [True]
 
 
-def test_large_tensor_true():
-    """Large tensor (triggers SIMD path) - all True."""
+def test_large_array_true():
+    """Large array (triggers SIMD path) - all True."""
     # 1000 elements will trigger AVX2 optimization (processes 32 at a time)
     t = array([True] * 1000, dtype=DataType.BOOL)
     result = t.all()
-    assert result._backing_data == [True]
+    assert result.to_list() == [True]
 
 
-def test_large_tensor_false():
-    """Large tensor (triggers SIMD path) - contains False."""
+def test_large_array_false():
+    """Large array (triggers SIMD path) - contains False."""
     t = array([True] * 500 + [False] + [True] * 499, dtype=DataType.BOOL)
     result = t.all()
-    assert result._backing_data == [False]
+    assert result.to_list() == [False]
 
 
 def test_truthy_integers():
@@ -71,7 +71,7 @@ def test_truthy_integers():
     t = array([1, 2, 3, 4, 5])
     result = t.all()
     # All non-zero integers should be truthy
-    assert result._backing_data == [True]
+    assert result.to_list() == [True]
 
 
 def test_zero_in_integers():
@@ -79,25 +79,25 @@ def test_zero_in_integers():
     t = array([1, 2, 0, 4, 5])
     result = t.all()
     # Contains zero (falsy), should return False
-    assert result._backing_data == [False]
+    assert result.to_list() == [False]
 
 
 def test_boundary_31_elements():
     """Test with 31 elements (just under AVX2 chunk size of 32)."""
     t = array([True] * 31, dtype=DataType.BOOL)
     result = t.all()
-    assert result._backing_data == [True]
+    assert result.to_list() == [True]
 
 
 def test_boundary_32_elements():
     """Test with exactly 32 elements (one AVX2 chunk)."""
     t = array([True] * 32, dtype=DataType.BOOL)
     result = t.all()
-    assert result._backing_data == [True]
+    assert result.to_list() == [True]
 
 
 def test_boundary_33_elements():
     """Test with 33 elements (one AVX2 chunk + 1 remainder)."""
     t = array([True] * 33, dtype=DataType.BOOL)
     result = t.all()
-    assert result._backing_data == [True]
+    assert result.to_list() == [True]

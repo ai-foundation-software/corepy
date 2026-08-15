@@ -45,7 +45,7 @@ print("=" * 70)
 cp.enable_profiling()
 
 # Simulate a pipeline with one slow operation
-data = cp.tensor([float(i) for i in range(10000)])
+data = cp.array([float(i) for i in range(10000)])
 
 # Fast operations
 temp1 = data + 1.0  # ~0.2ms
@@ -74,7 +74,7 @@ Corepy found that 'matmul' is a bottleneck because:
   - It takes >50% of total execution time
   - It's significantly slower than other operations
   - Optimizing it would have the biggest impact
-
+ 
 You didn't have to analyze anything manually!
 """)
 
@@ -90,7 +90,7 @@ print("=" * 70)
 
 cp.enable_profiling()
 
-data = cp.tensor([float(i) for i in range(5000)])
+data = cp.array([float(i) for i in range(5000)])
 
 # Several operations with varying costs
 for i in range(10):
@@ -160,7 +160,7 @@ def fast_postprocessing(data):
 
 cp.enable_profiling()
 
-data = cp.tensor([float(i) for i in range(1000)])
+data = cp.array([float(i) for i in range(1000)])
 
 # Run pipeline
 preprocessed = fast_preprocessing(data)
@@ -180,7 +180,7 @@ for b in bottlenecks:
 print("""
 💡 PRACTICAL INSIGHT:
 Bottleneck detection works on:
-  ✅ Tensor operations (add, matmul, sum, etc.)
+  ✅ ndarray operations (add, matmul, sum, etc.)
   ✅ Custom functions (decorated with @profile_operation)
   ✅ Any profiled code!
 
@@ -222,7 +222,8 @@ def aggregate(data):
 
 cp.enable_profiling()
 
-data = cp.tensor([float(i) for i in range(1000)])
+data = cp.array([float(i) for i in range(1000)])
+
 
 for _ in range(10):
     p = preprocess(data)
@@ -313,7 +314,7 @@ print("""
    # Compare current vs. expected performance
 
 4. WORKS EVERYWHERE:
-   - Tensor operations
+   - ndarray operations
    - Custom functions (@profile_operation)
    - Entire code sections (ProfileContext)
 

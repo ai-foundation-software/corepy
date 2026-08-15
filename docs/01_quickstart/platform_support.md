@@ -276,8 +276,8 @@ import corepy as cp
 import numpy as np
 
 # Create test data
-a = cp.Tensor(np.random.rand(1024, 1024))
-b = cp.Tensor(np.random.rand(1024, 1024))
+a = cp.Array(np.random.rand(1024, 1024))
+b = cp.Array(np.random.rand(1024, 1024))
 
 # Force CPU backend
 cp.set_backend_policy('cpu')
@@ -301,8 +301,8 @@ print(f"Has GPU: {info.has_gpu}")
 # Test GPU operation
 if info.has_gpu:
     import numpy as np
-    a = cp.Tensor(np.random.rand(2048, 2048))
-    b = cp.Tensor(np.random.rand(2048, 2048))
+    a = cp.Array(np.random.rand(2048, 2048))
+    b = cp.Array(np.random.rand(2048, 2048))
     
     cp.set_backend_policy('gpu')
     c = cp.matmul(a, b)

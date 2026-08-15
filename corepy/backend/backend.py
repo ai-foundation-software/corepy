@@ -39,14 +39,14 @@ class CPUBackend(Backend):
         return True
 
 
-# Placeholder for GPUBackend - would be loaded if available
-class GPUBackend(Backend):
+# Placeholder for CUDABackend - would be loaded if available
+class CUDABackend(Backend):
     def __init__(self):
         pass
 
     @property
     def device_type(self) -> BackendType:
-        return BackendType.GPU
+        return BackendType.CUDA
 
     def is_available(self) -> bool:
         # This would check actual driver availability
@@ -55,6 +55,24 @@ class GPUBackend(Backend):
     def supports_operation(self, op_type: OperationType) -> bool:
         # GPU typically doesn't support complex control flow or arbitrary scalar logic well
         # (at least not via this dispatch mechanism)
+        if op_type in (OperationType.CONTROL, OperationType.SCALAR):
+            return False
+        return True
+
+
+# Placeholder for MetalBackend
+class MetalBackend(Backend):
+    def __init__(self):
+        pass
+
+    @property
+    def device_type(self) -> BackendType:
+        return BackendType.METAL
+
+    def is_available(self) -> bool:
+        return False
+
+    def supports_operation(self, op_type: OperationType) -> bool:
         if op_type in (OperationType.CONTROL, OperationType.SCALAR):
             return False
         return True

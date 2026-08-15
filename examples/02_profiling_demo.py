@@ -19,7 +19,7 @@ def profile_workload():
     # 1 Million elements
     size = 1_000_000
     print(f"Allocating {size} elements...")
-    data = cp.Tensor([1.0] * size)
+    data = cp.ndarray([1.0] * size)
 
     # 3. Workload
     print("Running optimized kernels...")

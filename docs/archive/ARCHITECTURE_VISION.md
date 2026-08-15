@@ -33,7 +33,7 @@ The "Tri-Language" architecture is chosen to maximize the strengths of each lang
 ### 2.1 Python (The User Interface)
 *   **Role**: Public API, configuration, high-level graph definition, method dispatch.
 *   **Responsibilities**:
-    *   Defining the `Schema` and `DataFrame` / `Tensor` APIs.
+    *   Defining the `Schema` and `DataFrame` / `Array` APIs.
     *   Constructing the "Lazy Execution Graph" (the user describes *what* to do, not *how*).
     *   Python-side error handling and formatting.
     *   Integration with Pydantic for validation.
@@ -177,7 +177,7 @@ We treat the build system as a product feature.
 **Philosophy**: "Correctness First, Performance a close Second."
 
 ### Testing
-*   **Property-Based Testing (`hypothesis`)**: Generate random DataFrames/Tensors and compare results against a "Golden Reference" (simple, slow Python implementation or NumPy).
+*   **Property-Based Testing (`hypothesis`)**: Generate random DataFrames/Arrays and compare results against a "Golden Reference" (simple, slow Python implementation or NumPy).
 *   **FFI Boundary Tests**: Verify that passing invalid pointers, wrong types, or nulls from Python is caught safely by Rust/C++ before segfaulting.
 *   **Sanitizers**: Run CI with ASAN (AddressSanitizer) and TSAN (ThreadSanitizer) to catch memory leaks and race conditions in C++/Rust.
 
@@ -222,10 +222,10 @@ We treat the build system as a product feature.
 ### AI Preprocessing Pipeline
 ```python
 import corepy as cp
-from corepy.schema import Tensor, Float32
+from corepy.schema import Array, Float32
 
 # Define a lazy graph execution pipeline
-def preprocess(image_batch: cp.Tensor) -> cp.Tensor:
+def preprocess(image_batch: cp.Array) -> cp.Array:
     # Operations are hardware-aware and fused where possible
     normalized = (image_batch - 0.485) / 0.229
     # Handled by C++ SIMD kernels

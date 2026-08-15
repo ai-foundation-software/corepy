@@ -1,8 +1,8 @@
 # Corepy Performance Profiling - Complete Guide
 
-**Version**: 0.2.0  
-**Status**: Implementation Ready  
-**Last Updated**: 2026-01-27
+**Version**: 0.3.0  
+**Status**: Production Ready  
+**Last Updated**: 2026-08-15
 
 ---
 
@@ -44,7 +44,7 @@ Performance profiling is the process of measuring where your code spends its exe
 |---------|-------------|---------|
 | **Zero-Config** | Works out of the box | No complex setup |
 | **Low Overhead** | <2% performance impact | Safe for production |
-| **Automatic Tracking** | Instruments all tensor operations | No manual annotations |
+| **Automatic Tracking** | Instruments all array operations | No manual annotations |
 | **Smart Recommendations** | AI-powered optimization tips | Save hours of guessing |
 | **Multiple Formats** | JSON, CSV, Flamegraph, HTML | Integrate with any tool |
 | **Context Management** | Profile specific sections | Focus on what matters |
@@ -58,7 +58,7 @@ Performance profiling is the process of measuring where your code spends its exe
 Profiling is built into corepy. No extra installation needed!
 
 ```bash
-pip install corepy>=0.2.0
+pip install corepy-ai>=0.3.0
 ```
 
 ### 30-Second Example
@@ -70,7 +70,7 @@ import corepy as cp
 cp.enable_profiling()
 
 # 2. Run your code
-data = cp.tensor([1.0, 2.0, 3.0, 4.0, 5.0])
+data = cp.array([1.0, 2.0, 3.0, 4.0, 5.0])
 result = (data * 2.0 + 5.0).mean()
 
 # 3. See what happened
@@ -168,7 +168,7 @@ def my_algorithm(data):
 ```python
 cp.enable_profiling()
 ```
-Enables global profiling. All tensor operations will be tracked.
+Enables global profiling. All array operations will be tracked.
 
 **Returns**: None  
 **Side Effects**: Starts background profiling thread  

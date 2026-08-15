@@ -3,26 +3,26 @@
 Corepy is designed to be familiar if you have used tools like NumPy or Pandas, but with added safety and speed.
 
 > [!NOTE]
-> **Version 0.2.0 Status**: This guide shows what's currently working (✅) and what's planned for future releases (🔮).
+> **Version 0.3.0 Status**: This guide shows what's currently working (✅) and what's planned for future releases (🔮).
 
 ---
 
-## ✅ Working Features (v0.2.0)
+## ✅ Working Features (v0.3.0)
 
 These examples work in the current released version and have been tested.
 
 ---
 
-### 🌟 Example 1: Basic Tensor Operations (Math & Reductions)
+### 🌟 Example 1: Basic Array Operations (Math & Reductions)
 
 Corepy supports standard arithmetic and reduction operations.
 
 ```python
 import corepy as cp
 
-# Create tensors with list data
-a = cp.Tensor([1.0, 2.0, 3.0])
-b = cp.Tensor([4.0, 5.0, 6.0])
+# Create arrays with list data
+a = cp.Array([1.0, 2.0, 3.0])
+b = cp.Array([4.0, 5.0, 6.0])
 
 # Element-wise arithmetic (Works!)
 print(f"a + b = {a + b}")
@@ -39,14 +39,12 @@ print(f"Mean: {a.mean()}")
 ```
 
 **What works:**
-- ✅ Tensor creation from Python lists
+- ✅ Array creation from Python lists
 - ✅ Element-wise arithmetic (`+`, `-`, `*`, `/`)
-- ✅ Scalar operations (`tensor * scalar`)
+- ✅ Scalar operations (`array * scalar`)
 - ✅ Reductions (`sum`, `mean`)
+- ✅ Matrix Multiplication (`@`, `matmul`) with Cache-Aware Faer/OpenBLAS backends
 - ✅ CPU backend (automatic)
-
-**What doesn't work yet:**
-- ❌ Matrix multiplication (`@`) - partially implemented but not exposed via operator
 
 ---
 
@@ -56,9 +54,9 @@ Corepy v0.2.2 introduces advanced memory management and parallel execution.
 
 ```python
 # Automatic Parallelism
-# Tensors > 1M elements automatically use multi-threaded execution
-large_tensor = cp.Tensor([1.0] * 1_000_000)
-result = large_tensor.sum() # Runs in parallel using Rayon
+# Arrays > 1M elements automatically use multi-threaded execution
+large_array = cp.Array([1.0] * 1_000_000)
+result = large_array.sum() # Runs in parallel using Rayon
 ```
 
 **New Features:**
@@ -109,30 +107,54 @@ Platform: Darwin
 
 ---
 
-### 📊 Example 4: Data Tables
+### 📊 Example 4: Tabular DataFrame Engine
 
-Basic data table functionality for structured data.
+Corepy features a Rust-native DataFrame engine that processes data entirely in native code.
 
 ```python
-from corepy.data import Table
+import corepy as cp
 
-# Create a table from a dictionary
-data = {
-    "name": ["Alice", "Bob", "Charlie"],
-    "score": [95.5, 87.3, 92.1],
-    "age": [25, 30, 28]
-}
+# Create a tabular DataFrame natively
+df = cp.DataFrame()
+df.add_int_column("id", [101, 102, 103, 104, 105])
+df.add_float_column("latency_ms", [12.5, 45.0, 8.2, 102.1, 19.4])
+df.add_string_column("status", ["ok", "warn", "ok", "error", "ok"])
 
-table = Table(data)
-print(table)
-# Output: Table(rows=3, schema=None)
+print(df)
+# Fast filtering processing exclusively inside Rust
+high_latency = df.filter_int_eq("id", 103)
+print(high_latency)
+
+# Fast sorting entirely in Rust
+sorted_df = df.sort_by_int("id")
+print(sorted_df)
 ```
 
-**Status**: Basic functionality works. Schema integration and advanced operations coming in future versions.
+**Status**: Completely functional natively with `Int`, `Float`, and `String` columns. Zero-overhead filtering and sorting capabilities.
 
 ---
 
-### 🧪 Example 5: Testing & Debugging
+### 🎲 Example 5: High-Performance Random Operations
+
+Fast hardware-optimized random number generation (`Xoshiro256++` and `PCG64` algorithms) with native profiling integration.
+
+```python
+import corepy as cp
+
+# Uniform distribution
+uniform_array = cp.rand([100, 100])
+
+# Normal/Gaussian distribution
+normal_array = cp.randn([1000, 1000])
+
+print(f"Mean (Expected ~0.0): {normal_array.mean()}")
+```
+
+**Status**: Working flawlessly on all Rust platforms via `rand` and `rand_distr` crates.
+
+---
+
+### 🧪 Example 6: Testing & Debugging
 
 Verify your installation and explore the backend.
 
@@ -254,32 +276,23 @@ def process_financial_data():
 
 ---
 
-### ⚡ Future Example: Advanced Tensor Operations
+### ⚡ Future Example: Advanced Array Operations
 
 **Status**: 🔮 Planned for v0.3  
-**Dependencies**: Complete tensor operations
+**Dependencies**: Complete array operations
 
 ```python
 import corepy as cp
 
 # These operations are planned but not yet implemented
-a = cp.Tensor([1.0, 2.0, 3.0])
-b = cp.Tensor([4.0, 5.0, 6.0])
+a = cp.Array([1.0, 2.0, 3.0])
+b = cp.Array([4.0, 5.0, 6.0])
 
 # Coming in v0.3 (1-2 months)
-c = a - b          # ❌ Subtraction
-d = a * b          # ❌ Element-wise multiplication
-e = a / b          # ❌ Division
-f = a * 2.0        # ❌ Scalar multiplication
-
-# Matrix operations
-A = cp.Tensor([[1, 2], [3, 4]])
-B = cp.Tensor([[5, 6], [7, 8]])
-C = A @ B          # ❌ Matrix multiplication
-
-# Reductions
-sum_val = a.sum()  # ❌ Not implemented
-mean_val = a.mean()  # ❌ Not implemented
+c = a - b          # ❌ Subtraction (Planned native mapping)
+d = a * b          # ❌ Element-wise multiplication (Planned native mapping)
+e = a / b          # ❌ Division (Planned native mapping)
+f = a * 2.0        # ❌ Scalar multiplication (Planned native mapping)
 ```
 
 **Planned for**: v0.3 (1-2 months)
@@ -295,13 +308,13 @@ mean_val = a.mean()  # ❌ Not implemented
 import corepy as cp
 
 # GPU support coming in v2.0
-tensor_cpu = cp.Tensor([1, 2, 3], device="cpu")
+array_cpu = cp.Array([1, 2, 3], device="cpu")
 
 # Move to GPU
-tensor_gpu = tensor_cpu.to("cuda:0")  # ❌ Not implemented
+array_gpu = array_cpu.to("cuda:0")  # ❌ Not implemented
 
 # Operations automatically run on GPU
-result = tensor_gpu * 2.0  # ❌ Not implemented
+result = array_gpu * 2.0  # ❌ Not implemented
 
 # Move back to CPU
 result_cpu = result.to("cpu")  # ❌ Not implemented
@@ -347,8 +360,8 @@ assert result_cpp == result_ref
 import corepy as cp
 
 # Create computation graph (lazy)
-x = cp.Tensor([1, 2, 3])
-y = cp.Tensor([4, 5, 6])
+x = cp.Array([1, 2, 3])
+y = cp.Array([4, 5, 6])
 
 # These don't execute immediately - they build a graph
 z = x + y
@@ -373,7 +386,6 @@ final = result.compute()  # ❌ Lazy execution not implemented
 **v0.2.2 Work in Progress:**
 
 ### Operations
-- ❌ Matrix multiplication (`@`) operator not yet hooked up
 - ❌ Advanced linear algebra (inverse, svd, etc.)
 
 ### Modules
@@ -391,9 +403,9 @@ final = result.compute()  # ❌ Lazy execution not implemented
 ### ✅ Do This
 
 ```python
-# Use tensor addition (works)
-a = cp.Tensor([1, 2, 3])
-b = cp.Tensor([4, 5, 6])
+# Use array addition (works)
+a = cp.Array([1, 2, 3])
+b = cp.Array([4, 5, 6])
 result = a + b
 
 # Check device capabilities
@@ -420,32 +432,26 @@ result = cp.io.read()  # ❌ Module doesn't exist
 
 | Version | Status | Key Features |
 |:--------|:-------|:-------------|
-| **v0.2.0** | ✅ Current | Tensor creation, addition, device detection, basic tables |
-| **v0.3.0** | 🔨 In Progress | All tensor operations, C++ extension in wheel, reference backend |
-| **v1.0** | 🔮 Planned | CPU SIMD optimizations, multi-threading, schema system |
-| **v2.0** | 🔮 Planned | GPU support, lazy execution, I/O and vision modules |
+| **v0.3.0** | ✅ Current | Hardware-aware BLAS dispatch, Rust SIMD backend, Chrome profiler, DataFrames |
+| **v1.0** | 🔮 Planned | Full NumPy API parity, stable C-FFI, complete GPU pipelines |
 
 ---
 
 ## ❓ FAQ
 
 **Q: Why do only some operations work?**  
-A: Corepy is in early alpha (v0.2.0). We're implementing features incrementally, prioritizing correctness over completeness.
+A: Corepy is in alpha (v0.3.0). We're implementing features incrementally, prioritizing correctness over completeness.
 
 **Q: When will GPU support be available?**  
-A: GPU backend is planned for v2.0, approximately 6-12 months from now.
+A: Metal & CUDA acceleration are supported in v0.3.0 for macOS and Linux.
 
 **Q: How can I help?**  
-A: See [CONTRIBUTING.md](../07_contributing/CONTRIBUTING.md) for ways to contribute. Implementing missing tensor operations is a great starting point!
-
-**Q: Is the C++ extension working?**  
-A: The C++ code exists, but may not be included in the PyPI wheel for v0.2.0. We're fixing this in v0.3.
+A: See [CONTRIBUTING.md](../07_contributing/CONTRIBUTING.md) for ways to contribute.
 
 **Q: Should I use Corepy in production?**  
-A: Not yet. v0.2.0 is for experimentation and feedback. Wait for v1.0 for production use.
+A: v0.3.0 is suitable for performance evaluation and AI foundation development. Wait for v1.0 for production stability.
 
 ---
 
-**Last Updated**: 2026-02-05
-**Next Planned Release**: v0.3.0 (March 2026)  
-**Documentation Version**: Matches released package v0.2.2
+**Last Updated**: 2026-08-15
+**Documentation Version**: Matches released package v0.3.0

@@ -11,11 +11,11 @@ def test_matmul_2d():
     b_np = np.array([[5, 6], [7, 8]], dtype=np.float32)
     expected = a_np @ b_np
 
-    a_cp = cp.Tensor([[1, 2], [3, 4]])
-    b_cp = cp.Tensor([[5, 6], [7, 8]])
+    a_cp = cp.ndarray([[1, 2], [3, 4]])
+    b_cp = cp.ndarray([[5, 6], [7, 8]])
 
     result_cp = a_cp.matmul(b_cp)
-    result_np = np.array(result_cp._backing_data).reshape(result_cp.shape)
+    result_np = result_cp.to_list()
 
     print(f"A:\n{a_np}")
     print(f"B:\n{b_np}")
@@ -30,13 +30,11 @@ def test_matmul_2d():
     b_rect = np.random.rand(5, 2).astype(np.float32)
     expected_rect = a_rect @ b_rect
 
-    a_cp_rect = cp.Tensor(a_rect.tolist())
-    b_cp_rect = cp.Tensor(b_rect.tolist())
+    a_cp_rect = cp.ndarray(a_rect.tolist())
+    b_cp_rect = cp.ndarray(b_rect.tolist())
 
     result_cp_rect = a_cp_rect.matmul(b_cp_rect)
-    result_np_rect = np.array(result_cp_rect._backing_data).reshape(
-        result_cp_rect.shape
-    )
+    result_np_rect = result_cp_rect.to_list()
 
     np.testing.assert_allclose(result_np_rect, expected_rect, rtol=1e-5)
     print("✅ Rectangular matrix test passed!")

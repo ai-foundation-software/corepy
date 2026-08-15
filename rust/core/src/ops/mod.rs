@@ -1,4 +1,11 @@
+#[cfg(feature = "cuda")]
+pub mod cuda;
 pub mod elementwise;
 pub mod matmul;
+pub mod matmul_rust_parallel;
+#[cfg(feature = "metal")]
 pub mod metal;
+pub mod random;
 pub mod reduce;
+pub mod ufunc;
+pub mod workload;

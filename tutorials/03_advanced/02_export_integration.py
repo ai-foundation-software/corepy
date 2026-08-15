@@ -55,7 +55,7 @@ print("=" * 70)
 
 @profile_operation
 def sample_workflow():
-    data = cp.tensor([float(i) for i in range(1000)])
+    data = cp.array([float(i) for i in range(1000)])
     normalized = (data - data.mean()) / data.std()
     result = normalized.sum()
     return result
@@ -124,7 +124,7 @@ print("=" * 70)
 cp.enable_profiling()
 
 # Run more operations for better CSV example
-data = cp.tensor([float(i) for i in range(500)])
+data = cp.array([float(i) for i in range(500)])
 for i in range(5):
     temp = data + i
     result = temp.mean()
@@ -234,7 +234,7 @@ cp.enable_profiling()
 
 # Create a timeline of events
 for i in range(10):
-    data = cp.tensor([float(j) for j in range(100)])
+    data = cp.array([float(j) for j in range(100)])
     result = (data + i).mean()
 
 cp.export_profile(chrome_path, format="chrome_tracing")

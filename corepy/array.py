@@ -2,22 +2,59 @@ import logging
 from collections.abc import Sequence
 from typing import TYPE_CHECKING, Any, Optional, Tuple, Union
 
-import numpy as np
-from numpy.typing import NDArray
-
 from .backend.errors import BackendError
 from .backend.selector import select_backend
 from .backend.session import get_session
 from .backend.types import BackendType, DataType, OperationProperties, OperationType
 
 if TYPE_CHECKING:
-    from numpy.typing import NDArray
-
     from .buffer import BufferView
 
 logger = logging.getLogger("corepy.array")
 
 from .broadcasting import get_c_strides
+
+
+def _map_to_rust_dtype(dtype: Any) -> Any:
+    """Map a Python DataType / string / dtype object to _RustDType."""
+    try:
+        from ._corepy_rust import _RustDType
+    except ImportError:
+        return None
+
+    if isinstance(dtype, _RustDType):
+        return dtype
+
+    if hasattr(dtype, "value"):
+        dtype_str = str(dtype.value).lower()
+    else:
+        dtype_str = str(dtype).lower()
+
+    mapping = {
+        "float32": _RustDType.Float32,
+        "float64": _RustDType.Float64,
+        "int32": _RustDType.Int32,
+        "int64": _RustDType.Int64,
+        "bool": _RustDType.Bool,
+        "string": _RustDType.String,
+        "str": _RustDType.String,
+    }
+
+
+def _unflatten_list(flat: list, shape: tuple) -> list:
+    if len(shape) <= 1:
+        return flat
+    rows = shape[0]
+    sub_shape = shape[1:]
+    chunk_size = 1
+    for s in sub_shape:
+        chunk_size *= s
+    if len(flat) != rows * chunk_size:
+        return flat
+    return [
+        _unflatten_list(flat[i * chunk_size : (i + 1) * chunk_size], sub_shape)
+        for i in range(rows)
+    ]
 
 
 class ndarray:
@@ -46,7 +83,7 @@ class ndarray:
 
     def __init__(
         self,
-        data: Union[Sequence[Any], "ndarray", "NDArray[Any]"],
+        data: Union[Sequence[Any], "ndarray", Any],
         dtype: DataType = DataType.FLOAT32,
         backend: Optional[Union[str, BackendType]] = None,
         device: Optional[str] = None,
@@ -98,7 +135,9 @@ class ndarray:
                 size *= dim
             self._element_count = size
             self._backing_data = data  # type: ignore[assignment]
-        elif isinstance(data, np.ndarray):  # numpy array
+        elif hasattr(data, "shape") and hasattr(
+            data, "size"
+        ):  # numpy or array protocol
             self._shape = tuple(int(d) for d in data.shape)
             self._element_count = int(data.size)
             self._backing_data = data  # type: ignore[assignment]
@@ -111,7 +150,11 @@ class ndarray:
         # Resolve requested backend/device
         requested_backend = None
         if device:
-            if "cuda" in device or "gpu" in device or "metal" in device:
+            if "cuda" in device:
+                requested_backend = BackendType.CUDA
+            elif "metal" in device:
+                requested_backend = BackendType.METAL
+            elif "gpu" in device:
                 requested_backend = BackendType.GPU
             elif "cpu" in device:
                 requested_backend = BackendType.CPU
@@ -138,18 +181,13 @@ class ndarray:
 
         # Phase 2: GPU Persistent Buffer Tracking
         # Track where data currently resides to minimize transfers
-        self._cpu_data: Optional[np.ndarray] = None
+        self._cpu_data: Any = None
         self._gpu_data = None  # Metal buffer handle (if GPU-resident)
         self._data_location = "cpu"  # "cpu", "gpu", or "both"
 
         # Initialize CPU data from backing_data
-        if self._device == "cpu":
-            self._cpu_data = self._to_numpy_internal()
-            self._data_location = "cpu"
-        else:
-            # GPU device - prepare for lazy transfer
-            self._cpu_data = self._to_numpy_internal()
-            self._data_location = "cpu"  # Start on CPU, transfer on first use
+        self._cpu_data = self._backing_data
+        self._data_location = "cpu"
 
         # Select backend through policy
         context = OperationProperties(
@@ -175,8 +213,209 @@ class ndarray:
 
         # Store original device intent
         self._device_intent = self._device
+        self._core_array: Any = None
 
         logger.debug(f"Array created on {self._backend_type}. Shape={self._shape}")
+
+    @classmethod
+    def _wrap_core_array(
+        cls,
+        core_array: Any,
+        dtype: DataType = DataType.FLOAT32,
+        device: str = "cpu",
+        backend: Optional[Union[str, BackendType]] = None,
+    ) -> "ndarray":
+        """Wrap a Rust _RustCoreArray object into a Python ndarray."""
+        data = core_array.to_list() if hasattr(core_array, "to_list") else []
+        arr = cls(data, dtype=dtype, device=device, backend=backend)
+        if hasattr(core_array, "shape"):
+            raw_shape = (
+                core_array.shape() if callable(core_array.shape) else core_array.shape
+            )
+            arr._shape = tuple(raw_shape)
+            count = 1
+            for d in arr._shape:
+                count *= d
+            arr._element_count = count
+            if arr._cpu_data is not None and hasattr(arr._cpu_data, "reshape"):
+                arr._cpu_data = arr._cpu_data.reshape(arr._shape)
+        arr._core_array = core_array
+        return arr
+
+    def to_list(self) -> list:
+        """Convert array to a Python list matching its shape."""
+        raw_flat = []
+        if self._core_array is not None:
+            raw_flat = self._core_array.to_list()
+        elif hasattr(self, "_cpu_data") and self._cpu_data is not None:
+            if isinstance(self._cpu_data, list):
+                raw_flat = self._cpu_data
+            elif hasattr(self._cpu_data, "tolist"):
+                raw_flat = self._cpu_data.tolist()
+            else:
+                raw_flat = list(self._cpu_data)
+        elif hasattr(self, "_backing_data") and self._backing_data is not None:
+            if isinstance(self._backing_data, list):
+                raw_flat = self._backing_data
+            elif hasattr(self._backing_data, "tolist"):
+                raw_flat = self._backing_data.tolist()
+            else:
+                raw_flat = list(self._backing_data)
+
+        if len(self.shape) > 1 and isinstance(raw_flat, list):
+            if raw_flat and not isinstance(raw_flat[0], list):
+                return _unflatten_list(raw_flat, self.shape)
+
+        return raw_flat
+
+    def tolist(self) -> list:
+        """NumPy-compatible alias for to_list()."""
+        return self.to_list()
+
+    def sin(self) -> "ndarray":
+        from .ops.trigonometry import sin
+
+        return sin(self)
+
+    def cos(self) -> "ndarray":
+        from .ops.trigonometry import cos
+
+        return cos(self)
+
+    def tan(self) -> "ndarray":
+        from .ops.trigonometry import tan
+
+        return tan(self)
+
+    def arcsin(self) -> "ndarray":
+        from .ops.trigonometry import arcsin
+
+        return arcsin(self)
+
+    def arccos(self) -> "ndarray":
+        from .ops.trigonometry import arccos
+
+        return arccos(self)
+
+    def arctan(self) -> "ndarray":
+        from .ops.trigonometry import arctan
+
+        return arctan(self)
+
+    def sinh(self) -> "ndarray":
+        from .ops.trigonometry import sinh
+
+        return sinh(self)
+
+    def cosh(self) -> "ndarray":
+        from .ops.trigonometry import cosh
+
+        return cosh(self)
+
+    def tanh(self) -> "ndarray":
+        from .ops.trigonometry import tanh
+
+        return tanh(self)
+
+    def exp(self) -> "ndarray":
+        from .ops.exponential import exp
+
+        return exp(self)
+
+    def log(self) -> "ndarray":
+        from .ops.exponential import log
+
+        return log(self)
+
+    def sqrt(self) -> "ndarray":
+        from .ops.exponential import sqrt
+
+        return sqrt(self)
+
+    def prod(self) -> float:
+        from .ops.reduction import prod
+
+        return prod(self)
+
+    def cumsum(self) -> "ndarray":
+        from .ops.reduction import cumsum
+
+        return cumsum(self)
+
+    def square(self) -> "ndarray":
+        from .ops.special import square
+
+        return square(self)
+
+    def floor(self) -> "ndarray":
+        from .ops.rounding import floor
+
+        return floor(self)
+
+    def ceil(self) -> "ndarray":
+        from .ops.rounding import ceil
+
+        return ceil(self)
+
+    def sort(self, descending: bool = False) -> "ndarray":
+        from .ops.sorting import sort
+
+        return sort(self, descending)
+
+    def argsort(self, descending: bool = False) -> "ndarray":
+        from .ops.sorting import argsort
+
+        return argsort(self, descending)
+
+    def argmax(self) -> int:
+        from .ops.searching import argmax
+
+        return argmax(self)
+
+    def argmin(self) -> int:
+        from .ops.searching import argmin
+
+        return argmin(self)
+
+    def split(self, indices_or_sections: Any, axis: int = 0) -> list:
+        from .ops.stacking import split
+
+        return split(self, indices_or_sections, axis)
+
+    def is_even(self) -> "ndarray":
+        from .ops.ufunc_engine import ufunc_unary
+
+        return ufunc_unary("is_even", self)
+
+    def is_odd(self) -> "ndarray":
+        from .ops.ufunc_engine import ufunc_unary
+
+        return ufunc_unary("is_odd", self)
+
+    def abs(self) -> "ndarray":
+        from .ops.ufunc_engine import ufunc_unary
+
+        return ufunc_unary("abs", self)
+
+    def clamp(self, min_val: float, max_val: float) -> "ndarray":
+        from .ops.rounding import clamp
+
+        return clamp(self, min_val, max_val)
+
+    def clip(self, min_val: float, max_val: float) -> "ndarray":
+        from .ops.rounding import clip
+
+        return clip(self, min_val, max_val)
+
+    def take(self, indices: Any) -> "ndarray":
+        from .ops.indexing import take
+
+        return take(self, indices)
+
+    def boolean_index(self, mask: Any) -> "ndarray":
+        from .ops.indexing import boolean_index
+
+        return boolean_index(self, mask)
 
     @property
     def backend(self) -> BackendType:
@@ -220,7 +459,7 @@ class ndarray:
 
     def reshape(self, *shape) -> "ndarray":
         """
-        Return array reshaped to given dimensions (NumPy-compatible).
+        Return array reshaped to given dimensions.
 
         Args:
             shape: New shape as multiple arguments or single tuple/list.
@@ -229,9 +468,24 @@ class ndarray:
             Reshaped array with same data.
         """
         if len(shape) == 1 and isinstance(shape[0], (tuple, list)):
-            shape = tuple(shape[0])
-        np_arr = self.to_numpy().reshape(shape)
-        return ndarray(np_arr, dtype=self._dtype, backend=self.backend)
+            target_shape = tuple(shape[0])
+        else:
+            target_shape = tuple(shape)
+
+        new_arr = ndarray(
+            self.to_list(), dtype=self._dtype, device=self._device, backend=self.backend
+        )
+        new_arr._shape = target_shape
+        count = 1
+        for d in target_shape:
+            count *= d
+        new_arr._element_count = count
+        if self._core_array is not None and hasattr(self._core_array, "reshape"):
+            try:
+                new_arr._core_array = self._core_array.reshape(list(target_shape))
+            except Exception:
+                pass
+        return new_arr
 
     def transpose(self, *axes) -> "ndarray":
         """
@@ -274,7 +528,24 @@ class ndarray:
                 except ImportError:
                     pass
 
-        # Fallback to NumPy
+        # Native 2D transpose fallback
+        if len(self.shape) == 2:
+            rows, cols = self.shape
+            grid = self.to_list()
+            if grid and isinstance(grid[0], list):
+                transposed_grid = [
+                    [grid[r][c] for r in range(rows)] for c in range(cols)
+                ]
+            else:
+                # 1D flat list representation
+                transposed_grid = [
+                    [grid[r * cols + c] for r in range(rows)] for c in range(cols)
+                ]
+            elapsed_ms = (time.perf_counter() - start_time) * 1000
+            record_op("transpose", elapsed_ms, "Native-CPU")
+            return ndarray(transposed_grid, dtype=self._dtype, backend=self.backend)
+
+        # Multi-dimensional fallback via lazy to_numpy
         np_arr = self.to_numpy()
         if axes:
             np_arr = np_arr.transpose(*axes)
@@ -287,7 +558,7 @@ class ndarray:
 
     def to(self, device: str) -> "ndarray":
         """
-        Explicitly move tensor to a device (deprecated - use to_device).
+        Explicitly move array to a device (deprecated - use to_device).
 
         Arguments:
             device: 'cpu' or 'gpu'
@@ -352,45 +623,32 @@ class ndarray:
                 self.to_device("cpu")
 
     def __getitem__(self, item) -> Union["ndarray", float, int, bool]:
-        """
-        Access element or slice of the array.
-
-        Args:
-            item: Index or slice.
-
-        Returns:
-            ndarray or scalar: Result of indexing.
-        """
-        # Delegate to backing data
-        if isinstance(self._backing_data, list):
-            # List slicing returns list, indexing returns element
-            try:
-                result = self._backing_data[item]
-            except TypeError:
-                # Handle tuple indexing for lists (not supported natively)
-                # Fallback to numpy conversion for advanced indexing
-                return self.to_numpy()[item]
-
-            if isinstance(result, list):
-                return ndarray(result, dtype=self._dtype, backend=self.backend)
+        """Access element or slice of the array."""
+        grid = self.to_list()
+        try:
+            if isinstance(item, tuple):
+                sub = grid
+                for idx in item:
+                    sub = sub[idx]
+                result = sub
             else:
-                return result  # scalar
-        elif isinstance(self._backing_data, np.ndarray):
-            # NumPy slicing returns view or scalar
-            result = self._backing_data[item]
-            if isinstance(result, np.ndarray):
-                # View (keeps backing data)
-                return ndarray(result, dtype=self._dtype, backend=self.backend)
+                result = grid[item]
+        except (TypeError, IndexError):
+            # Fallback for nested indexing
+            sub = grid
+            if isinstance(item, tuple):
+                for idx in item:
+                    sub = sub[idx]
+                result = sub
             else:
-                # Scalar (numpy scalar)
-                return result.item() if hasattr(result, "item") else result
+                result = sub[item]
+
+        if isinstance(result, list):
+            return ndarray(result, dtype=self._dtype, backend=self.backend)
+        elif hasattr(result, "tolist"):
+            return result.tolist()
         else:
-            # Fallback for other types
-            result = self.to_numpy()[item]
-            if isinstance(result, np.ndarray):
-                return ndarray(result, dtype=self._dtype, backend=self.backend)
-            else:
-                return result.item() if hasattr(result, "item") else result
+            return result.item() if hasattr(result, "item") else result
 
     def __repr__(self):
         return f"ndarray({self._backing_data}, backend='{self._backend_type.value}')"
@@ -399,17 +657,69 @@ class ndarray:
         """Element-wise addition."""
         return self._binary_op("add", other)
 
+    def __radd__(self, other: Any) -> "ndarray":
+        """Reverse element-wise addition."""
+        return self._binary_op("add", other)
+
     def __sub__(self, other: Any) -> "ndarray":
         """Element-wise subtraction."""
         return self._binary_op("sub", other)
+
+    def __rsub__(self, other: Any) -> "ndarray":
+        """Reverse element-wise subtraction."""
+        return ndarray(other, backend=self.backend)._binary_op("sub", self)
 
     def __mul__(self, other: Any) -> "ndarray":
         """Element-wise multiplication."""
         return self._binary_op("mul", other)
 
+    def __rmul__(self, other: Any) -> "ndarray":
+        """Reverse element-wise multiplication."""
+        return self._binary_op("mul", other)
+
     def __truediv__(self, other: Any) -> "ndarray":
         """Element-wise division."""
         return self._binary_op("div", other)
+
+    def __rtruediv__(self, other: Any) -> "ndarray":
+        """Reverse element-wise division."""
+        return ndarray(other, backend=self.backend)._binary_op("div", self)
+
+    def __pow__(self, other: Any) -> "ndarray":
+        """Element-wise exponentiation."""
+        return self._binary_op("power", other)
+
+    def __rpow__(self, other: Any) -> "ndarray":
+        """Reverse element-wise exponentiation."""
+        return ndarray(other, backend=self.backend)._binary_op("power", self)
+
+    def __mod__(self, other: Any) -> "ndarray":
+        """Element-wise modulo."""
+        return self._binary_op("mod", other)
+
+    def __rmod__(self, other: Any) -> "ndarray":
+        """Reverse element-wise modulo."""
+        return ndarray(other, backend=self.backend)._binary_op("mod", self)
+
+    def __floordiv__(self, other: Any) -> "ndarray":
+        """Element-wise floor division."""
+        return self._binary_op("floor_div", other)
+
+    def __rfloordiv__(self, other: Any) -> "ndarray":
+        """Reverse element-wise floor division."""
+        return ndarray(other, backend=self.backend)._binary_op("floor_div", self)
+
+    def __neg__(self) -> "ndarray":
+        """Unary negation."""
+        from .ops.ufunc_engine import ufunc_unary
+
+        return ufunc_unary("neg", self)
+
+    def __abs__(self) -> "ndarray":
+        """Unary absolute value."""
+        from .ops.ufunc_engine import ufunc_unary
+
+        return ufunc_unary("abs", self)
 
     def matmul(self, other: Any) -> "ndarray":
         """Matrix multiplication (@ operator)."""
@@ -428,8 +738,8 @@ class ndarray:
             except OperationNotSupportedError:
                 # GPU doesn't support matmul, fall back to CPU
                 logger.info("GPU matmul not supported, falling back to CPU")
-                cpu_self = ndarray(self.to_numpy(), backend=BackendType.CPU)
-                cpu_other = ndarray(other.to_numpy(), backend=BackendType.CPU)
+                cpu_self = ndarray(self.to_list(), backend=BackendType.CPU)
+                cpu_other = ndarray(other.to_list(), backend=BackendType.CPU)
                 return cpu_self.matmul(cpu_other)
 
         # Phase 2: Automatic GPU Switching for large operations
@@ -448,8 +758,8 @@ class ndarray:
                 if caps.get("gpu", {}).get("metal_available", False):
                     # Promote to GPU for large matmul
                     logger.info("Auto-switching large matmul to GPU based on size")
-                    gpu_self = ndarray(self.to_numpy(), device="metal")
-                    gpu_other = ndarray(other.to_numpy(), device="metal")
+                    gpu_self = ndarray(self.to_list(), device="metal")
+                    gpu_other = ndarray(other.to_list(), device="metal")
                     return gpu_self.matmul(gpu_other)
 
         # Delegate to backend implementation
@@ -475,33 +785,33 @@ class ndarray:
         return self.matmul(other)
 
     def _get_scalar_value(self) -> float:
-        """Extract scalar value from single-element tensor."""
+        """Extract scalar value from single-element array."""
         if self._element_count != 1:
-            raise ValueError("Cannot compare non-scalar tensor")
+            raise ValueError("Cannot compare non-scalar array")
         if isinstance(self._backing_data, list):
             return float(self._backing_data[0])
         return float(self._backing_data)  # type: ignore[arg-type]
 
     def __lt__(self, other: Any) -> bool:
-        """Less than comparison (for scalar tensors)."""
+        """Less than comparison (for scalar arrays)."""
         return self._get_scalar_value() < (
             other._get_scalar_value() if isinstance(other, ndarray) else float(other)
         )
 
     def __le__(self, other: Any) -> bool:
-        """Less than or equal comparison (for scalar tensors)."""
+        """Less than or equal comparison (for scalar arrays)."""
         return self._get_scalar_value() <= (
             other._get_scalar_value() if isinstance(other, ndarray) else float(other)
         )
 
     def __gt__(self, other: Any) -> bool:
-        """Greater than comparison (for scalar tensors)."""
+        """Greater than comparison (for scalar arrays)."""
         return self._get_scalar_value() > (
             other._get_scalar_value() if isinstance(other, ndarray) else float(other)
         )
 
     def __ge__(self, other: Any) -> bool:
-        """Greater than or equal comparison (for scalar tensors)."""
+        """Greater than or equal comparison (for scalar arrays)."""
         return self._get_scalar_value() >= (
             other._get_scalar_value() if isinstance(other, ndarray) else float(other)
         )
@@ -533,8 +843,8 @@ class ndarray:
                 target_device = METAL
             # Future: CUDA support
 
-        # Case 1: NumPy array (fastest path)
-        if isinstance(self._backing_data, np.ndarray):
+        # Case 1: NumPy / Array interface array (fastest path)
+        if hasattr(self._backing_data, "__array_interface__"):
             return from_numpy(
                 self._backing_data, device=target_device, dtype=self._dtype
             )
@@ -548,31 +858,28 @@ class ndarray:
                 device=target_device,
             )
 
-        # Case 3: List (convert to NumPy first)
+        # Case 3: List (convert to bytearray buffer)
         elif isinstance(self._backing_data, list):
             import struct
 
-            # Flatten nested lists
-            def flatten(items):
-                for x in items:
-                    if isinstance(x, (list, tuple)):
-                        yield from flatten(x)
-                    else:
-                        yield x
+            from .ops.math import _flatten
 
-            # Convert to numpy based on dtype
-            if self._dtype == DataType.FLOAT32:
-                arr = np.array(list(flatten(self._backing_data)), dtype=np.float32)
-            elif self._dtype == DataType.INT32:
-                arr = np.array(list(flatten(self._backing_data)), dtype=np.int32)
-            elif self._dtype == DataType.FLOAT64:
-                arr = np.array(list(flatten(self._backing_data)), dtype=np.float64)
-            elif self._dtype == DataType.INT64:
-                arr = np.array(list(flatten(self._backing_data)), dtype=np.int64)
+            flat = _flatten(self._backing_data)
+            if self._dtype == DataType.INT32:
+                buf = bytearray()
+                for val in flat:
+                    buf.extend(struct.pack("i", int(val)))
             else:
-                arr = np.array(list(flatten(self._backing_data)), dtype=np.float32)
+                buf = bytearray()
+                for val in flat:
+                    buf.extend(struct.pack("f", float(val)))
 
-            return from_numpy(arr, device=target_device, dtype=self._dtype)
+            return from_buffer(
+                buf,
+                dtype=self._dtype,
+                shape=self._shape,
+                device=target_device,
+            )
 
         # Case 4: Unknown type
         else:
@@ -597,32 +904,11 @@ class ndarray:
         """
         import ctypes
 
-        import numpy as np
-
-        # Case 1: NumPy array (fastest path)
-        if isinstance(self._backing_data, np.ndarray):
+        # Case 1: Array with buffer interface (e.g. NumPy/ctypes array)
+        if hasattr(self._backing_data, "__array_interface__"):
             array = self._backing_data
-
-            # SYSTEMS SAFETY CHECK:
-            # We must ensure the array is C-contiguous before extracting the raw pointer.
-            # Passing non-contiguous strides to a dense kernel results in data corruption.
-            if not array.flags["C_CONTIGUOUS"]:
-                # Safe Copy (Performance Penalty, but Correct)
-                # Log at WARNING level so hidden copies are visible in production
-                logger.warning(
-                    f"Copying non-contiguous array (shape={array.shape}) for kernel; "
-                    "consider using contiguous arrays for better performance"
-                )
-
-                array = np.ascontiguousarray(array)
-
-            # Validate dtype matches request?
-            if dtype_char == "f4" and array.dtype != np.float32:
-                pass  # TODO: Handle dtype mismatch or define strict rules
-
-            # __array_interface__ provides (ptr, readonly)
             ptr = array.__array_interface__["data"][0]
-            count = array.size
+            count = getattr(array, "size", self._element_count)
             return (ptr, count, array)
 
         # Case 2: bytes/bytearray/memoryview (buffer protocol)
@@ -715,10 +1001,10 @@ class ndarray:
     def all(self) -> "ndarray":
         """Returns True if all elements evaluate to True."""
         try:
-            from ._corepy_rust import tensor_all  # type: ignore[import-untyped]
+            from ._corepy_rust import array_all  # type: ignore[import-untyped]
 
             ptr, count, _ref = self._get_buffer_pointer("u1")
-            result = tensor_all(ptr, count)
+            result = array_all(ptr, count)
 
             return ndarray(result, dtype=DataType.BOOL, backend=self.backend)
 
@@ -732,10 +1018,10 @@ class ndarray:
     def any(self) -> "ndarray":
         """Returns True if any element evaluates to True."""
         try:
-            from ._corepy_rust import tensor_any  # type: ignore[import-untyped]
+            from ._corepy_rust import array_any  # type: ignore[import-untyped]
 
             ptr, count, _ref = self._get_buffer_pointer("u1")
-            result = tensor_any(ptr, count)
+            result = array_any(ptr, count)
 
             return ndarray(result, dtype=DataType.BOOL, backend=self.backend)
         except ImportError:
@@ -752,19 +1038,25 @@ class ndarray:
 
         start_time = time.perf_counter()
 
-        # Fast path: Use NumPy for small arrays to avoid FFI overhead
+        # Fast path: Native Python sum for small arrays
         if self._should_use_fast_path():
-            result = float(np.sum(self.to_numpy()))
+            import builtins
+
+            from .ops.math import _flatten
+
+            result = float(builtins.sum(_flatten(self.to_list())))
             elapsed_ms = (time.perf_counter() - start_time) * 1000
-            record_op("sum", elapsed_ms, "NumPy-Fast")
+            record_op("sum", elapsed_ms, "Native-Fast")
             return ndarray([result], dtype=self._dtype, backend=self.backend)
 
         try:
             from ._corepy_rust import (  # type: ignore[import-untyped]
+                array_mean_f32,
+                array_mean_f32_strided,
+                array_sum_f32,
+                array_sum_f32_strided,
+                array_sum_i32,
                 metal_sum_f32,
-                tensor_sum_f32,
-                tensor_sum_f32_strided,
-                tensor_sum_i32,
             )
 
             # Use BufferView for dispatch decision
@@ -773,19 +1065,18 @@ class ndarray:
             if self._dtype == DataType.INT32:
                 # INT32 path (contiguous only for now)
                 ptr, count, _ref = self._get_buffer_pointer("i4")
-                result = tensor_sum_i32(ptr, count)
+                result = array_sum_i32(ptr, count)
             elif view.device.is_metal():
                 # Metal GPU path
                 result = metal_sum_f32(view.data_ptr, view.element_count)
             elif view.is_contiguous():
                 # Fast path: contiguous f32
-                result = tensor_sum_f32(view.data_ptr, view.element_count)
+                result = array_sum_f32(view.data_ptr, view.element_count)
             else:
                 # Zero-copy path: strided f32
-                result = tensor_sum_f32_strided(
+                result = array_sum_f32_strided(
                     view.data_ptr,
                     list(view.shape),
-                    list(view.shape),  # type: ignore[arg-type]
                     list(view.strides)
                     if view.strides is not None
                     else [s * view.dtype.itemsize for s in get_c_strides(view.shape)],  # type: ignore[arg-type]
@@ -812,18 +1103,23 @@ class ndarray:
 
         start_time = time.perf_counter()
 
-        # Fast path: Use NumPy for small arrays to avoid FFI overhead
+        # Fast path: Native Python mean for small arrays
         if self._should_use_fast_path():
-            result = float(np.mean(self.to_numpy()))
+            import builtins
+
+            from .ops.math import _flatten
+
+            flat = _flatten(self.to_list())
+            result = float(builtins.sum(flat) / len(flat)) if flat else 0.0
             elapsed_ms = (time.perf_counter() - start_time) * 1000
-            record_op("mean", elapsed_ms, "NumPy-Fast")
+            record_op("mean", elapsed_ms, "Native-Fast")
             return ndarray([result], dtype=DataType.FLOAT32, backend=self.backend)
 
         try:
             from ._corepy_rust import (  # type: ignore[import-untyped]
+                array_mean_f32,
+                array_mean_f32_strided,
                 metal_mean_f32,
-                tensor_mean_f32,
-                tensor_mean_f32_strided,
             )
 
             # Use BufferView for dispatch decision
@@ -834,13 +1130,12 @@ class ndarray:
                 result = metal_mean_f32(view.data_ptr, view.element_count)
             elif view.is_contiguous():
                 # Fast path: contiguous f32
-                result = tensor_mean_f32(view.data_ptr, view.element_count)
+                result = array_mean_f32(view.data_ptr, view.element_count)
             else:
                 # Zero-copy path: strided f32
-                result = tensor_mean_f32_strided(
+                result = array_mean_f32_strided(
                     view.data_ptr,
                     list(view.shape),
-                    list(view.shape),  # type: ignore[arg-type]
                     list(view.strides)
                     if view.strides is not None
                     else [s * view.dtype.itemsize for s in get_c_strides(view.shape)],  # type: ignore[arg-type]
@@ -896,7 +1191,7 @@ class ndarray:
 
             # Use strided version for generality
             view = self._get_buffer_view()
-            result = ffi.tensor_max_f32_strided(
+            result = ffi.array_max_f32_strided(
                 view.data_ptr,
                 list(view.shape),
                 list(view.strides)
@@ -946,7 +1241,7 @@ class ndarray:
             from . import _corepy_rust as ffi
 
             view = self._get_buffer_view()
-            result = ffi.tensor_min_f32_strided(
+            result = ffi.array_min_f32_strided(
                 view.data_ptr,
                 list(view.shape),
                 list(view.strides)
@@ -974,19 +1269,17 @@ class ndarray:
             new_data = self._backing_data  # type: ignore[assignment]
         return ndarray(new_data, dtype=self._dtype, backend=self.backend)
 
-    def _to_numpy_internal(self) -> "NDArray[Any]":
+    def _to_numpy_internal(self) -> Any:
         """Internal helper to convert backing_data to NumPy (used during init)."""
+        try:
+            import numpy as np
+        except ImportError:
+            return self._backing_data
+
         if isinstance(self._backing_data, np.ndarray):
             return self._backing_data
         elif isinstance(self._backing_data, list):
-            import struct
-
-            def flatten(items):
-                for x in items:
-                    if isinstance(x, (list, tuple)):
-                        yield from flatten(x)
-                    else:
-                        yield x
+            from .ops.math import _flatten
 
             dtype_map = {
                 DataType.FLOAT32: np.float32,
@@ -996,35 +1289,34 @@ class ndarray:
                 DataType.BOOL: bool,
             }
             np_dtype = dtype_map.get(self._dtype, np.float32)
-            return np.array(list(flatten(self._backing_data)), dtype=np_dtype).reshape(
+            return np.array(_flatten(self._backing_data), dtype=np_dtype).reshape(
                 self.shape
             )
         else:
             return np.array(self._backing_data).reshape(self.shape)
 
-    def to_numpy(self) -> "NDArray[Any]":
+    def to_numpy(self) -> Any:
         """
         Convert the array to a NumPy array.
         Returns:
             NDArray: NumPy array containing the data.
         """
+        try:
+            import numpy as np
+        except ImportError:
+            raise ImportError(
+                "NumPy is required to export corepy.ndarray to numpy format (to_numpy()). "
+                "Please install numpy: pip install numpy"
+            ) from None
+
         # Phase 2: Check if we already have CPU data cached
-        if self._cpu_data is not None:
+        if self._cpu_data is not None and isinstance(self._cpu_data, np.ndarray):
             return self._cpu_data
 
-        # Original logic for backward compatibility
         if isinstance(self._backing_data, np.ndarray):
             return self._backing_data
         elif isinstance(self._backing_data, list):
-            # Same logic as _get_buffer_view for consistency
-            import struct
-
-            def flatten(items):
-                for x in items:
-                    if isinstance(x, (list, tuple)):
-                        yield from flatten(x)
-                    else:
-                        yield x
+            from .ops.math import _flatten
 
             dtype_map = {
                 DataType.FLOAT32: np.float32,
@@ -1034,11 +1326,10 @@ class ndarray:
                 DataType.BOOL: bool,
             }
             np_dtype = dtype_map.get(self._dtype, np.float32)
-            return np.array(list(flatten(self._backing_data)), dtype=np_dtype).reshape(
+            return np.array(_flatten(self._backing_data), dtype=np_dtype).reshape(
                 self.shape
             )
         else:
-            # Fallback for buffer protocol objects
             return np.array(self._backing_data).reshape(self.shape)
 
     def __len__(self) -> int:
@@ -1055,7 +1346,7 @@ class ndarray:
         if isinstance(other, (int, float)):
             other = ndarray([float(other)] * self._element_count, device=self._device)
         elif isinstance(other, ndarray) and other._element_count == 1:
-            # Broadcasting: single-element tensor to match self's size
+            # Broadcasting: single-element array to match self's size
             scalar_val = (
                 other._backing_data[0]
                 if isinstance(other._backing_data, list)
@@ -1071,28 +1362,44 @@ class ndarray:
         if other.backend != self.backend:
             raise BackendError(f"Backend mismatch: {self.backend} vs {other.backend}")
 
-        # Fast path: Use NumPy for small arrays to avoid FFI overhead
-        # print(f"DEBUG: op={op} device={self._device} backend={self.backend} fast={self._should_use_fast_path()}")
-        if self._should_use_fast_path() and other._should_use_fast_path():
-            # print("DEBUG: Using Fast Path")
-            np_a = self.to_numpy()
-            np_b = other.to_numpy()
-            # ... (rest of fast path)
+        if self.shape != other.shape:
+            from .ops.ufunc_engine import _broadcast_pair
 
+            a_bc, b_bc = _broadcast_pair(self, other)
+            return a_bc._binary_op(op, b_bc)
+
+        # Fast path: Native Python for small CPU arrays to avoid FFI overhead
+        if (
+            self._should_use_fast_path()
+            and other._should_use_fast_path()
+            and self.shape == other.shape
+        ):
+            from .ops.math import _flatten
+
+            flat_a = _flatten(self.to_list())
+            flat_b = _flatten(other.to_list())
+            res = None
             if op == "add":
-                result = np_a + np_b
+                res = [x + y for x, y in zip(flat_a, flat_b)]
             elif op == "sub":
-                result = np_a - np_b
+                res = [x - y for x, y in zip(flat_a, flat_b)]
             elif op == "mul":
-                result = np_a * np_b
+                res = [x * y for x, y in zip(flat_a, flat_b)]
             elif op == "div":
-                result = np_a / np_b
-            else:
-                raise ValueError(f"Unknown operation: {op}")
+                res = [x / y for x, y in zip(flat_a, flat_b)]
+            elif op == "power":
+                res = [x**y for x, y in zip(flat_a, flat_b)]
+            elif op == "mod":
+                res = [x % y for x, y in zip(flat_a, flat_b)]
+            elif op == "floor_div":
+                res = [x // y for x, y in zip(flat_a, flat_b)]
 
-            elapsed_ms = (time.perf_counter() - start_time) * 1000
-            record_op(op, elapsed_ms, "NumPy-Fast")
-            return ndarray(result, dtype=self._dtype, backend=self.backend)
+            if res is not None:
+                elapsed_ms = (time.perf_counter() - start_time) * 1000
+                record_op(op, elapsed_ms, "Native-Fast")
+                return ndarray(res, dtype=self._dtype, backend=self.backend).reshape(
+                    self.shape
+                )
 
         # Priority 1: Metal GPU (if available and large enough OR if broadcasting needed)
         # We generally avoid GPU overhead for very small arrays (< 1024 elements)
@@ -1243,13 +1550,13 @@ class ndarray:
 
                 # Dispatch to Rust kernels
                 if op == "add":
-                    ffi.tensor_add_f32(ptr_a, ptr_b, ptr_out, count_a)
+                    ffi.array_add_f32(ptr_a, ptr_b, ptr_out, count_a)
                 elif op == "sub":
-                    ffi.tensor_sub_f32(ptr_a, ptr_b, ptr_out, count_a)
+                    ffi.array_sub_f32(ptr_a, ptr_b, ptr_out, count_a)
                 elif op == "mul":
-                    ffi.tensor_mul_f32(ptr_a, ptr_b, ptr_out, count_a)
+                    ffi.array_mul_f32(ptr_a, ptr_b, ptr_out, count_a)
                 elif op == "div":
-                    ffi.tensor_div_f32(ptr_a, ptr_b, ptr_out, count_a)
+                    ffi.array_div_f32(ptr_a, ptr_b, ptr_out, count_a)
 
                 out_floats = [
                     struct.unpack("f", buf_out[i : i + 4])[0]

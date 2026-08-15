@@ -29,7 +29,7 @@ def test_getitem_slice_basic():
     assert isinstance(sub, cp.ndarray)
     assert sub.shape == (3,)
     np.testing.assert_array_equal(
-        sub.to_numpy(), np.array([20, 30, 40], dtype=np.float32)
+        sub.to_list(), np.array([20, 30, 40], dtype=np.float32)
     )
 
 
@@ -40,7 +40,7 @@ def test_getitem_slice_step():
 
     assert isinstance(sub, cp.ndarray)
     assert sub.shape == (3,)
-    np.testing.assert_array_equal(sub.to_numpy(), np.array([1, 3, 5], dtype=np.float32))
+    np.testing.assert_array_equal(sub.to_list(), np.array([1, 3, 5], dtype=np.float32))
 
 
 def test_getitem_2d_row():
@@ -50,7 +50,7 @@ def test_getitem_2d_row():
 
     assert isinstance(row, cp.ndarray)
     assert row.shape == (2,)
-    np.testing.assert_array_equal(row.to_numpy(), np.array([3, 4], dtype=np.float32))
+    np.testing.assert_array_equal(row.to_list(), np.array([3, 4], dtype=np.float32))
 
 
 def test_getitem_2d_element():

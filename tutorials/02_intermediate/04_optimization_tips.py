@@ -24,7 +24,7 @@ TYPES OF RECOMMENDATIONS:
   1. Backend Switching → "Use GPU for this large matmul"
   2. Operation Batching → "Combine these 100 small adds"
   3. Data Type Changes → "Use int32 instead of float64"
-  4. Algorithm Selection → "Use fast path for small tensors"
+  4. Algorithm Selection → "Use fast path for small arrays"
 
 Let's see it in action!
 """)
@@ -40,7 +40,7 @@ print("=" * 70)
 cp.enable_profiling()
 
 # This is a large matmul running on CPU
-large_data = cp.tensor([float(i) for i in range(10000)])
+large_data = cp.array([float(i) for i in range(10000)])
 result = large_data.matmul(large_data)
 
 # Get recommendations
@@ -85,7 +85,7 @@ print("=" * 70)
 cp.enable_profiling()
 
 # Anti-pattern: Many small operations in a loop
-data = cp.tensor([1.0, 2.0, 3.0, 4.0, 5.0])
+data = cp.array([1.0, 2.0, 3.0, 4.0, 5.0])
 results = []
 
 for i in range(100):
@@ -112,7 +112,7 @@ print("""
           results.append(temp)
     
     AFTER (1 vectorized operation):
-      offsets = cp.tensor(list(range(100)))
+      offsets = cp.array(list(range(100)))
       results = data.unsqueeze(0) + offsets.unsqueeze(1)
       # Shape: (100, 5) - all results at once!
   
@@ -132,7 +132,7 @@ print("=" * 70)
 cp.enable_profiling()
 
 # Using float64 when float32 would suffice
-data_f64 = cp.tensor([1.0, 2.0, 3.0], dtype=cp.Float64)
+data_f64 = cp.array([1.0, 2.0, 3.0], dtype=cp.Float64)
 result_f64 = data_f64 * 2.0
 
 # Profile shows we're using 64-bit floats unnecessarily
@@ -145,7 +145,7 @@ print("""
   Impact: 1.5-2x faster, 50% less memory
   
   Analysis:
-    Your tensor uses float64 (8 bytes per element).
+    Your array uses float64 (8 bytes per element).
     For most ML/data tasks, float32 (4 bytes) is sufficient.
   
   Benefits:
@@ -154,8 +154,8 @@ print("""
     ✅ Better cache utilization
   
   Code Change:
-    BEFORE: data = cp.tensor([1.0, 2.0], dtype=cp.Float64)
-    AFTER:  data = cp.tensor([1.0, 2.0], dtype=cp.Float32)
+    BEFORE: data = cp.array([1.0, 2.0], dtype=cp.Float64)
+    AFTER:  data = cp.array([1.0, 2.0], dtype=cp.Float32)
     
   When to use float64:
     - Scientific computing requiring high precision
@@ -183,7 +183,7 @@ print("\n🐌 BEFORE OPTIMIZATION:")
 cp.enable_profiling()
 
 with ProfileContext("before"):
-    data = cp.tensor([float(i) for i in range(1000)], dtype=cp.Float64)
+    data = cp.array([float(i) for i in range(1000)], dtype=cp.Float64)
 
     # Multiple separate operations
     temp1 = data * 2.0
@@ -212,7 +212,7 @@ cp.enable_profiling()
 
 with ProfileContext("after"):
     # Using float32 (recommendation #1)
-    data = cp.tensor([float(i) for i in range(1000)], dtype=cp.Float32)
+    data = cp.array([float(i) for i in range(1000)], dtype=cp.Float32)
 
     # Fused operations (recommendation #2)
     temp = data * 2.0 + 5.0 - 1.0
@@ -222,6 +222,7 @@ with ProfileContext("after"):
 
 after_report = cp.profile_report(context="after")
 print(after_report)
+
 
 print("\n📊 PERFORMANCE IMPROVEMENT:")
 print("""

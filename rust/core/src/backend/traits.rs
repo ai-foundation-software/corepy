@@ -54,8 +54,8 @@ pub enum DataType {
 pub struct BackendCapabilities {
     /// Supported data types
     pub supported_dtypes: Vec<DataType>,
-    /// Maximum tensor size in bytes
-    pub max_tensor_bytes: Option<usize>,
+    /// Maximum array size in bytes
+    pub max_array_bytes: Option<usize>,
     /// Whether async execution is supported
     pub supports_async: bool,
     /// Whether in-place operations are supported

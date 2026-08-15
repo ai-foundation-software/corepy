@@ -38,7 +38,10 @@ YOUR MISSION:
   Find and fix the bottlenecks!
 """)
 
-input("\n📌 Press ENTER to start profiling...")
+# input("\n📌 Press ENTER to start profiling...")
+# input("\n📌 Press ENTER to see optimization recommendations...")
+# input("\n📌 Press ENTER to see the optimized version...")
+# input("\n📌 Press ENTER to see before/after comparison...")
 
 
 # ============================================================================
@@ -53,7 +56,7 @@ print("=" * 70)
 def load_batch(batch_id, batch_size):
     """Load training data (simulated)"""
     # Simulating data loading
-    data = cp.tensor([float(i) for i in range(batch_size)])
+    data = cp.array([float(i) for i in range(batch_size)])
     return data
 
 
@@ -182,7 +185,7 @@ print("""
    - FIX: Fuse into fewer operations
 
 3. UNNECESSARY COPIES:
-   - backward_pass creates unnecessary intermediate tensors
+   - backward_pass creates unnecessary intermediate arrays
    - FIX: Use in-place operations where possible
 
 4. DATA LOADING IN LOOP:
@@ -330,7 +333,7 @@ print("""
 
 1. ✅ Fused mean/std computation (1 pass instead of 2)
 2. ✅ Fused arithmetic operations in forward pass
-3. ✅ Removed unnecessary tensor copies
+3. ✅ Removed unnecessary array copies
 4. ✅ Preloaded batches (eliminated repeated I/O)
 
 RESULT: 10x speedup achievable with these optimizations!
@@ -356,7 +359,7 @@ print("""
 
 3. MINIMIZE DATA MOVEMENT:
    - Avoid unnecessary copies
-   - Reuse tensors when possible
+   - Reuse arrays when possible
    - Preload data if memory allows
 
 4. BATCH OPERATIONS:

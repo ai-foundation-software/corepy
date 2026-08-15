@@ -20,7 +20,7 @@ def run_benchmark():
 
     for m, n in sizes:
         try:
-            # Create random tensors
+            # Create random arrays
             a_np = np.random.randn(m, n).astype(np.float32)
             b_np = np.random.randn(n, m).astype(np.float32)
 

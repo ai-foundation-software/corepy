@@ -5,7 +5,7 @@ on:
     types: [published]
   push:
     tags:
-      - 'v*'
+      - "v*"
   workflow_dispatch:
 
 permissions:
@@ -15,256 +15,217 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  linux_build:
-    name: Linux / ${{ matrix.target }}
+
+# ───────────────── Linux Wheels (CUDA/manylinux) ─────────────────
+
+  linux:
+    name: Linux Wheel
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        target: [x86_64]
     steps:
       - uses: actions/checkout@v4
-      
-      # Use uv for caching and tool management even in the manylinux container setup if possible, 
-      # but maturin-action handles its own environment. We'll keep it simple here.
-      - uses: PyO3/maturin-action@v1
-        with:
-          manylinux: 2_28
-          command: build
-          args: --release --out dist --interpreter 3.9 3.10 3.11 3.12 3.13
-          target: ${{ matrix.target }}
-          before-script-linux: |
-            # Minimal deps for building C++ extensions inside manylinux
-            # manylinux_2_28 uses dnf (AlmaLinux 8)
-            if command -v dnf &> /dev/null; then
-              dnf install -y openblas-devel cmake ninja-build libatomic
-            elif command -v apt-get &> /dev/null; then
-              # Install cross-compiler for aarch64 if we are on an apt system (Ubuntu Jammy in cross image)
-              apt-get update && apt-get install -y libopenblas-dev cmake ninja-build
-              if [ "${{ matrix.target }}" == "aarch64" ] && [ "$(uname -m)" != "aarch64" ]; then
-                 apt-get install -y g++-aarch64-linux-gnu gcc-aarch64-linux-gnu
-              fi
-            elif command -v yum &> /dev/null; then
-              yum install -y openblas-devel cmake ninja-build
-            fi
-            
-            # Install uv
-            curl -LsSf https://astral.sh/uv/install.sh | sh
-            export PATH="$HOME/.local/bin:$PATH"
 
-            # Use a venv for build tools to avoid system pollution
-            uv venv .build-venv
-            source .build-venv/bin/activate
-            
-            # Upgrade pip as requested
-            uv pip install --upgrade pip
-            
-            # Install build dependencies
-            uv pip install pybind11 cmake ninja
-            
-            PYBIND11_CMAKE_DIR=$(python3 -c "import pybind11; print(pybind11.get_cmake_dir())")
-            
-            # Detect cross-compilation (host arch != target arch)
-            HOST_ARCH=$(uname -m)
-            TARGET_ARCH="${{ matrix.target }}"
-            
-            CMAKE_EXTRA_ARGS=""
-            if [ "$HOST_ARCH" != "$TARGET_ARCH" ]; then
-              echo "Cross-compiling C++ kernels: $HOST_ARCH -> $TARGET_ARCH"
-              CMAKE_EXTRA_ARGS="-DCMAKE_SYSTEM_NAME=Linux -DCMAKE_SYSTEM_PROCESSOR=$TARGET_ARCH"
-              
-              # For aarch64 on Ubuntu-based cross images (like manylinux_2_28-cross), 
-              # we likely have aarch64-linux-gnu-g++ which is newer (GCC 11+ on Jammy)
-              # The 'unknown' variant might be an older toolchain provided by the image
-              
-              if command -v aarch64-linux-gnu-g++ &> /dev/null; then
-                  echo "Found aarch64-linux-gnu-g++, using it."
-                  CMAKE_EXTRA_ARGS="$CMAKE_EXTRA_ARGS -DCMAKE_C_COMPILER=aarch64-linux-gnu-gcc"
-                  CMAKE_EXTRA_ARGS="$CMAKE_EXTRA_ARGS -DCMAKE_CXX_COMPILER=aarch64-linux-gnu-g++"
-              elif command -v ${TARGET_ARCH}-unknown-linux-gnu-g++ &> /dev/null; then
-                  echo "Found ${TARGET_ARCH}-unknown-linux-gnu-g++, using it."
-                  CMAKE_EXTRA_ARGS="$CMAKE_EXTRA_ARGS -DCMAKE_C_COMPILER=${TARGET_ARCH}-unknown-linux-gnu-gcc"
-                  CMAKE_EXTRA_ARGS="$CMAKE_EXTRA_ARGS -DCMAKE_CXX_COMPILER=${TARGET_ARCH}-unknown-linux-gnu-g++"
-              fi
-              
-              # Ensure libatomic is linked for aarch64 if needed (often required for C++20 atomic support on some platforms)
-              # But let's rely on standard detection first.
-            fi
-            
-            # Build C++ Kernels
-            # Explicitly pass Python_EXECUTABLE to help CMake find the venv python
-            cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release \
-                -Dpybind11_DIR="$PYBIND11_CMAKE_DIR" \
-                -DPython_EXECUTABLE=$(pwd)/.build-venv/bin/python \
-                $CMAKE_EXTRA_ARGS
-            cmake --build build --config Release
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: wheels-linux-${{ matrix.target }}
-          path: dist/*.whl
-
-  host_build:
-    name: ${{ matrix.os }} / ${{ matrix.target }} / ${{ matrix.python-version }}
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          # Windows x86_64
-          - os: windows-latest
-            target: x86_64-pc-windows-msvc
-            python-version: "3.9"
-            openblas_url: "https://github.com/OpenMathLib/OpenBLAS/releases/download/v0.3.28/OpenBLAS-0.3.28-x64.zip"
-          - os: windows-latest
-            target: x86_64-pc-windows-msvc
-            python-version: "3.10"
-            openblas_url: "https://github.com/OpenMathLib/OpenBLAS/releases/download/v0.3.28/OpenBLAS-0.3.28-x64.zip"
-          - os: windows-latest
-            target: x86_64-pc-windows-msvc
-            python-version: "3.11"
-            openblas_url: "https://github.com/OpenMathLib/OpenBLAS/releases/download/v0.3.28/OpenBLAS-0.3.28-x64.zip"
-          - os: windows-latest
-            target: x86_64-pc-windows-msvc
-            python-version: "3.12"
-            openblas_url: "https://github.com/OpenMathLib/OpenBLAS/releases/download/v0.3.28/OpenBLAS-0.3.28-x64.zip"
-          - os: windows-latest
-            target: x86_64-pc-windows-msvc
-            python-version: "3.13"
-            openblas_url: "https://github.com/OpenMathLib/OpenBLAS/releases/download/v0.3.28/OpenBLAS-0.3.28-x64.zip"
-          
-          # macOS ARM64 (Apple Silicon)
-          - os: macos-14
-            target: aarch64-apple-darwin
-            python-version: "3.9"
-          - os: macos-14
-            target: aarch64-apple-darwin
-            python-version: "3.10"
-          - os: macos-14
-            target: aarch64-apple-darwin
-            python-version: "3.11"
-          - os: macos-14
-            target: aarch64-apple-darwin
-            python-version: "3.12"
-          - os: macos-14
-            target: aarch64-apple-darwin
-            python-version: "3.13"
-
-    steps:
-      - uses: actions/checkout@v4
-      
       - name: Install uv
         uses: astral-sh/setup-uv@v5
         with:
           enable-cache: true
-          cache-suffix: "py${{ matrix.python-version }}"
 
-      - name: Set up Python ${{ matrix.python-version }}
-        run: uv python install ${{ matrix.python-version }}
-
-      - name: Install Rust Toolchain
-        uses: dtolnay/rust-toolchain@stable
+      - name: Build wheels
+        uses: PyO3/maturin-action@v1
         with:
-          targets: ${{ matrix.target }}
+          target: x86_64
+          manylinux: 2_28
+          command: build
+          # No --interpreter list needed, abi3 builds one generic cp39-abi3 wheel limit
+          args: --release --features cuda --out dist --auditwheel skip --manifest-path rust/core/Cargo.toml
+          before-script-linux: |
+            # 1. Install system dependencies (OpenBLAS and CUDA Toolkit)
+            if command -v dnf &> /dev/null; then
+              dnf install -y openblas-devel libatomic dnf-plugins-core
+              dnf config-manager --add-repo https://developer.download.nvidia.com/compute/cuda/repos/rhel8/x86_64/cuda-rhel8.repo
+              dnf install -y cuda-toolkit-12-6
+            elif command -v apt-get &> /dev/null; then
+              apt-get update && apt-get install -y libopenblas-dev nvidia-cuda-toolkit
+            fi
 
-      # --- Dependencies & C++ Build ---
+            # 2. Setup uv for fast Python toolchain building if needed
+            curl -LsSf https://astral.sh/uv/install.sh | sh
+            export PATH="$HOME/.local/bin:$PATH"
 
-      - name: Setup OpenBLAS & cmake (macOS)
-        if: runner.os == 'macOS'
+      - name: Install patchelf
+        run: sudo apt-get update && sudo apt-get install -y patchelf
+
+      - name: Repair wheels with auditwheel
         run: |
-          brew install openblas cmake ninja
-          echo "CMAKE_PREFIX_PATH=$(brew --prefix openblas)" >> $GITHUB_ENV
-          echo "LIBRARY_PATH=$(brew --prefix openblas)/lib:$LIBRARY_PATH" >> $GITHUB_ENV
+          mkdir -p dist_repaired
+          for whl in dist/*.whl; do
+            uvx auditwheel repair "$whl" --exclude libcuda.so.1 --plat manylinux_2_28_x86_64 -w dist_repaired
+          done
+          rm dist/*.whl
+          mv dist_repaired/*.whl dist/
 
-      - name: Setup OpenBLAS (Windows)
-        if: runner.os == 'Windows'
-        shell: bash
-        run: |
-          # Cache OpenBLAS download could be improved here, but keep simple for now
-          curl -L -o openblas.zip ${{ matrix.openblas_url }}
-          unzip -q openblas.zip -d openblas
-          echo "OPENBLAS_DIR=${{ github.workspace }}/openblas" >> $GITHUB_ENV
-          echo "CMAKE_PREFIX_PATH=${{ github.workspace }}/openblas" >> $GITHUB_ENV
-          echo "${{ github.workspace }}/openblas/bin" >> $GITHUB_PATH
-
-      - name: Sync Dev Dependencies
-        # This installs pybind11, cmake, ninja, maturin etc into the uv environment
-        run: uv sync --all-extras --group dev --no-install-project
-
-      - name: Build C++ Kernels
-        shell: bash
-        run: |
-          source .venv/bin/activate || source .venv/Scripts/activate
-          
-          # pybind11 is in the uv venv
-          PYBIND11_CMAKE_DIR=$(python -c "import pybind11; print(pybind11.get_cmake_dir())")
-          echo "pybind11 found at: $PYBIND11_CMAKE_DIR"
-          
-          # Configure CMake
-          CMAKE_ARGS="-DCMAKE_BUILD_TYPE=Release -Dpybind11_DIR=$PYBIND11_CMAKE_DIR"
-          
-          if [[ "$RUNNER_OS" == "Windows" ]]; then
-             cmake -S . -B build $CMAKE_ARGS
-          else
-             cmake -S . -B build -G Ninja $CMAKE_ARGS
-          fi
-          
-          cmake --build build --config Release
-
-      - name: Post-Build Metal (macOS)
-        if: runner.os == 'macOS'
-        run: |
-          xcrun -sdk macosx metal -v -c csrc/src/metal/kernels.metal -o build/csrc/kernels.air
-          xcrun -sdk macosx metallib build/csrc/kernels.air -o build/csrc/default.metallib
-          cp build/csrc/default.metallib corepy/default.metallib
-
-      - name: Build Wheels
-        shell: bash
-        run: |
-          source .venv/bin/activate || source .venv/Scripts/activate
-          
-          # Prevent uv from trying to build/install the project itself
-          maturin build --release --out dist \
-            --manifest-path rust/core/Cargo.toml \
-            --target ${{ matrix.target }}
 
       - uses: actions/upload-artifact@v4
         with:
-          name: wheels-${{ matrix.os }}-${{ matrix.python-version }}
+          name: wheels-linux
           path: dist/*.whl
 
-  build_sdist:
-    name: Build sdist
+
+# ───────────────── Windows Wheels (CUDA) ─────────────────
+
+  windows:
+    name: Windows Wheel
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cache Rust
+        uses: Swatinem/rust-cache@v2
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Install Python
+        run: uv python install 3.12
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+
+      - name: Setup CUDA
+        uses: Jimver/cuda-toolkit@v0.2.30
+        with:
+          cuda: "12.6.0"
+          use-github-cache: true
+
+      - name: Setup OpenBLAS
+        shell: bash
+        run: |
+          curl -L -o openblas.zip https://github.com/OpenMathLib/OpenBLAS/releases/download/v0.3.28/OpenBLAS-0.3.28-x64.zip
+          unzip -q openblas.zip -d openblas
+          echo "OPENBLAS_DIR=${{ github.workspace }}/openblas" >> $GITHUB_ENV
+          echo "${{ github.workspace }}/openblas/bin" >> $GITHUB_PATH
+
+      - name: Build wheel
+        shell: bash
+        run: |
+          uv venv .venv
+          source .venv/Scripts/activate
+          uv pip install maturin
+
+          # Build one abi3 wheel (py39-none-win_amd64)
+          maturin build \
+            --release \
+            --manifest-path rust/core/Cargo.toml \
+            --target x86_64-pc-windows-msvc \
+            --out dist \
+            --features cuda
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wheels-windows
+          path: dist/*.whl
+
+
+# ───────────────── macOS Wheels (Metal) ─────────────────
+
+  macos:
+    name: macOS Wheel
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cache Rust
+        uses: Swatinem/rust-cache@v2
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Install Python
+        run: uv python install 3.12
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin
+
+      - name: Install OpenBLAS
+        run: brew install openblas
+
+      - name: Build wheel
+        run: |
+          uv venv .venv
+          source .venv/bin/activate
+          uv pip install maturin
+
+          # Build one abi3 wheel (py39-none-macosx_11_0_arm64)
+          maturin build \
+            --release \
+            --manifest-path rust/core/Cargo.toml \
+            --target aarch64-apple-darwin \
+            --out dist \
+            --features metal
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wheels-macos
+          path: dist/*.whl
+
+
+# ───────────────── Source Distribution (sdist) ─────────────────
+
+  sdist:
+    name: Source Distribution
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      
       - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          
       - run: uv build --sdist --out-dir dist
+
       - uses: actions/upload-artifact@v4
         with:
           name: sdist
           path: dist/*.tar.gz
 
+
+# ───────────────── Publish to PyPI ─────────────────
+
   publish:
-    name: Publish to PyPI
-    needs: [linux_build, host_build, build_sdist]
+    name: Publish
+    needs: [linux, windows, macos, sdist]
     runs-on: ubuntu-latest
+    # Only run this on tagged pushes starting with v (e.g., v0.3.0)
     if: startsWith(github.ref, 'refs/tags/v')
+
     environment:
       name: pypi
-      url: https://pypi.org/p/corepy
+      url: https://pypi.org/p/corepy-ai
+
     permissions:
-      id-token: write
+      id-token: write # Required for trusted publishing (OIDC)
+
     steps:
+      # Download all artifacts into 'dist'
       - uses: actions/download-artifact@v4
         with:
           pattern: wheels-*
           path: dist
           merge-multiple: true
+
       - uses: actions/download-artifact@v4
         with:
           name: sdist
           path: dist
-          merge-multiple: true
-      - uses: pypa/gh-action-pypi-publish@release/v1
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
         with:
           packages-dir: dist

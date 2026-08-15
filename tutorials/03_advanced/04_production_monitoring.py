@@ -49,7 +49,7 @@ SAMPLE_RATE = 0.01  # Profile 1% of requests
 def handle_api_request(request_id):
     """Simulated API request handler"""
     # Your business logic here
-    data = cp.tensor([float(i) for i in range(100)])
+    data = cp.array([float(i) for i in range(100)])
     result = (data * 2.0 + 5.0).mean()
     return result
 
@@ -113,7 +113,7 @@ def process_request(request_data):
     """Request processing with variable latency"""
     # Simulate variable processing time
     size = random.randint(10, 1000)
-    data = cp.tensor([float(i) for i in range(size)])
+    data = cp.array([float(i) for i in range(size)])
     result = data.mean()
     return result
 
@@ -190,7 +190,7 @@ metrics = defaultdict(lambda: {"count": 0, "total_time": 0, "max_time": 0})
 @profile_operation
 def monitored_operation(data_size):
     """Operation we're monitoring in production"""
-    data = cp.tensor([float(i) for i in range(data_size)])
+    data = cp.array([float(i) for i in range(data_size)])
     return data.sum()
 
 

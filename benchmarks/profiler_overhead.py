@@ -10,7 +10,8 @@ import corepy as cp
 
 def measure_overhead():
     iterations = 100_000
-    data = cp.Tensor([1.0, 2.0, 3.0, 4.0, 5.0])
+    # Create a small array
+    data = cp.array([1.0, 2.0, 3.0, 4.0, 5.0])
 
     print(f"Running {iterations} iterations...")
 

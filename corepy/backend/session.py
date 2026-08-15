@@ -1,6 +1,6 @@
 from typing import Dict
 
-from .backend import Backend, CPUBackend, GPUBackend
+from .backend import Backend, CPUBackend, CUDABackend, MetalBackend
 from .device import DeviceInfo, detect_devices
 from .types import BackendType
 
@@ -27,8 +27,10 @@ class Session:
 
         # Initialize default backends
         self._backends[BackendType.CPU] = CPUBackend()
-        if self._device_info.gpu_count > 0:
-            self._backends[BackendType.GPU] = GPUBackend()
+        if self._device_info.has_cuda:
+            self._backends[BackendType.CUDA] = CUDABackend()
+        if self._device_info.has_metal:
+            self._backends[BackendType.METAL] = MetalBackend()
 
         self._initialized = True
 

@@ -123,7 +123,7 @@ import corepy as cp
 cp.enable_profiling()
 
 # Run your data pipeline
-data = cp.tensor([float(i) for i in range(10000)])
+data = cp.array([float(i) for i in range(10000)])
 normalized = (data - data.mean()) / data.std()
 result = normalized.sum()
 
@@ -209,7 +209,7 @@ import corepy as cp
 # BEFORE: Unoptimized code
 cp.enable_profiling()
 
-data = cp.tensor([float(i) for i in range(100000)])
+data = cp.array([float(i) for i in range(100000)])
 for i in range(100):
     temp = data + i  # 100 separate operations!
     
@@ -236,7 +236,7 @@ for rec in recommendations:
 #            temp = data + i
 #      
 #      AFTER:
-#        offsets = cp.tensor(list(range(100)))
+#        offsets = cp.array(list(range(100)))
 #        results = data.unsqueeze(0) + offsets.unsqueeze(1)
 
 cp.clear_profile()
@@ -244,7 +244,7 @@ cp.clear_profile()
 # AFTER: Optimized based on recommendation
 cp.enable_profiling()
 
-offsets = cp.tensor(list(range(100)))
+offsets = cp.array(list(range(100)))
 results = data.unsqueeze(0) + offsets.unsqueeze(1)  # 1 operation!
 
 # Verify improvement

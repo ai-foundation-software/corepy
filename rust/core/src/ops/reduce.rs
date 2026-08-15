@@ -14,18 +14,7 @@
 const PARALLEL_THRESHOLD_F32: usize = 1_000_000;
 const PARALLEL_THRESHOLD_I32: usize = 1_000_000;
 
-// FFI declaration for C++ kernels (optional)
-#[cfg(feature = "cpp_kernels")]
-extern "C" {
-    pub fn all_bool_cpu(data_ptr: *const u8, count: usize) -> bool;
-    pub fn any_bool_cpu(data_ptr: *const u8, count: usize) -> bool;
-    pub fn sum_f32_cpu(data_ptr: *const f32, count: usize) -> f32;
-    pub fn sum_i32_cpu(data_ptr: *const i32, count: usize) -> i32;
-    pub fn mean_f32_cpu(data_ptr: *const f32, count: usize) -> f32;
-}
-
-// Rust fallback implementations
-#[cfg(not(feature = "cpp_kernels"))]
+// Rust implementations
 #[inline]
 unsafe fn all_bool_cpu(data_ptr: *const u8, count: usize) -> bool {
     for i in 0..count {
@@ -36,7 +25,6 @@ unsafe fn all_bool_cpu(data_ptr: *const u8, count: usize) -> bool {
     true
 }
 
-#[cfg(not(feature = "cpp_kernels"))]
 #[inline]
 unsafe fn any_bool_cpu(data_ptr: *const u8, count: usize) -> bool {
     for i in 0..count {
@@ -47,7 +35,6 @@ unsafe fn any_bool_cpu(data_ptr: *const u8, count: usize) -> bool {
     false
 }
 
-#[cfg(not(feature = "cpp_kernels"))]
 #[inline]
 unsafe fn sum_f32_cpu(data_ptr: *const f32, count: usize) -> f32 {
     let mut sum = 0.0;
@@ -57,7 +44,6 @@ unsafe fn sum_f32_cpu(data_ptr: *const f32, count: usize) -> f32 {
     sum
 }
 
-#[cfg(not(feature = "cpp_kernels"))]
 #[inline]
 unsafe fn sum_i32_cpu(data_ptr: *const i32, count: usize) -> i32 {
     let mut sum = 0i32;
@@ -67,8 +53,8 @@ unsafe fn sum_i32_cpu(data_ptr: *const i32, count: usize) -> i32 {
     sum
 }
 
-#[cfg(not(feature = "cpp_kernels"))]
 #[inline]
+#[allow(dead_code)]
 unsafe fn mean_f32_cpu(data_ptr: *const f32, count: usize) -> f32 {
     if count == 0 {
         return 0.0;
@@ -232,6 +218,7 @@ unsafe fn parallel_sum_i32_cpu(data_ptr: *const i32, count: usize) -> i32 {
 /// Caller must ensure:
 /// - data_ptr is valid for `count` f32 elements
 /// - data_ptr must be aligned for f32
+#[allow(dead_code)]
 pub unsafe fn mean_f32_cpu_dispatch(data_ptr: *const f32, count: usize) -> f32 {
     use crate::scheduler::arena::with_arena;
 

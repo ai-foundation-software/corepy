@@ -17,7 +17,7 @@ def test_concatenate_1d():
     assert isinstance(res, cp.ndarray)
     assert res.shape == (5,)
     np.testing.assert_array_equal(
-        res.to_numpy(), np.array([1, 2, 3, 4, 5], dtype=np.float32)
+        res.to_list(), np.array([1, 2, 3, 4, 5], dtype=np.float32)
     )
 
 
@@ -28,7 +28,7 @@ def test_concatenate_list_input():
     # Plan says: "Convert all inputs to ndarray if needed".
     res = cp.concatenate(([1, 2], [3]))
     assert res.shape == (3,)
-    assert res.to_numpy().tolist() == [1.0, 2.0, 3.0]
+    assert res.to_list() == [1.0, 2.0, 3.0]
 
 
 def test_concatenate_2d_axis0():
@@ -39,7 +39,7 @@ def test_concatenate_2d_axis0():
 
     assert res.shape == (3, 2)
     expected = np.array([[1, 2], [3, 4], [5, 6]], dtype=np.float32)
-    np.testing.assert_array_equal(res.to_numpy(), expected)
+    np.testing.assert_array_equal(res.to_list(), expected)
 
 
 def test_concatenate_2d_axis1():
@@ -50,4 +50,4 @@ def test_concatenate_2d_axis1():
 
     assert res.shape == (2, 3)
     expected = np.array([[1, 2, 5], [3, 4, 6]], dtype=np.float32)
-    np.testing.assert_array_equal(res.to_numpy(), expected)
+    np.testing.assert_array_equal(res.to_list(), expected)

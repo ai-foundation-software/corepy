@@ -43,10 +43,10 @@ arr = np.array([0, 1, 2, 3, 4, 5], dtype=np.float32)
 # Memory layout:  ^     ^     ^   (strides = 8 bytes, not 4)
 sliced = arr[::2]
 
-# BUG: Tensor extracts ptr to '0', passes count=3
+# BUG: Array extracts ptr to '0', passes count=3
 # C++ reads:  arr[0], arr[1], arr[2]  (wrong!)
 # Expected:   arr[0], arr[2], arr[4]  (correct)
-result = cp.Tensor(sliced).sum()  # Returns 3.0, should be 6.0
+result = cp.Array(sliced).sum()  # Returns 3.0, should be 6.0
 ```
 
 **Data Flow**:
@@ -55,7 +55,7 @@ Python: sliced_arr[::2]  → strides=(8,), shape=(3,)
    ↓
 _get_buffer_pointer()    → Extracts ptr, ignores strides
    ↓
-Rust FFI                 → tensor_sum_f32(ptr, count=3)
+Rust FFI                 → array_sum_f32(ptr, count=3)
    ↓
 C++ AVX2 Kernel          → Assumes dense: ptr[0], ptr[1], ptr[2]
    ↓
@@ -104,7 +104,7 @@ full_arr = np.array([0, 1, 2, 3, 4, 5], dtype=np.float32)
 sliced = full_arr[::2]
 
 # Expected: sum([0, 2, 4]) = 6.0
-result = cp.Tensor(sliced).sum()._backing_data[0]
+result = cp.Array(sliced).sum()._backing_data[0]
 
 assert result == 6.0  # ✅ Passes after fix
 ```
@@ -173,14 +173,14 @@ Tests:
 3. **Device Abstraction**:
    ```python
    # Unified API for CPU/GPU
-   tensor.to("cuda:0")  # Explicit H2D transfer
-   tensor.sum()         # Dispatches to CUDA kernel
+   array.to("cuda:0")  # Explicit H2D transfer
+   array.sum()         # Dispatches to CUDA kernel
    ```
 
 4. **DLPack Interop**:
    ```python
    # Zero-copy with PyTorch/JAX
-   torch_tensor = torch.from_dlpack(corepy_tensor)
+   torch_array = torch.from_dlpack(corepy_array)
    ```
 
 ### Migration Roadmap
@@ -251,7 +251,7 @@ arr.T          # Transposed (non-C-contiguous)
 
 ⚠️ **Device transfers**:
 ```python
-cpu_tensor.to("cuda:0")  # H2D copy (explicit)
+cpu_array.to("cuda:0")  # H2D copy (explicit)
 ```
 
 ### Unsafe Patterns to Avoid
@@ -259,13 +259,13 @@ cpu_tensor.to("cuda:0")  # H2D copy (explicit)
 ❌ **Assuming no copies**:
 ```python
 # Bad: Hidden copy, no visibility
-result = tensor.sum()
+result = array.sum()
 ```
 
 ✅ **Explicit contiguity**:
 ```python
 # Good: Force contiguous before expensive ops
-tensor = cp.Tensor(np.ascontiguousarray(arr))
+array = cp.Array(np.ascontiguousarray(arr))
 ```
 
 ---
@@ -286,7 +286,7 @@ arr = np.array([[1, 2], [3, 4]], dtype=np.int32)
 ```
 
 ### Industry Standards
-- **DLPack**: Cross-framework tensor exchange (PyTorch, JAX, TensorFlow)
+- **DLPack**: Cross-framework array exchange (PyTorch, JAX, ArrayFlow)
 - **Python Buffer Protocol**: PEP 3118
 - **CUDA Memory Types**: `cudaMalloc`, `cudaHostAlloc`, `cudaMallocManaged`
 

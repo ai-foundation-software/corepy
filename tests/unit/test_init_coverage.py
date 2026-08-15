@@ -41,14 +41,14 @@ class TestInitFunctions:
         a = cp.array([1, 2])
         b = cp.array([3, 4])
         c = cp.concatenate([a, b])
-        assert np.array_equal(c.to_numpy(), np.array([1, 2, 3, 4]))
+        assert np.array_equal(c.to_list(), np.array([1, 2, 3, 4]))
 
     def test_concatenate_mixed(self):
         a = cp.array([1, 2])
         b = [3, 4]
         c = np.array([5, 6])
         res = cp.concatenate([a, b, c])
-        assert np.array_equal(res.to_numpy(), np.array([1, 2, 3, 4, 5, 6]))
+        assert np.array_equal(res.to_list(), np.array([1, 2, 3, 4, 5, 6]))
 
     def test_concatenate_errors(self):
         with pytest.raises(ValueError):
@@ -57,12 +57,18 @@ class TestInitFunctions:
     def test_compute_stats_all(self):
         arr = cp.array([1.0, 2.0, 3.0, 4.0, 5.0])
         stats = cp.compute_stats(arr, ["mean", "sum", "std", "max", "min"])
-        # Use to_numpy().item() for reliable scalar extraction
-        assert stats["mean"].to_numpy().item() == 3.0
-        assert stats["sum"].to_numpy().item() == 15.0
-        assert abs(stats["std"].to_numpy().item() - 1.414) < 0.1
-        assert stats["max"].to_numpy().item() == 5.0
-        assert stats["min"].to_numpy().item() == 1.0
+
+        def _val(v):
+            """Extract numeric value from ndarray or scalar."""
+            if hasattr(v, "to_list"):
+                return np.array(v.to_list()).item()
+            return float(v)
+
+        assert _val(stats["mean"]) == 3.0
+        assert _val(stats["sum"]) == 15.0
+        assert abs(_val(stats["std"]) - 1.414) < 0.1
+        assert _val(stats["max"]) == 5.0
+        assert _val(stats["min"]) == 1.0
 
     def test_compute_stats_error(self):
         arr = cp.array([1])
@@ -71,21 +77,21 @@ class TestInitFunctions:
 
     def test_dtype_helpers(self):
         # Access internal function directly from the module
-        assert cp._dtype_from_numpy(np.float32) == DataType.FLOAT32
-        assert cp._dtype_from_numpy(np.dtype("float32")) == DataType.FLOAT32
+        assert cp._dtype_from_string(np.float32.__name__) == DataType.FLOAT32
+        assert cp._dtype_from_string("float32") == DataType.FLOAT32
         # Coverage for fallback
-        assert cp._dtype_from_numpy("unknown") == DataType.FLOAT32
+        assert cp._dtype_from_string("unknown") == DataType.FLOAT32
 
     def test_factory_functions(self):
         # zeros
         z = cp.zeros((2, 2))
         assert z.shape == (2, 2)
-        assert np.all(z.to_numpy() == 0)
+        assert np.all(np.array(z.to_list()) == 0)
 
         # ones
         o = cp.ones(3)
         assert o.shape == (3,)
-        assert np.all(o.to_numpy() == 1)
+        assert np.all(np.array(o.to_list()) == 1)
 
         # empty
         e = cp.empty((2, 2))
@@ -93,14 +99,14 @@ class TestInitFunctions:
 
         # arange
         a = cp.arange(0, 5)
-        assert np.all(a.to_numpy() == np.arange(0, 5))
+        assert np.all(a.to_list() == np.arange(0, 5))
 
     def test_top_level_wrappers(self):
         # add
         a = cp.array([1, 2])
         b = cp.array([3, 4])
         res = cp.add(a, b)
-        assert np.all(res.to_numpy() == np.array([4, 6]))
+        assert np.all(res.to_list() == np.array([4, 6]))
 
         # matmul / dot
         m1 = cp.array([[1, 0], [0, 1]])
@@ -109,8 +115,8 @@ class TestInitFunctions:
         res_dot = cp.dot(m1, m2)
         expected = np.array([[2, 0], [0, 2]])
 
-        assert np.all(res_matmul.to_numpy() == expected)
-        assert np.all(res_dot.to_numpy() == expected)
+        assert np.all(res_matmul.to_list() == expected)
+        assert np.all(res_dot.to_list() == expected)
 
     def test_wrapper_casting(self):
         # Ensure wrappers handle list inputs by converting to array

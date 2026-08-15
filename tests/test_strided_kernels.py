@@ -19,8 +19,8 @@ class TestStridedSum:
         result = t.sum()
 
         expected = arr.sum()
-        # Extract scalar from tensor
-        actual = result._backing_data[0]
+        # Extract scalar from array
+        actual = result.to_list()[0]
 
         assert abs(actual - expected) < 1e-4
 
@@ -33,7 +33,7 @@ class TestStridedSum:
         result = t.sum()
 
         expected = sliced.sum()
-        actual = result._backing_data[0]
+        actual = result.to_list()[0]
 
         assert abs(actual - expected) < 1e-4
 
@@ -46,7 +46,7 @@ class TestStridedSum:
         result = t.sum()
 
         expected = sliced.sum()
-        actual = result._backing_data[0]
+        actual = result.to_list()[0]
 
         assert abs(actual - expected) < 1e-3
 
@@ -74,7 +74,7 @@ class TestStridedMean:
         result = t.mean()
 
         expected = arr.mean()
-        actual = result._backing_data[0]
+        actual = result.to_list()[0]
 
         assert abs(actual - expected) < 1e-4
 
@@ -87,7 +87,7 @@ class TestStridedMean:
         result = t.mean()
 
         expected = sliced.mean()
-        actual = result._backing_data[0]
+        actual = result.to_list()[0]
 
         assert abs(actual - expected) < 1e-4
 
@@ -112,7 +112,7 @@ class TestCorrectnessVsNumpy:
         sliced = arr[slice_spec]
 
         t = array(sliced)
-        result = t.sum()._backing_data[0]
+        result = t.sum().to_list()[0]
         expected = sliced.sum()
 
         assert abs(result - expected) < 1e-3, f"Expected {expected}, got {result}"
@@ -130,7 +130,7 @@ class TestCorrectnessVsNumpy:
         sliced = arr[slice_spec]
 
         t = array(sliced)
-        result = t.mean()._backing_data[0]
+        result = t.mean().to_list()[0]
         expected = sliced.mean()
 
         assert abs(result - expected) < 1e-4, f"Expected {expected}, got {result}"

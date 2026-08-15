@@ -3,29 +3,27 @@
 // ============================================================================
 
 // FFI declaration for C++ kernel
-// FFI declaration for C++ kernel
-extern "C" {
-    /// Set number of threads for the backend
-    #[allow(dead_code)]
-    pub fn corepy_set_num_threads(num_threads: i32);
-}
 
 /// Safety wrapper for pointers to be Send/Sync for Rayon
+#[allow(dead_code)]
 struct SendPtr<T>(*const T);
 unsafe impl<T> Send for SendPtr<T> {}
 unsafe impl<T> Sync for SendPtr<T> {}
 impl<T> SendPtr<T> {
     #[inline]
+    #[allow(dead_code)]
     fn ptr(&self) -> *const T {
         self.0
     }
 }
 
+#[allow(dead_code)]
 struct SendPtrMut<T>(*mut T);
 unsafe impl<T> Send for SendPtrMut<T> {}
 unsafe impl<T> Sync for SendPtrMut<T> {}
 impl<T> SendPtrMut<T> {
     #[inline]
+    #[allow(dead_code)]
     fn ptr(&self) -> *mut T {
         self.0
     }
@@ -44,6 +42,7 @@ unsafe fn dot_product_f32_scalar(a: *const f32, b: *const f32, count: usize) -> 
 /// AVX2 implementation of dot product
 #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
 #[target_feature(enable = "avx2", enable = "fma")]
+#[allow(dead_code)]
 unsafe fn dot_product_f32_avx2(a: *const f32, b: *const f32, count: usize) -> f32 {
     #[cfg(target_arch = "x86")]
     use std::arch::x86::*;
@@ -139,6 +138,7 @@ unsafe fn dot_product_f32_neon(a: *const f32, b: *const f32, count: usize) -> f3
 }
 
 /// Dispatch dot product operation to CPU kernel
+#[allow(dead_code)]
 pub unsafe fn dot_product_f32_cpu_dispatch(a: *const f32, b: *const f32, count: usize) -> f32 {
     use crate::scheduler::arena::with_arena;
     with_arena(|_arena| {
@@ -191,10 +191,10 @@ unsafe fn kernel_matmul_f32_scalar(
     }
 }
 
-/// AVX2 MatMul with 4x8 Register Tiling (High Performance IJK)
+/// Unblocked 6x16 AVX2 micro-kernel for medium matrices
 #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
 #[target_feature(enable = "avx2", enable = "fma")]
-unsafe fn kernel_matmul_f32_avx2(
+unsafe fn kernel_matmul_f32_avx2_simple(
     a: *const f32,
     b: *const f32,
     c: *mut f32,
@@ -208,62 +208,84 @@ unsafe fn kernel_matmul_f32_avx2(
     use std::arch::x86_64::*;
 
     let mut i = 0;
-    while i + 4 <= m {
+    while i + 6 <= m {
         let mut j = 0;
-        while j + 8 <= n {
-            // Accumulators in registers
-            let mut s0 = _mm256_setzero_ps();
-            let mut s1 = _mm256_setzero_ps();
-            let mut s2 = _mm256_setzero_ps();
-            let mut s3 = _mm256_setzero_ps();
+        while j + 16 <= n {
+            let mut s00 = _mm256_setzero_ps();
+            let mut s01 = _mm256_setzero_ps();
+            let mut s10 = _mm256_setzero_ps();
+            let mut s11 = _mm256_setzero_ps();
+            let mut s20 = _mm256_setzero_ps();
+            let mut s21 = _mm256_setzero_ps();
+            let mut s30 = _mm256_setzero_ps();
+            let mut s31 = _mm256_setzero_ps();
+            let mut s40 = _mm256_setzero_ps();
+            let mut s41 = _mm256_setzero_ps();
+            let mut s50 = _mm256_setzero_ps();
+            let mut s51 = _mm256_setzero_ps();
 
             for l in 0..k {
-                // Load B vec (8 elements) once
-                let vb = _mm256_loadu_ps(b.add(l * n + j));
+                let vb0 = _mm256_loadu_ps(b.add(l * n + j));
+                let vb1 = _mm256_loadu_ps(b.add(l * n + j + 8));
+                let va0 = _mm256_set1_ps(*a.add(i * k + l));
+                let va1 = _mm256_set1_ps(*a.add((i + 1) * k + l));
+                let va2 = _mm256_set1_ps(*a.add((i + 2) * k + l));
+                let va3 = _mm256_set1_ps(*a.add((i + 3) * k + l));
+                let va4 = _mm256_set1_ps(*a.add((i + 4) * k + l));
+                let va5 = _mm256_set1_ps(*a.add((i + 5) * k + l));
 
-                // Broadcast A elements for each row
-                s0 = _mm256_fmadd_ps(_mm256_set1_ps(*a.add(i * k + l)), vb, s0);
-                s1 = _mm256_fmadd_ps(_mm256_set1_ps(*a.add((i + 1) * k + l)), vb, s1);
-                s2 = _mm256_fmadd_ps(_mm256_set1_ps(*a.add((i + 2) * k + l)), vb, s2);
-                s3 = _mm256_fmadd_ps(_mm256_set1_ps(*a.add((i + 3) * k + l)), vb, s3);
+                s00 = _mm256_fmadd_ps(va0, vb0, s00);
+                s01 = _mm256_fmadd_ps(va0, vb1, s01);
+                s10 = _mm256_fmadd_ps(va1, vb0, s10);
+                s11 = _mm256_fmadd_ps(va1, vb1, s11);
+                s20 = _mm256_fmadd_ps(va2, vb0, s20);
+                s21 = _mm256_fmadd_ps(va2, vb1, s21);
+                s30 = _mm256_fmadd_ps(va3, vb0, s30);
+                s31 = _mm256_fmadd_ps(va3, vb1, s31);
+                s40 = _mm256_fmadd_ps(va4, vb0, s40);
+                s41 = _mm256_fmadd_ps(va4, vb1, s41);
+                s50 = _mm256_fmadd_ps(va5, vb0, s50);
+                s51 = _mm256_fmadd_ps(va5, vb1, s51);
             }
 
-            // Store results (overwrite C)
-            _mm256_storeu_ps(c.add(i * n + j), s0);
-            _mm256_storeu_ps(c.add((i + 1) * n + j), s1);
-            _mm256_storeu_ps(c.add((i + 2) * n + j), s2);
-            _mm256_storeu_ps(c.add((i + 3) * n + j), s3);
-
-            j += 8;
+            _mm256_storeu_ps(c.add(i * n + j), s00);
+            _mm256_storeu_ps(c.add(i * n + j + 8), s01);
+            _mm256_storeu_ps(c.add((i + 1) * n + j), s10);
+            _mm256_storeu_ps(c.add((i + 1) * n + j + 8), s11);
+            _mm256_storeu_ps(c.add((i + 2) * n + j), s20);
+            _mm256_storeu_ps(c.add((i + 2) * n + j + 8), s21);
+            _mm256_storeu_ps(c.add((i + 3) * n + j), s30);
+            _mm256_storeu_ps(c.add((i + 3) * n + j + 8), s31);
+            _mm256_storeu_ps(c.add((i + 4) * n + j), s40);
+            _mm256_storeu_ps(c.add((i + 4) * n + j + 8), s41);
+            _mm256_storeu_ps(c.add((i + 5) * n + j), s50);
+            _mm256_storeu_ps(c.add((i + 5) * n + j + 8), s51);
+            j += 16;
         }
-
-        // Handle remaining columns for these 4 rows
         while j < n {
-            for row_offset in 0..4 {
+            for r in 0..6 {
                 let mut sum = 0.0;
                 for l in 0..k {
-                    sum += *a.add((i + row_offset) * k + l) * *b.add(l * n + j);
+                    sum += *a.add((i + r) * k + l) * *b.add(l * n + j);
                 }
-                *c.add((i + row_offset) * n + j) = sum;
+                *c.add((i + r) * n + j) = sum;
             }
             j += 1;
         }
-        i += 4;
+        i += 6;
     }
-
-    // Remaining rows
     while i < m {
         let mut j = 0;
         while j + 8 <= n {
-            let mut sum_vec = _mm256_setzero_ps();
+            let mut s = _mm256_setzero_ps();
             for l in 0..k {
-                sum_vec = _mm256_fmadd_ps(
+                s = _mm256_fmadd_ps(
                     _mm256_set1_ps(*a.add(i * k + l)),
                     _mm256_loadu_ps(b.add(l * n + j)),
-                    sum_vec,
+                    s,
                 );
             }
-            _mm256_storeu_ps(c.add(i * n + j), sum_vec);
+            _mm256_storeu_ps(c.add(i * n + j), s);
             j += 8;
         }
         while j < n {
@@ -275,6 +297,192 @@ unsafe fn kernel_matmul_f32_avx2(
             j += 1;
         }
         i += 1;
+    }
+}
+
+/// AVX2 MatMul with Cache Blocking and 6x16 Register Tiling
+#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+#[target_feature(enable = "avx2", enable = "fma")]
+#[allow(dead_code)]
+unsafe fn kernel_matmul_f32_avx2_blocked(
+    a: *const f32,
+    b: *const f32,
+    c: *mut f32,
+    m: usize,
+    k_dim: usize,
+    n: usize,
+) {
+    #[cfg(target_arch = "x86")]
+    use std::arch::x86::*;
+    #[cfg(target_arch = "x86_64")]
+    use std::arch::x86_64::*;
+
+    let l2_size = crate::backend::capabilities::get_capabilities()
+        .cpu
+        .l2_cache_size;
+    let tile_size = ((l2_size as f64) / (3.0 * 4.0)).sqrt() as usize; // 4 is sizeof(T)
+
+    // Register tiling factors: AVX2 uses 6x16
+    let mc_block = std::cmp::max(72, (tile_size / 6) * 6);
+    let kc_block = std::cmp::max(256, tile_size);
+
+    for ic in (0..m).step_by(mc_block) {
+        let mc = std::cmp::min(m - ic, mc_block);
+        for lc in (0..k_dim).step_by(kc_block) {
+            let kc = std::cmp::min(k_dim - lc, kc_block);
+
+            let mut i = 0;
+            while i + 6 <= mc {
+                let mut j = 0;
+                while j + 16 <= n {
+                    let mut s00 = if lc == 0 {
+                        _mm256_setzero_ps()
+                    } else {
+                        _mm256_loadu_ps(c.add((ic + i) * n + j))
+                    };
+                    let mut s01 = if lc == 0 {
+                        _mm256_setzero_ps()
+                    } else {
+                        _mm256_loadu_ps(c.add((ic + i) * n + j + 8))
+                    };
+                    let mut s10 = if lc == 0 {
+                        _mm256_setzero_ps()
+                    } else {
+                        _mm256_loadu_ps(c.add((ic + i + 1) * n + j))
+                    };
+                    let mut s11 = if lc == 0 {
+                        _mm256_setzero_ps()
+                    } else {
+                        _mm256_loadu_ps(c.add((ic + i + 1) * n + j + 8))
+                    };
+                    let mut s20 = if lc == 0 {
+                        _mm256_setzero_ps()
+                    } else {
+                        _mm256_loadu_ps(c.add((ic + i + 2) * n + j))
+                    };
+                    let mut s21 = if lc == 0 {
+                        _mm256_setzero_ps()
+                    } else {
+                        _mm256_loadu_ps(c.add((ic + i + 2) * n + j + 8))
+                    };
+                    let mut s30 = if lc == 0 {
+                        _mm256_setzero_ps()
+                    } else {
+                        _mm256_loadu_ps(c.add((ic + i + 3) * n + j))
+                    };
+                    let mut s31 = if lc == 0 {
+                        _mm256_setzero_ps()
+                    } else {
+                        _mm256_loadu_ps(c.add((ic + i + 3) * n + j + 8))
+                    };
+                    let mut s40 = if lc == 0 {
+                        _mm256_setzero_ps()
+                    } else {
+                        _mm256_loadu_ps(c.add((ic + i + 4) * n + j))
+                    };
+                    let mut s41 = if lc == 0 {
+                        _mm256_setzero_ps()
+                    } else {
+                        _mm256_loadu_ps(c.add((ic + i + 4) * n + j + 8))
+                    };
+                    let mut s50 = if lc == 0 {
+                        _mm256_setzero_ps()
+                    } else {
+                        _mm256_loadu_ps(c.add((ic + i + 5) * n + j))
+                    };
+                    let mut s51 = if lc == 0 {
+                        _mm256_setzero_ps()
+                    } else {
+                        _mm256_loadu_ps(c.add((ic + i + 5) * n + j + 8))
+                    };
+
+                    for l in 0..kc {
+                        let vb0 = _mm256_loadu_ps(b.add((lc + l) * n + j));
+                        let vb1 = _mm256_loadu_ps(b.add((lc + l) * n + j + 8));
+                        let va0 = _mm256_set1_ps(*a.add((ic + i) * k_dim + (lc + l)));
+                        let va1 = _mm256_set1_ps(*a.add((ic + i + 1) * k_dim + (lc + l)));
+                        let va2 = _mm256_set1_ps(*a.add((ic + i + 2) * k_dim + (lc + l)));
+                        let va3 = _mm256_set1_ps(*a.add((ic + i + 3) * k_dim + (lc + l)));
+                        let va4 = _mm256_set1_ps(*a.add((ic + i + 4) * k_dim + (lc + l)));
+                        let va5 = _mm256_set1_ps(*a.add((ic + i + 5) * k_dim + (lc + l)));
+                        s00 = _mm256_fmadd_ps(va0, vb0, s00);
+                        s01 = _mm256_fmadd_ps(va0, vb1, s01);
+                        s10 = _mm256_fmadd_ps(va1, vb0, s10);
+                        s11 = _mm256_fmadd_ps(va1, vb1, s11);
+                        s20 = _mm256_fmadd_ps(va2, vb0, s20);
+                        s21 = _mm256_fmadd_ps(va2, vb1, s21);
+                        s30 = _mm256_fmadd_ps(va3, vb0, s30);
+                        s31 = _mm256_fmadd_ps(va3, vb1, s31);
+                        s40 = _mm256_fmadd_ps(va4, vb0, s40);
+                        s41 = _mm256_fmadd_ps(va4, vb1, s41);
+                        s50 = _mm256_fmadd_ps(va5, vb0, s50);
+                        s51 = _mm256_fmadd_ps(va5, vb1, s51);
+                    }
+
+                    _mm256_storeu_ps(c.add((ic + i) * n + j), s00);
+                    _mm256_storeu_ps(c.add((ic + i) * n + j + 8), s01);
+                    _mm256_storeu_ps(c.add((ic + i + 1) * n + j), s10);
+                    _mm256_storeu_ps(c.add((ic + i + 1) * n + j + 8), s11);
+                    _mm256_storeu_ps(c.add((ic + i + 2) * n + j), s20);
+                    _mm256_storeu_ps(c.add((ic + i + 2) * n + j + 8), s21);
+                    _mm256_storeu_ps(c.add((ic + i + 3) * n + j), s30);
+                    _mm256_storeu_ps(c.add((ic + i + 3) * n + j + 8), s31);
+                    _mm256_storeu_ps(c.add((ic + i + 4) * n + j), s40);
+                    _mm256_storeu_ps(c.add((ic + i + 4) * n + j + 8), s41);
+                    _mm256_storeu_ps(c.add((ic + i + 5) * n + j), s50);
+                    _mm256_storeu_ps(c.add((ic + i + 5) * n + j + 8), s51);
+                    j += 16;
+                }
+                while j < n {
+                    for r in 0..6 {
+                        let mut sum = if lc == 0 {
+                            0.0
+                        } else {
+                            *c.add((ic + i + r) * n + j)
+                        };
+                        for l in 0..kc {
+                            sum +=
+                                *a.add((ic + i + r) * k_dim + (lc + l)) * *b.add((lc + l) * n + j);
+                        }
+                        *c.add((ic + i + r) * n + j) = sum;
+                    }
+                    j += 1;
+                }
+                i += 6;
+            }
+            while i < mc {
+                let mut j = 0;
+                while j + 8 <= n {
+                    let mut sum_vec = if lc == 0 {
+                        _mm256_setzero_ps()
+                    } else {
+                        _mm256_loadu_ps(c.add((ic + i) * n + j))
+                    };
+                    for l in 0..kc {
+                        sum_vec = _mm256_fmadd_ps(
+                            _mm256_set1_ps(*a.add((ic + i) * k_dim + (lc + l))),
+                            _mm256_loadu_ps(b.add((lc + l) * n + j)),
+                            sum_vec,
+                        );
+                    }
+                    _mm256_storeu_ps(c.add((ic + i) * n + j), sum_vec);
+                    j += 8;
+                }
+                while j < n {
+                    let mut sum = if lc == 0 {
+                        0.0
+                    } else {
+                        *c.add((ic + i) * n + j)
+                    };
+                    for l in 0..kc {
+                        sum += *a.add((ic + i) * k_dim + (lc + l)) * *b.add((lc + l) * n + j);
+                    }
+                    *c.add((ic + i) * n + j) = sum;
+                    j += 1;
+                }
+                i += 1;
+            }
+        }
     }
 }
 
@@ -354,6 +562,7 @@ unsafe fn kernel_matmul_f32_neon(
 }
 
 /// OpenBLAS MatMul using cblas-sys
+#[cfg(has_blas)]
 unsafe fn kernel_matmul_f32_openblas(
     a: *const f32,
     b: *const f32,
@@ -382,8 +591,27 @@ unsafe fn kernel_matmul_f32_openblas(
     );
 }
 
+/// Fallback MatMul if no BLAS was compiled into the extensions
+#[cfg(not(has_blas))]
+unsafe fn kernel_matmul_f32_openblas(
+    a: *const f32,
+    b: *const f32,
+    c: *mut f32,
+    m: usize,
+    k: usize,
+    n: usize,
+) {
+    let matrix_size = m.max(n).max(k);
+    let plan = crate::backend::thread_policy::compute_thread_plan(
+        matrix_size,
+        crate::backend::selector_v2::MathBackend::RustParallel,
+    );
+    crate::ops::matmul_rust_parallel::matmul_f32_rust_parallel(a, b, c, m, k, n, plan.count);
+}
+
 /// Internal CPU kernel selector
 #[inline(always)]
+#[allow(dead_code)]
 unsafe fn matmul_f32_cpu_kernel(
     a: *const f32,
     b: *const f32,
@@ -392,57 +620,37 @@ unsafe fn matmul_f32_cpu_kernel(
     k: usize,
     n: usize,
 ) {
-    // Note: On macOS with Apple Silicon, we use Accelerate framework which
-    // automatically leverages AMX (Apple Matrix eXtension) coprocessor.
-    // AMX is significantly faster than NEON, so we use it more aggressively.
-
     #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
     {
-        // AVX-512 path: wider SIMD is competitive with OpenBLAS for larger sizes
-        if is_x86_feature_detected!("avx512f") && is_x86_feature_detected!("fma") {
-            // AVX-512 can handle larger matrices before OpenBLAS becomes faster
-            if m * n * k <= 256 * 256 * 256 {
-                // Note: Using AVX2 kernel as we don't have dedicated AVX-512 kernel yet
-                // The AVX2 kernel benefits from wider registers via compiler auto-vectorization
-                return kernel_matmul_f32_avx2(a, b, c, m, k, n);
+        if is_x86_feature_detected!("avx2") && is_x86_feature_detected!("fma") {
+            // Use simple kernel for matrices that fit in L2/L3 without blocking
+            if m * n * k <= 16_777_216 {
+                // 256x256x256
+                return kernel_matmul_f32_avx2_simple(a, b, c, m, k, n);
             }
-        } else if is_x86_feature_detected!("avx2") && is_x86_feature_detected!("fma") {
-            // For small/medium sizes, use our native kernels to avoid FFI overhead.
-            // Up to 128x128x128 (2M ops) native is competitive and avoids FFI sync.
-            if m * n * k <= 128 * 128 * 128 {
-                return kernel_matmul_f32_avx2(a, b, c, m, k, n);
-            }
+            return kernel_matmul_f32_avx2_blocked(a, b, c, m, k, n);
         }
     }
 
     #[cfg(target_arch = "aarch64")]
     {
-        // On macOS with Accelerate (AMX), prefer BLAS even for smaller matrices
-        // because AMX is ~2x faster than NEON for matrix operations
-        #[cfg(use_accelerate)]
-        {
-            // Use NEON only for very small matrices where overhead dominates
-            // AMX is beneficial starting from ~32x32 matrices
-            if m * n * k <= 32 * 32 * 32 {
-                return kernel_matmul_f32_neon(a, b, c, m, k, n);
-            }
-        }
-
-        // On non-macOS ARM64 (Linux, etc) or when Accelerate is not available,
-        // use NEON for small/medium sizes
-        #[cfg(not(use_accelerate))]
-        {
-            if m * n * k <= 128 * 128 * 128 {
-                return kernel_matmul_f32_neon(a, b, c, m, k, n);
-            }
+        // Use NEON for all small/medium sizes on ARM
+        if m * n * k <= 1024 * 1024 * 1024 {
+            return kernel_matmul_f32_neon(a, b, c, m, k, n);
         }
     }
 
-    // Fall back to BLAS (OpenBLAS or Accelerate depending on platform)
+    // Fall back to BLAS
     kernel_matmul_f32_openblas(a, b, c, m, k, n);
 }
 
-/// Dispatch 2D matrix multiplication to CPU kernel with Parallel Thresholding
+/// Dispatch 2D matrix multiplication to CPU kernel with Vendor-Aware Thread Policy
+///
+/// Dispatch priority:
+///   1. SIMD ultra-fast path (tiny matrices, < SERIAL_OPS_THRESHOLD)
+///   2. Explicit policy set by user (Mkl / Aocl / RustParallel / Openblas / Blas)
+///   3. Auto-selection via selector_v2 (MKL → AOCL → Accelerate → OpenBLAS → Rust)
+///      with thread count from thread_policy and env vars from env_setter.
 pub unsafe fn matmul_f32_cpu_dispatch(
     a: *const f32,
     b: *const f32,
@@ -451,60 +659,188 @@ pub unsafe fn matmul_f32_cpu_dispatch(
     k: usize,
     n: usize,
 ) {
-    use crate::backend::{get_policy, record_detailed_dispatch, record_dispatch};
-    use crate::scheduler::arena::with_arena;
+    use crate::backend::{
+        env_setter, get_math_backend, get_policy, record_detailed_dispatch, record_dispatch,
+        selector_v2::MathBackend, thread_policy::compute_thread_plan, BackendPolicy,
+    };
+
+    let total_ops = m * n * k;
+    // Matrix side used for thread policy (largest dimension drives cache pressure)
+    let matrix_size = m.max(n).max(k);
+
+    // ── Ultra-fast SIMD path for small matrices ( <= 256^3 ops ) ───────────────
+    // Bypasses all policy/env logic to minimise overhead for matrices up to 256x256.
+    if total_ops <= 16_777_216 {
+        #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+        {
+            if is_x86_feature_detected!("avx2") && is_x86_feature_detected!("fma") {
+                record_dispatch(0);
+                if total_ops <= 2_097_152 {
+                    kernel_matmul_f32_avx2_simple(a, b, c, m, k, n);
+                } else {
+                    kernel_matmul_f32_avx2_blocked(a, b, c, m, k, n);
+                }
+                return;
+            }
+        }
+        #[cfg(target_arch = "aarch64")]
+        {
+            record_dispatch(0);
+            kernel_matmul_f32_neon(a, b, c, m, k, n);
+            return;
+        }
+        // Scalar fallback for other arches
+        #[cfg(not(any(target_arch = "x86", target_arch = "x86_64", target_arch = "aarch64")))]
+        {
+            record_dispatch(0);
+            kernel_matmul_f32_scalar(a, b, c, m, k, n);
+            return;
+        }
+    }
 
     let policy = get_policy();
-    record_dispatch(0); // Corepy ID
-    record_detailed_dispatch(0, "matmul", m, n, k, policy);
 
-    // Parallel Thresholding
-    let total_ops = m * n * k;
-
-    // If it's a large matrix, use OpenBLAS directly.
-    // 256x256x256 = 16.7M ops.
-    if total_ops >= 256 * 256 * 256 {
-        kernel_matmul_f32_openblas(a, b, c, m, k, n);
-        return;
+    // ── Explicit policy override ─────────────────────────────────────────────
+    match policy {
+        BackendPolicy::Openblas | BackendPolicy::Blas => {
+            let plan = compute_thread_plan(matrix_size, MathBackend::OpenBlas);
+            env_setter::apply_thread_env(MathBackend::OpenBlas, plan.count);
+            record_dispatch(1);
+            record_detailed_dispatch(1, "matmul", m, n, k, policy);
+            kernel_matmul_f32_openblas(a, b, c, m, k, n);
+            return;
+        }
+        BackendPolicy::RustParallel => {
+            let plan = compute_thread_plan(matrix_size, MathBackend::RustParallel);
+            env_setter::apply_thread_env(MathBackend::RustParallel, plan.count);
+            record_dispatch(8);
+            record_detailed_dispatch(8, "matmul", m, n, k, policy);
+            crate::ops::matmul_rust_parallel::matmul_f32_rust_parallel(
+                a, b, c, m, k, n, plan.count,
+            );
+            return;
+        }
+        BackendPolicy::Mkl => {
+            // MKL: fall through to BLAS call (linked as libmkl_rt when feature active)
+            let plan = compute_thread_plan(matrix_size, MathBackend::Mkl);
+            env_setter::apply_thread_env(MathBackend::Mkl, plan.count);
+            record_dispatch(5);
+            record_detailed_dispatch(5, "matmul", m, n, k, policy);
+            kernel_matmul_f32_openblas(a, b, c, m, k, n); // same CBLAS ABI
+            return;
+        }
+        BackendPolicy::Aocl => {
+            let plan = compute_thread_plan(matrix_size, MathBackend::Aocl);
+            env_setter::apply_thread_env(MathBackend::Aocl, plan.count);
+            record_dispatch(6);
+            record_detailed_dispatch(6, "matmul", m, n, k, policy);
+            kernel_matmul_f32_openblas(a, b, c, m, k, n); // same CBLAS ABI
+            return;
+        }
+        _ => {} // Default: continue to auto-selection below
     }
 
-    // For medium/small matrices, use native SIMD kernels.
-    // Parallel Threshold: ~2M ops.
-    let parallel_threshold = 2_000_000;
+    // ── Auto-selection (Default policy) ─────────────────────────────────────
+    let math_backend = get_math_backend();
+    let plan = compute_thread_plan(matrix_size, math_backend);
+    env_setter::apply_thread_env(math_backend, plan.count);
 
-    if total_ops < parallel_threshold {
-        matmul_f32_cpu_kernel(a, b, c, m, k, n);
-        return;
+    match math_backend {
+        MathBackend::RustParallel => {
+            record_dispatch(8);
+            record_detailed_dispatch(8, "matmul", m, n, k, policy);
+            crate::ops::matmul_rust_parallel::matmul_f32_rust_parallel(
+                a, b, c, m, k, n, plan.count,
+            );
+        }
+        // MKL, AOCL, Accelerate, OpenBLAS all use the same cblas_sgemm ABI
+        // linked at build time. Thread count controlled by env vars above.
+        MathBackend::Mkl => {
+            record_dispatch(5);
+            record_detailed_dispatch(5, "matmul", m, n, k, policy);
+            kernel_matmul_f32_openblas(a, b, c, m, k, n);
+        }
+        MathBackend::Aocl => {
+            record_dispatch(6);
+            record_detailed_dispatch(6, "matmul", m, n, k, policy);
+            kernel_matmul_f32_openblas(a, b, c, m, k, n);
+        }
+        MathBackend::Accelerate => {
+            record_dispatch(7);
+            record_detailed_dispatch(7, "matmul", m, n, k, policy);
+            kernel_matmul_f32_openblas(a, b, c, m, k, n);
+        }
+        MathBackend::OpenBlas => {
+            record_dispatch(1);
+            record_detailed_dispatch(1, "matmul", m, n, k, policy);
+            kernel_matmul_f32_openblas(a, b, c, m, k, n);
+        }
     }
+}
 
-    use rayon::prelude::*;
-    let a_wrap = SendPtr(a);
-    let b_wrap = SendPtr(b);
-    let c_wrap = SendPtrMut(c);
+// ============================================================================
+// F64 Matrix Multiplication (Phase 3)
+// ============================================================================
 
-    with_arena(|_arena| {
-        let num_threads = num_cpus::get();
-        let rows_per_thread = m.div_ceil(num_threads);
-        let rows_per_thread = if rows_per_thread == 0 {
-            1
-        } else {
-            rows_per_thread
-        };
+/// OpenBLAS/MKL MatMul for f64 using cblas_dgemm
+#[cfg(has_blas)]
+unsafe fn kernel_matmul_f64_openblas(
+    a: *const f64,
+    b: *const f64,
+    c: *mut f64,
+    m: usize,
+    k: usize,
+    n: usize,
+) {
+    use cblas_sys::{cblas_dgemm, CblasNoTrans, CblasRowMajor};
 
-        (0..m)
-            .into_par_iter()
-            .chunks(rows_per_thread)
-            .for_each(move |row_indices| {
-                let start_row = row_indices[0];
-                let num_rows = row_indices.len();
+    cblas_dgemm(
+        CblasRowMajor,
+        CblasNoTrans,
+        CblasNoTrans,
+        m as i32,
+        n as i32,
+        k as i32,
+        1.0,
+        a,
+        k as i32,
+        b,
+        n as i32,
+        0.0,
+        c,
+        n as i32,
+    );
+}
 
-                let a_ptr = a_wrap.ptr().add(start_row * k);
-                let b_ptr = b_wrap.ptr();
-                let c_ptr = c_wrap.ptr().add(start_row * n);
+/// Fallback f64 MatMul when no BLAS is linked — naive scalar implementation
+#[cfg(not(has_blas))]
+unsafe fn kernel_matmul_f64_openblas(
+    a: *const f64,
+    b: *const f64,
+    c: *mut f64,
+    m: usize,
+    k: usize,
+    n: usize,
+) {
+    for i in 0..m {
+        for j in 0..n {
+            let mut sum = 0.0f64;
+            for p in 0..k {
+                sum += *a.add(i * k + p) * *b.add(p * n + j);
+            }
+            *c.add(i * n + j) = sum;
+        }
+    }
+}
 
-                unsafe {
-                    matmul_f32_cpu_kernel(a_ptr, b_ptr, c_ptr, num_rows, k, n);
-                }
-            });
-    });
+/// Dispatch 2D f64 matrix multiplication to BLAS kernel
+pub unsafe fn matmul_f64_cpu_dispatch(
+    a: *const f64,
+    b: *const f64,
+    c: *mut f64,
+    m: usize,
+    k: usize,
+    n: usize,
+) {
+    kernel_matmul_f64_openblas(a, b, c, m, k, n);
 }

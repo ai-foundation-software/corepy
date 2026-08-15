@@ -5,6 +5,56 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.0] - 2026-03-22
+
+### Added — Rust-Native Runtime
+
+- **Pure Maturin Build**: Migrated from C++/CMake to pure Rust via `maturin` + PyO3. All math logic now lives in Rust with zero C++ dependency.
+- **`CoreArray`**: Rust-backed array type as the strict backing store for all operations. Pure Python and NumPy fallbacks removed.
+- **Python 3.14 Support**: Bumped supported Python versions to 3.10–3.14.
+
+### Added — UFUNC CORE-50 & Linalg
+
+- **50+ Universal Functions**: Complete NumPy-compatible ufunc library (Trig, Hyperbolic, Exp/Log, Rounding, Bitwise, Reductions, Stacking).
+- **Advanced Linalg**: Verified and tested `linalg.inv`, `linalg.det`, and `linalg.norm` for matrices $n > 2$ using the `faer` backend.
+- **Ufunc Engine**: Centralized dispatch via `corepy.ops.ufunc_engine` with Rust-first execution.
+
+### Added — Lazy Evaluation
+
+- **`cp.lazy()` Context Manager**: Builds expression trees instead of executing immediately. Call `.compute()` to materialize.
+- **Fusion-Ready IR**: Lazy arrays record operations for future optimization and kernel fusion.
+
+### Added — Adaptive CPU Backend
+
+- **Runtime Hardware Awareness**: Vendor detection (Intel/AMD/Apple) and SIMD optimization (AVX2, AVX512, NEON, AMX).
+- **Intelligent Dispatch**: Priority-ordered BLAS selection (MKL → AOCL → Accelerate → OpenBLAS → Pure-Rust).
+- **Adaptive Threading**: Thread policy that avoids oversubscription based on matrix size and CPU topology.
+
+### Added — Data & Random
+
+- **DataFrame & Series**: Rust-backed `DataFrame` with CSV I/O, parallelized `groupby`, and relational operations.
+- **Random Module**: Parallelized PCG64 and Xoshiro generators (`rand`, `randn`, `randint`).
+
+### Added — CI, Build & Docs
+
+- **Automated Performance Tracking**: Integrated `scripts/benchmark.py` into GitHub Actions CI for regression detection.
+- **Self-Contained Wheels**: Robust BLAS DLL bundling for Linux and improved Windows discovery.
+- **Advanced Documentation**: New Windows Installation Guide and Testing Strategy rationale.
+- **Project Sanitization**: Consolidated multi-language utilities into `scripts/` and removed legacy root-level artifacts.
+
+### Changed
+
+- `matmul_f32_cpu_dispatch` uses vendor-aware backend selection and adaptive thread policy.
+- `build.rs` supports feature-gated MKL, AOCL, and robust Windows OpenBLAS detection.
+- Removed all legacy C++/CMake code and root-level housekeeping scripts.
+- NumPy is now strictly an optional benchmarking dependency.
+
+### Fixed
+
+- Linalg precision and shape consistency for multi-dimensional matrix operations.
+- Windows CI `ImportError: DLL load failed` — resolved via proactive DLL pre-loading.
+- Metal framework linking on macOS and backend selector test mocks.
+
 ## [0.2.4] - 2026-02-08
 
 ### Added
@@ -13,6 +63,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 - **Dependency Pinning**: Standardized on stable versions for `numpy`, `pydantic`, `pydantic-core`, and `pybind11`.
+- **Package Rename**: Renamed PyPI package to `corepy-ai` (import as `corepy`).
 - **Script Modernization**: All scripts now strictly use `uv`.
 
 ### Fixed

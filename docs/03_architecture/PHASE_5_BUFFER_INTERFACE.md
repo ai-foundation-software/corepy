@@ -19,15 +19,15 @@ Current limitations in `corepy/array.py`:
 
 ## Reference: Production ML Systems
 
-### PyTorch Tensor Storage Model
+### PyTorch Array Storage Model
 ```
-Tensor
+Array
   ├─ Storage (actual memory)
   │   ├─ data_ptr: void*
   │   ├─ device: CPU | CUDA | ...
   │   ├─ allocator: CPUAllocator | CUDAAllocator
   │   └─ nbytes: size_t
-  └─ TensorImpl (view metadata)
+  └─ ArrayImpl (view metadata)
       ├─ sizes: [int]
       ├─ strides: [int]
       ├─ offset: int
@@ -58,10 +58,10 @@ typedef struct {
     int64_t* shape;
     int64_t* strides;     // NULL = C-contiguous
     uint64_t byte_offset;
-} DLTensor;
+} DLArray;
 ```
 
-**Insight**: Industry standard for zero-copy tensor exchange.
+**Insight**: Industry standard for zero-copy array exchange.
 
 ---
 
@@ -217,7 +217,7 @@ def from_buffer(obj: Any, dtype: DataType, device: Device = CPU) -> BufferView:
 ## Migration Path
 
 ### Phase 5.1: Internal BufferView (No API Change)
-- `Tensor._get_buffer_pointer()` → `Tensor._get_buffer_view()`
+- `Array._get_buffer_pointer()` → `Array._get_buffer_view()`
 - Returns `BufferView` internally
 - Dispatch logic uses `BufferView.is_contiguous()`, `BufferView.device`
 - **Benefit**: Cleaner dispatch, easier to add GPU later
@@ -235,8 +235,8 @@ def from_buffer(obj: Any, dtype: DataType, device: Device = CPU) -> BufferView:
 - **Benefit**: Unified API for CPU/GPU
 
 ### Phase 5.4: DLPack Interop
-- Implement `Tensor.__dlpack__()` and `Tensor.from_dlpack()`
-- Zero-copy with PyTorch, JAX, TensorFlow
+- Implement `Array.__dlpack__()` and `Array.from_dlpack()`
+- Zero-copy with PyTorch, JAX, ArrayFlow
 - **Benefit**: Ecosystem integration
 
 ---
@@ -297,5 +297,5 @@ Input Buffer
 
 - [NumPy Array Interface](https://numpy.org/doc/stable/reference/arrays.interface.html)
 - [DLPack Specification](https://dmlc.github.io/dlpack/latest/)
-- [PyTorch Storage Design](https://pytorch.org/docs/stable/tensor_attributes.html)
+- [PyTorch Storage Design](https://pytorch.org/docs/stable/array_attributes.html)
 - [CUDA Memory Types](https://docs.nvidia.com/cuda/cuda-c-programming-guide/index.html#memory-hierarchy)

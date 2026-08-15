@@ -24,18 +24,14 @@ from ..backend.types import BackendType
 
 def _flatten(data: Any) -> List[float]:
     """Recursively flatten nested lists/tuples/arrays to a flat list of floats."""
-    import numpy as np
-
     # Import here to avoid circular dependency
     from corepy.array import ndarray
 
-    # Handle CorePy ndarray objects by converting to numpy first
+    # Handle CorePy ndarray objects
     if isinstance(data, ndarray):
-        return _flatten(data.to_numpy())
-
-    # Handle numpy arrays first
-    if isinstance(data, np.ndarray):
-        return [float(x) for x in data.flatten()]
+        if data._core_array is not None:
+            return [float(x) for x in data._core_array.to_list()]
+        return _flatten(data.to_list())
 
     # Handle memoryview
     if isinstance(data, memoryview):
@@ -242,3 +238,17 @@ def cpu_min(a: Any) -> float:
     if len(flat) == 0:
         return 0.0
     return min(flat)
+
+
+def maximum(a: Any, b: Any) -> Any:
+    """Element-wise maximum of array elements."""
+    from .ufunc_engine import ufunc_binary
+
+    return ufunc_binary("maximum", a, b)
+
+
+def minimum(a: Any, b: Any) -> Any:
+    """Element-wise minimum of array elements."""
+    from .ufunc_engine import ufunc_binary
+
+    return ufunc_binary("minimum", a, b)

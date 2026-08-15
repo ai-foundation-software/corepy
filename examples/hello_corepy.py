@@ -1,19 +1,30 @@
-import corepy
+import corepy as cp
 
 
 def main():
-    print(f"Corepy Version: {corepy.__version__}")
+    print(f"Corepy Version: {cp.__version__}")
+    print("-" * 30)
 
-    # Demonstrate C++ extension
-    val = 10
-    result = corepy.add_one(val)
-    print(f"C++ Kernel: add_one({val}) = {result}")
+    # 1. Hardware Awareness
+    print("Backend Analysis:")
+    analysis = cp.analyse_workload(matrix_size=1024)
+    print(analysis)
+    print("-" * 30)
 
-    # Check Rust extension status
-    if hasattr(corepy, "sum_as_string") and corepy.sum_as_string:
-        print(f"Rust Kernel: sum_as_string(2, 2) = {corepy.sum_as_string(2, 2)}")
-    else:
-        print("Rust Kernel: Not fully linked yet (Placeholder active)")
+    # 2. Modern ndarray Operations
+    a = cp.array([10.0, 20.0, 30.0])
+    b = cp.array([1.0, 2.0, 3.0])
+
+    print(f"ndarray a: {a}")
+    print(f"ndarray b: {b}")
+
+    # Simple addition
+    c = a + b
+    print(f"a + b = {c}")
+
+    # Scalar multiplication
+    d = a * 2.0
+    print(f"a * 2.0 = {d}")
 
 
 if __name__ == "__main__":

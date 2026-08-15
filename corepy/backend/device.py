@@ -14,13 +14,20 @@ class DeviceInfo:
     """
 
     cpu_cores: int
+    cpu_threads: int = 1
     memory_limit_bytes: Optional[int] = None
     has_avx2: bool = False
     has_avx512: bool = False
     has_neon: bool = False
+    l1_cache_size: int = 32768
+    l2_cache_size: int = 524288
+    l3_cache_size: int = 16777216
     gpu_count: int = 0
+    has_cuda: bool = False
+    has_metal: bool = False
     gpu_names: List[str] = field(default_factory=list)
     gpu_memory_bytes: List[int] = field(default_factory=list)
+    gpu_memory_free_bytes: List[int] = field(default_factory=list)
     platform_system: str = platform.system()
     forced_backend: Optional[BackendType] = None
 
@@ -65,21 +72,32 @@ class CPUDevice(Device):
 
     @property
     def memory_free(self) -> int:
-        # Implementation to fetch real memory stats would go here (e.g., using psutil)
-        # For now, return a safe large number or implement basic `psutil` check if allowed
-        # Fallback to 'unknown'/None if not checking
-        return 1024**3 * 16  # Placeholder: 16GB
+        try:
+            import psutil
+
+            return psutil.virtual_memory().available
+        except ImportError:
+            return 1024**3 * 16  # Placeholder: 16GB
 
 
 class GPUDevice(Device):
-    def __init__(self, index: int, name: str, memory: int):
+    def __init__(
+        self,
+        index: int,
+        name: str,
+        memory: int,
+        memory_free: int,
+        is_metal: bool = False,
+    ):
         self._index = index
         self._name = name
         self._memory_total = memory
+        self._memory_free = memory_free
+        self._is_metal = is_metal
 
     @property
     def type(self) -> BackendType:
-        return BackendType.GPU
+        return BackendType.METAL if self._is_metal else BackendType.CUDA
 
     @property
     def name(self) -> str:
@@ -87,20 +105,50 @@ class GPUDevice(Device):
 
     @property
     def memory_free(self) -> int:
-        # Placeholder for actual GPU memory check
-        return self._memory_total
+        return self._memory_free
 
 
-def _detect_cuda_gpus() -> List[int]:
+def _detect_cuda_gpus() -> tuple[List[int], List[int]]:
     """
-    Attempts to detect NVIDIA GPUs via ctypes loading of libcudart/libcuda.
-    Returns a list of memory sizes (in bytes) for detected GPUs.
-    For this pass, we just return a list of fake memory sizes (e.g. 8GB)
-    if we detect a GPU, since getting exact memory requires complex struct mapping.
+    Attempts to detect NVIDIA GPUs via nvidia-smi.
+    Returns (memory_total_bytes_list, memory_free_bytes_list).
     """
+    import shutil
+    import subprocess
+
+    if getattr(shutil, "which", lambda x: None)("nvidia-smi"):
+        try:
+            # Output format: "8192, 7000" (MiB)
+            output = subprocess.check_output(
+                [
+                    "nvidia-smi",
+                    "--query-gpu=memory.total,memory.free",
+                    "--format=csv,noheader,nounits",
+                ],
+                stderr=subprocess.DEVNULL,
+                text=True,
+            )
+
+            totals = []
+            frees = []
+
+            for line in output.strip().split("\n"):
+                if not line.strip():
+                    continue
+                parts = [p.strip() for p in line.split(",")]
+                if len(parts) == 2:
+                    # Convert MiB to Bytes
+                    totals.append(int(parts[0]) * 1024 * 1024)
+                    frees.append(int(parts[1]) * 1024 * 1024)
+
+            if totals:
+                return totals, frees
+        except Exception:
+            pass
+
+    # Fallback to older ctypes method if nvidia-smi isn't available
     import ctypes.util
 
-    # Try locating CUDA runtime
     lib_names = ["cudart", "cudart.so.11.0", "cudart.so.12", "cuda"]
     lib_path = None
     for name in lib_names:
@@ -109,12 +157,13 @@ def _detect_cuda_gpus() -> List[int]:
             break
 
     if not lib_path:
-        # Fallback for linux if ldconfig not updated but path exists in standard locations
         common_paths = [
             "/usr/local/cuda/lib64/libcudart.so",
             "/usr/lib/x86_64-linux-gnu/libcudart.so",
         ]
         for p in common_paths:
+            import os
+
             if os.path.exists(p):
                 lib_path = p
                 break
@@ -123,17 +172,14 @@ def _detect_cuda_gpus() -> List[int]:
         try:
             cuda = ctypes.CDLL(lib_path)
             count = ctypes.c_int()
-            # cudaGetDeviceCount(int* count)
             if hasattr(cuda, "cudaGetDeviceCount"):
                 ret = cuda.cudaGetDeviceCount(ctypes.byref(count))
                 if ret == 0 and count.value > 0:
-                    # Detected GPUs!
-                    # For now, return a placeholder 8GB for each
-                    return [8 * 1024**3] * count.value
+                    return [8 * 1024**3] * count.value, [8 * 1024**3] * count.value
         except Exception:
             pass
 
-    return []
+    return [], []
 
 
 def _detect_metal_gpus() -> tuple[List[str], List[int]]:
@@ -193,47 +239,103 @@ def _detect_metal_gpus() -> tuple[List[str], List[int]]:
         return [], []
 
 
+def _get_cpu_cores_threads():
+    """Returns (physical_cores, logical_threads)."""
+    try:
+        import psutil
+
+        physical = psutil.cpu_count(logical=False)
+        logical = psutil.cpu_count(logical=True)
+        return physical or logical or 1, logical or 1
+    except ImportError:
+        import os
+
+        count = os.cpu_count() or 1
+        return count, count
+
+
 def detect_devices() -> DeviceInfo:
     """
-    Detects available hardware devices on the system.
+    Detects available hardware devices on the system using Rust FFI.
     """
-    info = DeviceInfo(cpu_cores=os.cpu_count() or 1)
+    physical, logical = _get_cpu_cores_threads()
+    info = DeviceInfo(cpu_cores=physical, cpu_threads=logical)
 
-    # Simple architecture checks
-    machine = platform.machine().lower()
-    if "x86_64" in machine or "amd64" in machine:
-        info.has_avx2 = True  # optimistically assume AVX2 on modern x86
-    elif "arm" in machine or "aarch64" in machine:
-        info.has_neon = True
+    try:
+        from .. import _corepy_rust
 
-    # GPU Detection
-    if platform.system() == "Darwin":
-        # Primary Check: Ask Rust runtime if Metal is actually usable
-        # This handles cases where system_profiler fails (CI) or Metal is unsupported
-        try:
-            from .. import _corepy_rust
+        caps = _corepy_rust.get_system_capabilities()
+        cpu_caps = caps.get("cpu", {})
+        gpu_caps = caps.get("gpu", {})
 
-            if _corepy_rust.metal_is_available():
-                gpu_names, gpu_mems = _detect_metal_gpus()
-                # If system_profiler failed but Rust says yes, add a generic Metal GPU
-                if not gpu_names:
-                    gpu_names = ["Metal GPU"]
-                    gpu_mems = [0]  # Unknown memory
-            else:
-                gpu_names, gpu_mems = [], []
-        except ImportError:
-            # Fallback if Rust not loaded (shouldn't happen in installed pkg)
-            gpu_names, gpu_mems = [], []
-    else:
-        # CUDA Detection
-        gpu_mems = _detect_cuda_gpus()
-        gpu_names = [f"CUDA Device {i}" for i in range(len(gpu_mems))]
+        info.has_avx2 = cpu_caps.get("has_avx2", False)
+        info.has_avx512 = cpu_caps.get("has_avx512", False)
+        info.has_neon = cpu_caps.get("has_neon", False)
 
-    info.gpu_count = len(gpu_mems)
-    info.gpu_memory_bytes = gpu_mems
+        # Add cache knowledge to the DeviceInfo
+        info.l1_cache_size = cpu_caps.get("l1_cache", 32 * 1024)
+        info.l2_cache_size = cpu_caps.get("l2_cache", 512 * 1024)
+        info.l3_cache_size = cpu_caps.get("l3_cache", 16 * 1024 * 1024)
 
-    # Only overwrite gpu_names if we found something, to handle empty list correctly
-    if info.gpu_count > 0:
-        info.gpu_names = gpu_names
+        if gpu_caps.get("metal_available", False):
+            info.has_metal = True
+            gpu_names, gpu_mems = _detect_metal_gpus()
+            if not gpu_names:
+                gpu_names = ["Metal GPU"]
+                gpu_mems = [0]
+            info.gpu_count = len(gpu_names)
+            info.gpu_names = gpu_names
+            info.gpu_memory_bytes = gpu_mems
+            # For UMA, free memory is system free memory (approx)
+            try:
+                import psutil
+
+                free_mem = psutil.virtual_memory().available
+                info.gpu_memory_free_bytes = [free_mem] * len(gpu_names)
+            except ImportError:
+                info.gpu_memory_free_bytes = gpu_mems
+        elif gpu_caps.get("cuda_available", False) or platform.system() != "Darwin":
+            # Fallback to python CUDA detection
+            info.has_cuda = True
+            gpu_mems, gpu_frees = _detect_cuda_gpus()
+            gpu_names = [f"CUDA Device {i}" for i in range(len(gpu_mems))]
+            info.gpu_count = len(gpu_names)
+            info.gpu_names = gpu_names
+            info.gpu_memory_bytes = gpu_mems
+            info.gpu_memory_free_bytes = gpu_frees
+
+    except Exception:
+        # Fallback if Rust module fails to load
+        machine = platform.machine().lower()
+        if "x86_64" in machine or "amd64" in machine:
+            info.has_avx2 = True
+        elif "arm" in machine or "aarch64" in machine:
+            info.has_neon = True
+
+        info.l1_cache_size = 32 * 1024
+        info.l2_cache_size = 512 * 1024
+        info.l3_cache_size = 16 * 1024 * 1024
+
+        if platform.system() == "Darwin":
+            info.has_metal = True
+            gpu_names, gpu_mems = _detect_metal_gpus()
+            info.gpu_count = len(gpu_names)
+            info.gpu_names = gpu_names
+            info.gpu_memory_bytes = gpu_mems
+            try:
+                import psutil
+
+                free_mem = psutil.virtual_memory().available
+                info.gpu_memory_free_bytes = [free_mem] * len(gpu_names)
+            except ImportError:
+                info.gpu_memory_free_bytes = gpu_mems
+        else:
+            info.has_cuda = True
+            gpu_mems, gpu_frees = _detect_cuda_gpus()
+            gpu_names = [f"CUDA Device {i}" for i in range(len(gpu_mems))]
+            info.gpu_count = len(gpu_names)
+            info.gpu_names = gpu_names
+            info.gpu_memory_bytes = gpu_mems
+            info.gpu_memory_free_bytes = gpu_frees
 
     return info

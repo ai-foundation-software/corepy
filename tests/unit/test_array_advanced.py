@@ -12,7 +12,7 @@ class TestArrayAdvanced:
         arr = cp.array(data)
         assert arr.shape == (2, 2, 2)
         assert arr.size == 8
-        assert arr.to_numpy().shape == (2, 2, 2)
+        assert np.array(arr.to_list()).shape == (2, 2, 2)
 
     def test_init_bytearray(self):
         data = bytearray([1, 2, 3, 4])
@@ -31,7 +31,7 @@ class TestArrayAdvanced:
         # Manually ensure it hasn't converted to numpy yet if possible,
         # or just test slicing works
         # In current impl, it stays as list until compute?
-        # Lines 79: self._backing_data = data (list)
+        # Lines 79: self.to_list() = data (list)
 
         assert arr[0] == 1.0
         assert isinstance(arr[0:2], cp.ndarray)
@@ -45,7 +45,7 @@ class TestArrayAdvanced:
     def test_binary_ops_scalar_broadcasting(self):
         arr = cp.array([1, 2])
         res = arr + 10
-        assert res.to_numpy().tolist() == [11.0, 12.0]
+        assert res.to_list() == [11.0, 12.0]
 
         # Reverse? __radd__ not implemented in snippet?
         # If not implemented, Python tries to call __add__ on scalar, which fails.
@@ -58,7 +58,7 @@ class TestArrayAdvanced:
         arr2 = cp.array([3.0, 4.0], dtype=DataType.FLOAT32, device="cpu")
 
         res = arr1 + arr2
-        assert res.to_numpy().tolist() == [4.0, 6.0]
+        assert res.to_list() == [4.0, 6.0]
 
     def test_comparison_ops(self):
         arr1 = cp.array([1.0])

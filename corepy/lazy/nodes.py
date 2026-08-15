@@ -56,7 +56,32 @@ class BinaryOp(ExprNode):
 
     def is_elementwise(self) -> bool:
         """Binary ops are element-wise and can be fused."""
-        return self.op in ("add", "sub", "mul", "div")
+        return self.op in (
+            "add",
+            "sub",
+            "mul",
+            "div",
+            "power",
+            "mod",
+            "floor_div",
+            "eq",
+            "ne",
+            "gt",
+            "lt",
+            "ge",
+            "le",
+            "logical_and",
+            "logical_or",
+            "logical_xor",
+            "arctan2",
+            "hypot",
+            "copysign",
+            "bitwise_and",
+            "bitwise_or",
+            "bitwise_xor",
+            "left_shift",
+            "right_shift",
+        )
 
     def __repr__(self):
         return f"BinaryOp({self.op}, {self.left}, {self.right})"
@@ -80,7 +105,45 @@ class UnaryOp(ExprNode):
 
     def is_elementwise(self) -> bool:
         """Most unary ops are element-wise."""
-        return self.op in ("neg", "abs", "sqrt", "exp", "log")
+        return self.op in (
+            "neg",
+            "abs",
+            "sqrt",
+            "exp",
+            "log",
+            "sin",
+            "cos",
+            "tan",
+            "arcsin",
+            "arccos",
+            "arctan",
+            "sinh",
+            "cosh",
+            "tanh",
+            "arcsinh",
+            "arccosh",
+            "arctanh",
+            "exp2",
+            "expm1",
+            "log2",
+            "log10",
+            "log1p",
+            "floor",
+            "ceil",
+            "round",
+            "trunc",
+            "rint",
+            "sign",
+            "square",
+            "reciprocal",
+            "cbrt",
+            "degrees",
+            "radians",
+            "logical_not",
+            "bitwise_not",
+            "is_even",
+            "is_odd",
+        )
 
     def __repr__(self):
         return f"UnaryOp({self.op}, {self.operand})"

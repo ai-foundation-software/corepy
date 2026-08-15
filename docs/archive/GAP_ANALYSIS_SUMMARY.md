@@ -9,7 +9,7 @@ All gap analysis items from P1-P3 have been successfully implemented and tested.
 ## What Was Built
 
 ### 1. **Thread-Local Arena Allocators**
-- Bump allocation for O(1) temporary tensor buffers
+- Bump allocation for O(1) temporary array buffers
 - 1MB per thread (configurable via `COREPY_ARENA_SIZE`)
 - Zero synchronization overhead
 - Automatic cleanup after operations
@@ -48,8 +48,8 @@ SIMD-optimized for f32 arrays (8 floats/iteration):
 
 ### 5. **Python Bindings**
 8 new PyO3 functions exported to Python:
-- `tensor_any()`, `tensor_sum_f32()`, `tensor_sum_i32()`, `tensor_mean_f32()`
-- `tensor_add_f32()`, `tensor_sub_f32()`, `tensor_mul_f32()`, `tensor_div_f32()`
+- `array_any()`, `array_sum_f32()`, `array_sum_i32()`, `array_mean_f32()`
+- `array_add_f32()`, `array_sub_f32()`, `array_mul_f32()`, `array_div_f32()`
 
 **File**: [rust/corepy-runtime/src/ffi/python.rs](file:///home/crazyguy/VSCode/corepy/rust/corepy-runtime/src/ffi/python.rs)
 
@@ -61,12 +61,12 @@ SIMD-optimized for f32 arrays (8 floats/iteration):
 ============================================================
 Total: 7/7 tests passed
 ============================================================
-✅ PASS: tensor_any
-✅ PASS: tensor_sum_f32  
-✅ PASS: tensor_sum_i32
-✅ PASS: tensor_mean_f32
-✅ PASS: tensor_add_f32
-✅ PASS: tensor_mul_f32
+✅ PASS: array_any
+✅ PASS: array_sum_f32  
+✅ PASS: array_sum_i32
+✅ PASS: array_mean_f32
+✅ PASS: array_add_f32
+✅ PASS: array_mul_f32
 ✅ PASS: SIMD performance (1.48x speedup vs NumPy)
 ```
 
@@ -163,8 +163,8 @@ maturin develop --release  # ✅ Success
 The foundation is complete. Recommended next priorities:
 
 1. **NumPy Integration**: Add buffer protocol support for universal zero-copy
-2. **Arena Usage**: Wire up thread-local arenas in actual tensor operations
-3. **Parallel Dispatch**: Use rayon scheduler for large tensor operations
+2. **Arena Usage**: Wire up thread-local arenas in actual array operations
+3. **Parallel Dispatch**: Use rayon scheduler for large array operations
 4. **Additional Types**: Support f64, i64, u32, etc.
 5. **Matrix Ops**: Implement matmul, transpose, etc.
 

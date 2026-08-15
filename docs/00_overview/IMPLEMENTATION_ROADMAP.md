@@ -1,6 +1,6 @@
 # Implementation Roadmap: Performance & Operations
 
-**Status**: Phase 4 Complete, Phase 5 Planned  
+**Status**: Phase 6 Complete, Phase 7 Planned  
 **Priority**: P0 (Critical) → P3 (Nice-to-have)
 
 ---
@@ -21,19 +21,26 @@
 - [x] Basic matmul: 1D dot product (pure Rust implementation)
 
 ### Testing
-- [x] 14 tests passing (repro_strides, buffer_protocol, gap_analysis)
-- [x] Memory safety verification
-- [x] SIMD performance validation
+- [x] Comprehensive test suite for all endpoints (`make ci`)
+- [x] Memory safety verification via robust CI
+- [x] SIMD performance native validation
+
+### 🚀 Phase 5 & 6: DataFrames, Lazy Eval & Performance (Completed)
+- [x] DataFrame Engine (CSV, GroupBy, Pivot, Merge)
+- [x] Lazy Evaluation Engine / Operation Fusion
+- [x] Rayon Multi-threading actively scheduled
+- [x] Global LRU Buffer Pool (No-OS allocations)
+- [x] Rayon-backed PRNG (Xoshiro/PCG64)
 
 ---
 
-## 🚀 Phase 6: Performance Activation (Next Sprint)
+## 🚀 Phase 7: Optimization & GPU Selection (Next Sprint)
 
-**Objective**: Activate existing performance infrastructure (arenas + rayon)
+**Objective**: Finish SIMD coverage and start preparing for the GPU backend.
 
 ### P0: Arena Integration for Reductions
 **Why**: Eliminate heap allocations in hot paths  
-**Impact**: ~10-20% speedup for small-medium tensors
+**Impact**: ~10-20% speedup for small-medium arrays
 
 **Tasks**:
 - [ ] **6.1.1**: Add arena parameter to C++ reduction kernels
@@ -59,7 +66,7 @@
 
 ---
 
-### P0: Parallel Dispatch for Large Tensors
+### P0: Parallel Dispatch for Large Arrays
 **Why**: Utilize multi-core CPUs for large reductions  
 **Impact**: 2-4x speedup for arrays >100K elements
 
@@ -159,10 +166,10 @@
 - [ ] **6.4.1**: Design matmul API with shape validation
   ```python
   # Python API
-  result = tensor_a.matmul(tensor_b)  # (m, k) @ (k, n) -> (m, n)
+  result = array_a.matmul(array_b)  # (m, k) @ (k, n) -> (m, n)
   ```
 
-- [ ] **6.4.2**: Implement naive C++ kernel (row-major)
+- [x] **6.4.2**: Implement naive C++ kernel (row-major)
   ```cpp
   void matmul_f32_cpu(
       const float* a, const float* b, float* c,
@@ -180,20 +187,20 @@
   }
   ```
 
-- [ ] **6.4.3**: SIMD optimization (blocked algorithm)
+- [x] **6.4.3**: SIMD optimization (blocked algorithm)
   - Use AVX2 for inner loop
   - Cache-blocking for large matrices
-  - Reference: [BLIS](https://github.com/flame/blis) design
+  - Reference: BLIS design
 
-- [ ] **6.4.4**: Integrate with Python layer
+- [x] **6.4.4**: Integrate with Python layer
   - Shape validation: `(m, k) @ (k, n)`
   - Zero-copy dispatch via `BufferView`
 
-**Estimated Effort**: 12-16 hours (basic), 40+ hours (optimized)
+**Status**: Basic working dot-product and matmul completed via Rust `nano-gemm` crates and parallel dot-products.
 
 ---
 
-## 🧪 Phase 7: Benchmarking Suite
+## 🧪 Phase 8: Benchmarking Suite
 
 **Objective**: Quantify performance vs NumPy/PyTorch
 
@@ -211,8 +218,8 @@
       data = np.random.rand(size).astype(np.float32)
       
       # Corepy
-      cp_tensor = cp.Tensor(data)
-      result = benchmark(cp_tensor.sum)
+      cp_array = cp.Array(data)
+      result = benchmark(cp_array.sum)
       
       # Compare with NumPy
       np_result = np.sum(data)

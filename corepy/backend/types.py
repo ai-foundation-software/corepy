@@ -9,8 +9,10 @@ class BackendType(Enum):
     """
 
     CPU = "cpu"
-    GPU = "gpu"
+    CUDA = "cuda"
+    METAL = "metal"
     TPU = "tpu"
+    GPU = "gpu"
     # Future backends can be added here
 
 
@@ -54,6 +56,7 @@ class DataType(Enum):
     INT32 = "int32"
     INT64 = "int64"
     BOOL = "bool"
+    STRING = "string"
     # complex types etc.
 
     @property
@@ -65,5 +68,6 @@ class DataType(Enum):
             "int32": 4,
             "int64": 8,
             "bool": 1,
+            "string": 0,
         }
         return sizes.get(self.value, 4)

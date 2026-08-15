@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """
-Test script to validate corepy 0.2.4 released package APIs.
+Test script to validate corepy 0.3.0 released package APIs.
 This will help us determine which examples work for usage.md documentation.
 """
 
 print("=" * 60)
-print("Testing Corepy 0.2.4 Released Package")
+print("Testing Corepy 0.3.0 Released Package")
 print("=" * 60)
 
 # Test 1: Basic imports
@@ -23,8 +23,8 @@ print("\n[Test 2] Available Top-Level Attributes")
 available = [attr for attr in dir(cp) if not attr.startswith("_")]
 print(f"Available: {', '.join(available)}")
 
-# Test 3: Array creation (NumPy-style)
-print("\n[Test 3] Array Creation")
+# Test 3: ndarray creation (NumPy-style)
+print("\n[Test 3] ndarray Creation")
 try:
     # Primary API
     a = cp.array([1.0, 2.0, 3.0])
@@ -35,15 +35,15 @@ try:
     print(f"✓ Created zeros: {z}")
 
     # Backward compatibility
-    from corepy import Tensor
+    from corepy import ndarray
 
-    t = Tensor([1, 2, 3])
-    print(f"✓ Created legacy Tensor: {t}")
+    t = ndarray([1, 2, 3])
+    print(f"✓ Created legacy ndarray: {t}")
 except Exception as e:
-    print(f"✗ Array creation failed: {e}")
+    print(f"✗ ndarray creation failed: {e}")
 
-# Test 4: Array operations
-print("\n[Test 4] Array Operations")
+# Test 4: ndarray operations
+print("\n[Test 4] ndarray Operations")
 try:
     b = cp.array([4.0, 5.0, 6.0])
     c = a + b
@@ -53,7 +53,21 @@ try:
         f"✓ Properties: shape={c.shape}, dtype={c.dtype}, ndim={c.ndim}, size={c.size}"
     )
 except Exception as e:
-    print(f"✗ Array operations failed: {e}")
+    print(f"✗ ndarray operations failed: {e}")
+
+# Test 4.5: Metal hardware acceleration integration
+print("\n[Test 4.5] Metal Hardware Accelerated API")
+try:
+    from corepy.backend import get_system_capabilities
+
+    caps = get_system_capabilities()
+    if caps.get("gpu", {}).get("metal_available", False):
+        m = cp.array([1.0, 2.0, 3.0], device="metal")
+        print(f"✓ Created Metal array: {m} on backend {m.backend.value}")
+    else:
+        print("⚠ Metal not inherently available on this hardware block for testing.")
+except Exception as e:
+    print(f"✗ Metal API extraction explicitly failed: {e}")
 
 # Test 5: Data module
 print("\n[Test 5] Data Module")

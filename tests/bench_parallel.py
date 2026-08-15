@@ -8,7 +8,7 @@ Measures speedup for large arrays (>100K elements).
 import time
 
 import numpy as np
-from _corepy_rust import tensor_mean_f32, tensor_sum_f32, tensor_sum_i32
+from _corepy_rust import array_mean_f32, array_sum_f32, array_sum_i32
 
 
 def bench_scaling(op_name, op_func, dtype, sizes):
@@ -104,19 +104,19 @@ def main():
     # === sum_f32 ===
     print("\n[1/3] sum_f32 (AVX2 SIMD)")
     print("-" * 70)
-    sum_f32_results = bench_scaling("sum_f32", tensor_sum_f32, np.float32, test_sizes)
+    sum_f32_results = bench_scaling("sum_f32", array_sum_f32, np.float32, test_sizes)
     print_speedup_analysis(sum_f32_results)
 
     # === sum_i32 ===
     print("\n[2/3] sum_i32 (AVX2 SIMD)")
     print("-" * 70)
-    sum_i32_results = bench_scaling("sum_i32", tensor_sum_i32, np.int32, test_sizes)
+    sum_i32_results = bench_scaling("sum_i32", array_sum_i32, np.int32, test_sizes)
     print_speedup_analysis(sum_i32_results)
 
     # === mean_f32 ===
     print("\n[3/3] mean_f32 (parallel sum + divide)")
     print("-" * 70)
-    mean_results = bench_scaling("mean_f32", tensor_mean_f32, np.float32, test_sizes)
+    mean_results = bench_scaling("mean_f32", array_mean_f32, np.float32, test_sizes)
     print_speedup_analysis(mean_results)
 
     # === Summary ===
@@ -151,7 +151,7 @@ def main():
     # Corepy sum
     start = time.perf_counter()
     for _ in range(10):
-        cp_result = tensor_sum_f32(data_f32.ctypes.data, size)
+        cp_result = array_sum_f32(data_f32.ctypes.data, size)
     corepy_time = time.perf_counter() - start
 
     speedup = numpy_time / corepy_time

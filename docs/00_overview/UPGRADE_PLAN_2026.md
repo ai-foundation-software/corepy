@@ -2,7 +2,7 @@
 
 **Current Status**: CorePy has achieved **CPU Parity** with NumPy for large matrices and **1.5x Speedup** for mid-sized matrices via optimized OpenBLAS dispatch and Zero-Copy architecture.
 
-**Vision**: Move beyond simple matrix multiplication into full tensor capabilities (Broadcasting, Autograd) and Hardware Acceleration (CUDA).
+**Vision**: Move beyond simple matrix multiplication into full array capabilities (Broadcasting, Autograd) and Hardware Acceleration (CUDA).
 
 ## Phase 1: Completing the Foundation (Q1 2026)
 
@@ -19,7 +19,7 @@
 **Goal**: Use Rayon to parallelize element-wise ops for N > 100k.
 - **Tasks**:
     - [ ] Activate `rayon` thread pool in `elementwise.rs`.
-    - [ ] Implement chunked parallel iterator for `tensor_add_f32`, etc.
+    - [ ] Implement chunked parallel iterator for `array_add_f32`, etc.
     - [ ] Benchmark vs NumPy for 10M element arrays (Target: 2-4x speedup).
 
 ## Phase 2: Advanced Capabilities (Q2 2026)
@@ -35,7 +35,7 @@
 **Problem**: CorePy is valid for inference but not training.
 **Goal**: Backpropagation support.
 - **Tasks**:
-    - [ ] Add `requires_grad=bool` to Tensor.
+    - [ ] Add `requires_grad=bool` to Array.
     - [ ] Implement DAG (Directed Acyclic Graph) to track operation history.
     - [ ] Implement `backward()` for MatMul, Add, and ReLU.
 

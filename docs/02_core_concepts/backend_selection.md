@@ -33,21 +33,20 @@ We use conservative thresholds to prevent performance degradation from kernel la
 
 ## Backend Selection Logic
 
-The `select_backend` function determines the execution device:
+The modern Rust-based dispatcher automatically analyzes your hardware and workload sizes:
 
 ```python
-def select_backend(op, data, device_info):
-    # 1. User/Env Override
-    if forced: return forced
-    
-    # 2. Safety Checks
-    if op.type is CONTROL: return CPU
-    
-    # 3. Optimality Checks
-    if has_gpu and data.size > threshold:
-        return GPU
-        
-    return CPU
+import corepy as cp
+
+# 1. Automatic Hardware & Cache detection
+caps = cp.get_system_capabilities()
+print(caps["cpu"])
+# Outputs features like `has_avx512`, `has_neon`, and Cache sizes like `l2_cache` for chunking
+
+# 2. Smart dispatch in action
+a = cp.ones((2048, 2048))
+b = cp.ones((2048, 2048))
+result = a @ b  # Rust optimizer decides CPU (Faer/AVX2) or GPU (Metal)
 ```
 
 ## User Overrides
@@ -56,24 +55,31 @@ def select_backend(op, data, device_info):
 Set `COREPY_BACKEND` to force a default for the entire process:
 
 ```bash
-export COREPY_BACKEND=gpu  # Try to run everything on GPU (unsafe fallback to CPU if missing)
+export COREPY_BACKEND=gpu  # Force GPU usage
 export COREPY_BACKEND=cpu  # Force strict CPU execution
 ```
 
 ### API Override
-Pass `device` or `backend` argument to tensor constructors or operations:
+Pass the `backend` argument to constructors:
 
 ```python
-import corepy.backend as cb
+import corepy as cp
 
-# Manual override
-backend = cb.select_backend(..., requested_backend=cb.BackendType.GPU)
+# Explicitly use CPU
+t = cp.array([1, 2, 3], backend="cpu")
+
+# Explicitly use GPU (macOS only for now)
+try:
+    t_gpu = cp.array([1, 2, 3], backend="gpu")
+except ValueError:
+    print("GPU not available")
 ```
 
 ## Cross-Platform Notes
 
-*   **Linux**: Supports CUDA (Nvidia) and ROCm (AMD).
-*   **macOS**: Supports Metal (MPS) on Apple Silicon.
-*   **Windows**: Supports CUDA.
+*   **Linux**: Optimized CPU kernels (Rust AVX2/AVX512, Faer). CUDA support coming soon.
+*   **macOS**: Native Metal acceleration on Apple Silicon via Rust.
+*   **Windows**: Optimized CPU kernels via Faer/OpenBLAS.
 
-*Note: Initial implementation uses placeholders for driver detection. Full hardware integration will follow.*
+*Note: The system prioritizes Rust native capabilities while aggressively matching L1/L2 Cache topologies to matrix operations for dense performance without GPU overhead.*
+

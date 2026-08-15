@@ -106,7 +106,7 @@ _python_profiler = _PythonProfiler()
 # Try to import Rust extension
 try:
     # Use relative import to ensure we share the same extension instance
-    # as the rest of the package (e.g. tensor.py)
+    # as the rest of the package (e.g. array.py)
     from .. import _corepy_rust
 
     # Bind functions
@@ -118,10 +118,10 @@ try:
     # _RUST_AVAILABLE = True
     # For now, disable Rust profiler to ensure we capture Python-side events
     _RUST_AVAILABLE = False
-    logger.warning("Disabling Rust profiler to ensure Python events are captured.")
+    logger.debug("Disabling Rust profiler to ensure Python events are captured.")
 except ImportError:
     _RUST_AVAILABLE = False
-    logger.warning("Corepy Rust extension not found. Profiling will be disabled.")
+    logger.debug("Corepy Rust extension not found. Profiling will be disabled.")
 
 
 # Force Python profiler if we're debugging or Rust is broken

@@ -26,7 +26,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
-        python-version: ["3.9", "3.10", "3.11", "3.12", "3.13"]
+        python-version: ["3.10", "3.11", "3.12", "3.13"]
 
     steps:
       - name: Checkout Repository
@@ -47,18 +47,17 @@ jobs:
       # ========================================
       # STEP 1: Platform Dependencies
       # ========================================
+
       - name: Install Dependencies (Ubuntu)
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y libopenblas-dev cmake ninja-build
+          sudo apt-get install -y libopenblas-dev
 
       - name: Install Dependencies (macOS)
         if: runner.os == 'macOS'
         run: |
-          brew install openblas cmake ninja
-          echo "CMAKE_PREFIX_PATH=$(brew --prefix openblas)" >> $GITHUB_ENV
-          echo "PKG_CONFIG_PATH=$(brew --prefix openblas)/lib/pkgconfig" >> $GITHUB_ENV
+          brew install openblas
           echo "LIBRARY_PATH=$(brew --prefix openblas)/lib:$LIBRARY_PATH" >> $GITHUB_ENV
 
       - name: Install Dependencies (Windows)
@@ -68,77 +67,89 @@ jobs:
           curl -L -o openblas.zip https://github.com/OpenMathLib/OpenBLAS/releases/download/v0.3.28/OpenBLAS-0.3.28-x64.zip
           unzip -q openblas.zip -d openblas
           echo "OPENBLAS_DIR=${{ github.workspace }}/openblas" >> $GITHUB_ENV
-          echo "CMAKE_PREFIX_PATH=${{ github.workspace }}/openblas" >> $GITHUB_ENV
-          # Add OpenBLAS bin to PATH so DLLs are found at runtime
           echo "${{ github.workspace }}/openblas/bin" >> $GITHUB_PATH
 
       # ========================================
-      # STEP 2: Install pybind11 (required for CMake)
-      # ========================================
-      - name: Install pybind11
-        shell: bash
-        run: |
-          uv venv
-          uv pip install pybind11
-
-      # ========================================
-      # STEP 3: Build C++ Kernels (csrc/)
-      # ========================================
-      - name: Build C++ kernels
-        shell: bash
-        run: |
-          if [ "$RUNNER_OS" == "Windows" ]; then
-            PYTHON_EXE="./.venv/Scripts/python"
-          else
-            PYTHON_EXE="./.venv/bin/python"
-          fi
-          PYBIND11_CMAKE_DIR=$($PYTHON_EXE -c "import pybind11; print(pybind11.get_cmake_dir())")
-          echo "pybind11 found at: $PYBIND11_CMAKE_DIR"
-          
-          if [ "$RUNNER_OS" == "Windows" ]; then
-            cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -Dpybind11_DIR="$PYBIND11_CMAKE_DIR"
-          else
-            cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -Dpybind11_DIR="$PYBIND11_CMAKE_DIR"
-          fi
-          cmake --build build --config Release
-          
-          if [ "$RUNNER_OS" == "macOS" ]; then
-             echo "Compiling Metal Kernels..."
-             xcrun -sdk macosx metal -v -c csrc/src/metal/kernels.metal -o build/csrc/kernels.air
-             xcrun -sdk macosx metallib build/csrc/kernels.air -o build/csrc/default.metallib
-             echo "COREPY_METAL_LIB_PATH=$(pwd)/build/csrc/default.metallib" >> $GITHUB_ENV
-          fi
-
-      # ========================================
-      # STEP 4: Install Python deps & Build Rust
+      # STEP 2: Install Python deps & Build Rust
       # ========================================
 
       - name: Install Python dependencies
-        shell: bash
-        run: |
-          # Install dependencies WITHOUT triggering editable install yet
-          # This prevents maturin from building before C++ kernels are ready
-          uv sync --no-install-workspace --all-extras --group dev
+        run: uv sync --all-extras --group dev
 
       - name: Build Rust extension
-        shell: bash
+        run: uv run maturin develop --release --manifest-path rust/core/Cargo.toml
+
+      - name: Copy BLAS DLLs next to pyd (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
         run: |
-          # Now build Rust extension with CMake artifacts present
-          uv run maturin develop --release --manifest-path rust/core/Cargo.toml
+          # On Python 3.10+, Windows no longer searches PATH for DLL dependencies.
+          # We must place BLAS DLLs next to the .pyd OR register directories.
+          
+          # Find the built .pyd file
+          $pyd = Get-ChildItem -Path "corepy" -Filter "_corepy_rust*.pyd" -Recurse | Select-Object -First 1
+          if (-not $pyd) {
+            # Also check .venv for maturin develop installations
+            $pyd = Get-ChildItem -Path ".venv" -Filter "_corepy_rust*.pyd" -Recurse | Select-Object -First 1
+          }
+          
+          if ($pyd) {
+            $dest = $pyd.DirectoryName
+            Write-Host "Found .pyd at: $($pyd.FullName)"
+            
+            # Check if MKL was linked (mkl-devel is a dev dependency)
+            $venvLibBin = Join-Path ".venv" "Library" "bin"
+            if (Test-Path (Join-Path $venvLibBin "mkl_rt.2.dll")) {
+              Write-Host "MKL detected in venv - copying MKL DLLs"
+              Get-ChildItem -Path $venvLibBin -Filter "mkl_*.dll" | ForEach-Object {
+                Copy-Item $_.FullName -Destination $dest
+                Write-Host "  Copied $($_.Name)"
+              }
+              # Also copy tbb DLL if present (MKL dependency)
+              Get-ChildItem -Path $venvLibBin -Filter "tbb*.dll" | ForEach-Object {
+                Copy-Item $_.FullName -Destination $dest
+                Write-Host "  Copied $($_.Name)"
+              }
+            }
+            
+            # Also copy OpenBLAS DLL if present
+            $openblasDir = $env:OPENBLAS_DIR
+            if (-not $openblasDir -and (Test-Path "openblas")) {
+              $openblasDir = (Get-Item "openblas").FullName
+            }
+            if ($openblasDir -and (Test-Path $openblasDir)) {
+              $openblasPath = Join-Path $openblasDir "bin" "libopenblas.dll"
+              if (Test-Path $openblasPath) {
+                Copy-Item $openblasPath -Destination $dest
+                Write-Host "Copied libopenblas.dll"
+              }
+            }
+            
+            Write-Host "--- DLLs next to .pyd ---"
+            Get-ChildItem $dest -Filter "*.dll" | Select-Object Name
+          } else {
+            Write-Host "ERROR: _corepy_rust*.pyd not found!"
+            exit 1
+          }
 
       # ========================================
-      # STEP 5: Verify & Test
+      # STEP 3: Verify & Test
       # ========================================
-      - name: Verify Import
-        shell: bash
+      - name: Verify Backend & Import
         run: |
           uv run python -c "import corepy; print(f'corepy {corepy.__version__}')"
+          uv run python -c "from corepy import get_backend_policy; print(f'Active Backend: {get_backend_policy()}')"
           uv run python -c "from corepy import _corepy_rust; print('Rust runtime loaded')"
 
-      - name: Run Tests
-        shell: bash
-        run: |
-          uv run pytest tests/ --cov=corepy --cov-report=term -v
+      - name: Run Tests (pytest)
+        run: uv run pytest tests/ --cov=corepy --cov-report=term -v
+
+      - name: Functional Smoke Test (Broadcasting & Random)
+        run: uv run python scripts/val_smoke.py
+
+      - name: Performance Benchmark Smoke Test
+        run: uv run python benchmarks/cpu_matmul_bench.py --size 128
+
 
   # ===========================================================================
   # Rust Compile Check (verifies code compiles for all target architectures)
@@ -152,10 +163,10 @@ jobs:
         include:
           # x86_64 targets
           - target: x86_64-unknown-linux-gnu
-            features: ""
+            features: "--features extension-module"
           # ARM64 cross-compile (no execution, just verify compilation)
           - target: aarch64-unknown-linux-gnu
-            features: ""
+            features: "--features extension-module"
 
     steps:
       - name: Checkout Repository
@@ -175,21 +186,13 @@ jobs:
       - name: Install Build Dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y libopenblas-dev cmake ninja-build python3 python3-pip
-
-      - name: Install pybind11
-        run: |
-          pip3 install pybind11
-
-      - name: Build C++ kernels
-        run: |
-          PYBIND11_CMAKE_DIR=$(python3 -c "import pybind11; print(pybind11.get_cmake_dir())")
-          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -Dpybind11_DIR="$PYBIND11_CMAKE_DIR"
-          cmake --build build --config Release
+          sudo apt-get install -y libopenblas-dev python3 python3-pip
 
       - name: Cargo Check (compile only)
+        env:
+          PYO3_CROSS_PYTHON_VERSION: "3.10"
         run: |
-          cargo check --manifest-path rust/core/Cargo.toml --target ${{ matrix.target }}
+          cargo check --manifest-path rust/core/Cargo.toml --target ${{ matrix.target }} ${{ matrix.features }}
 
   # ===========================================================================
   # Rust Lints (Clippy)
@@ -209,17 +212,7 @@ jobs:
       - name: Install Build Dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y libopenblas-dev cmake ninja-build python3 python3-pip
-
-      - name: Install pybind11
-        run: |
-          pip3 install pybind11
-
-      - name: Build C++ kernels
-        run: |
-          PYBIND11_CMAKE_DIR=$(python3 -c "import pybind11; print(pybind11.get_cmake_dir())")
-          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -Dpybind11_DIR="$PYBIND11_CMAKE_DIR"
-          cmake --build build --config Release
+          sudo apt-get install -y libopenblas-dev python3 python3-pip
 
       - name: Clippy
         run: |

@@ -37,7 +37,6 @@ BUFFER_POOL_SIZE_CLASSES = [1_000, 10_000, 100_000, 1_000_000, 10_000_000, 100_0
 BACKEND_PRIORITY = {
     "metal": 3,  # Highest for GPU operations
     "cpu": 2,  # Accelerate/NEON
-    "numpy": 1,  # Fallback
 }
 
 # Auto-select backend based on array size

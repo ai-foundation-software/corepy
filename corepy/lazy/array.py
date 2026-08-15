@@ -99,6 +99,52 @@ class LazyArray:
         """Mean reduction: lazy_a.mean()"""
         return LazyArray(expr=Reduction("mean", self))
 
+    def max(self):
+        """Max reduction."""
+        return LazyArray(expr=Reduction("max", self))
+
+    def min(self):
+        """Min reduction."""
+        return LazyArray(expr=Reduction("min", self))
+
+    # CORE-50 operators
+    def __pow__(self, other):
+        return LazyArray(expr=BinaryOp("power", self, self._wrap(other)))
+
+    def __mod__(self, other):
+        return LazyArray(expr=BinaryOp("mod", self, self._wrap(other)))
+
+    def __floordiv__(self, other):
+        return LazyArray(expr=BinaryOp("floor_div", self, self._wrap(other)))
+
+    # CORE-50 unary methods
+    def sin(self):
+        return LazyArray(expr=UnaryOp("sin", self))
+
+    def cos(self):
+        return LazyArray(expr=UnaryOp("cos", self))
+
+    def tan(self):
+        return LazyArray(expr=UnaryOp("tan", self))
+
+    def exp(self):
+        return LazyArray(expr=UnaryOp("exp", self))
+
+    def log(self):
+        return LazyArray(expr=UnaryOp("log", self))
+
+    def sqrt(self):
+        return LazyArray(expr=UnaryOp("sqrt", self))
+
+    def floor(self):
+        return LazyArray(expr=UnaryOp("floor", self))
+
+    def ceil(self):
+        return LazyArray(expr=UnaryOp("ceil", self))
+
+    def square(self):
+        return LazyArray(expr=UnaryOp("square", self))
+
     def compute(self):
         """
         Force evaluation of the lazy expression tree.

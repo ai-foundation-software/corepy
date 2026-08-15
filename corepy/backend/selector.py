@@ -2,29 +2,34 @@ import logging
 import os
 from typing import Optional
 
+from ..compute import get_config
 from .device import DeviceInfo
 from .types import BackendType, OperationProperties, OperationType
 
 # Configure logging
 logger = logging.getLogger("corepy.backend.selector")
 
-# Thresholds (CONSTANTS)
-# Thresholds (CONSTANTS)
-THRESHOLD_VECTOR_ELEMENTS = 1_000_000  # Increased to favor CPU for small/medium ops
-THRESHOLD_MATRIX_rows = (
-    2048  # Increased based on benchmarks (Metal overhead high for < 2048)
-)
-THRESHOLD_MATRIX_COLS = 2048
-THRESHOLD_BATCH_SIZE = 64
+try:
+    from .. import _corepy_rust
+except ImportError:
+    _corepy_rust = None
 
 
-def _get_forced_backend() -> Optional[BackendType]:
+def _get_forced_backend(device_info: DeviceInfo) -> Optional[BackendType]:
     """Check environment variable for forced backend."""
     env_backend = os.getenv("COREPY_BACKEND", "").lower()
     if env_backend == "cpu":
         return BackendType.CPU
+    if env_backend == "cuda":
+        return BackendType.CUDA
+    if env_backend == "metal":
+        return BackendType.METAL
     if env_backend == "gpu":
-        return BackendType.GPU
+        return (
+            BackendType.METAL
+            if device_info.platform_system == "Darwin"
+            else BackendType.CUDA
+        )
     # Add TPU or others if needed
     return None
 
@@ -54,7 +59,10 @@ def select_backend(
         logger.debug(f"User requested backend: {requested_backend}")
 
         # Verify availability
-        if requested_backend == BackendType.GPU and not device_info.has_gpu:
+        if (
+            requested_backend in (BackendType.CUDA, BackendType.METAL)
+            and not device_info.has_gpu
+        ):
             logger.warning(
                 f"Requested backend {requested_backend} but no GPU/Accelerator detected. Falling back to CPU."
             )
@@ -63,80 +71,105 @@ def select_backend(
         return requested_backend
 
     # 2. Environment Variable Override
-    env_forced = _get_forced_backend()
+    env_forced = _get_forced_backend(device_info)
     if env_forced:
         logger.debug(f"Environment forced backend: {env_forced}")
-        if env_forced == BackendType.GPU and not device_info.has_gpu:
-            # Fallback if forced GPU but no GPU found?
-            # Or raise error? Requirement says "safe fallback", but "forced" suggests user intent.
-            # "Always provide safe fallbacks" implies we should warn and fallback.
+        if (
+            env_forced in (BackendType.CUDA, BackendType.METAL)
+            and not device_info.has_gpu
+        ):
             logger.warning(
-                "COREPY_BACKEND=gpu set but no GPU detected. Falling back to CPU."
+                "COREPY_BACKEND requests GPU execution but no GPU detected. Falling back to CPU."
             )
             return BackendType.CPU
         return env_forced
 
-    # 3. Correctness & Suitability Checks (The "Core Principles")
-
+    # 3. Correctness & Suitability Checks
     # Principle: Small data -> CPU always wins
     # Principle: Control/Scalar -> CPU always wins
     if op_type in (
         OperationType.CONTROL,
         OperationType.SCALAR,
-        # OperationType.MEMORY_BOUND,  # Allow large allocations to go to GPU if thresholds met
     ):
         logger.debug(f"Operation {op_type} is best suited for CPU.")
         return BackendType.CPU
 
-    # Principle: Streaming without batching -> CPU
     if op_props.is_streaming and not op_props.is_batched:
         logger.debug(
             "Streaming operation without batching -> forcing CPU for correctness."
         )
         return BackendType.CPU
 
-    # 4. GPU Candidate Evaluation
-    if device_info.gpu_count > 0:
-        # Check thresholds
-        use_gpu = False
+    # 4. Smart Scoring Evaluation
+    cfg = get_config()
+    if _corepy_rust is not None:
+        # Approximate flops. 1 element ~ 2 operations typically
+        flops = op_props.element_count * 2
+        # E.g. matrix mul O(N^3) -> 2 * m * n * k
+        if op_type == OperationType.COMPUTE_MATRIX and len(op_props.shape) >= 2:
+            m, n = op_props.shape[-2:]
+            flops = 2 * m * n * n  # very rough approx
+
+        memory_bytes = op_props.element_count * op_props.dtype_bytes
+
+        # Consult Rust AI Brain for the optimal compiled backend
+        recommended = _corepy_rust.recommend_backend(
+            flops, memory_bytes, op_props.is_batched
+        )
+
+        logger.debug(
+            f"Rust Brain Evaluation - Flops: {flops}, Mem: {memory_bytes}, Recommendation: {recommended}"
+        )
+
+        if recommended == "Metal" and device_info.has_metal:
+            return BackendType.METAL
+        if recommended == "CUDA" and device_info.has_cuda:
+            return BackendType.CUDA
+        if recommended in ("Metal", "CUDA") and device_info.has_gpu:
+            return BackendType.METAL if device_info.has_metal else BackendType.CUDA
+
+    else:
+        # Fallback if rust is not compiled
+        flops = op_props.element_count * 2
+
+    # 5. Legacy/Dynamic Threshold GPU Candidate Evaluation
+    if device_info.has_gpu:
+        use_accel = False
+        accel_type = BackendType.METAL if device_info.has_metal else BackendType.CUDA
+
+        min_flops = cfg.metal_min_flops if device_info.has_metal else cfg.cuda_min_flops
+        min_vector = (
+            cfg.metal_min_vector_size
+            if device_info.has_metal
+            else cfg.cuda_min_vector_size
+        )
+        min_matrix = (
+            cfg.metal_min_matrix_dim
+            if device_info.has_metal
+            else cfg.cuda_min_matrix_dim
+        )
+
+        if flops >= min_flops:
+            use_accel = True
 
         if op_type == OperationType.COMPUTE_VECTOR:
-            if op_props.element_count > THRESHOLD_VECTOR_ELEMENTS:
-                use_gpu = True
-                logger.debug(
-                    f"Vector size {op_props.element_count} > {THRESHOLD_VECTOR_ELEMENTS}. GPU Candidate."
-                )
-            else:
-                logger.debug(
-                    f"Vector size {op_props.element_count} <= {THRESHOLD_VECTOR_ELEMENTS}. Keeping CPU."
-                )
+            if op_props.element_count >= min_vector:
+                use_accel = True
 
         elif op_type == OperationType.COMPUTE_MATRIX:
             rows, cols = op_props.shape[-2:] if len(op_props.shape) >= 2 else (0, 0)
-            if rows >= THRESHOLD_MATRIX_rows and cols >= THRESHOLD_MATRIX_COLS:
-                use_gpu = True
-                logger.debug(
-                    f"Matrix shape {rows}x{cols} >= {THRESHOLD_MATRIX_rows}x{THRESHOLD_MATRIX_COLS}. GPU Candidate."
-                )
-            else:
-                return BackendType.CPU  # Explicitly return to avoid falling through
+            if rows >= min_matrix and cols >= min_matrix:
+                use_accel = True
 
-        # Check Batching
-        if op_props.is_batched and op_props.batch_size >= THRESHOLD_BATCH_SIZE:
-            use_gpu = True
-            logger.debug(
-                f"Batch size {op_props.batch_size} >= {THRESHOLD_BATCH_SIZE}. GPU Candidate."
-            )
+        if op_props.is_batched and op_props.batch_size >= cfg.cpu_min_batch_size:
+            use_accel = True
 
         if op_type == OperationType.MEMORY_BOUND:
-            if op_props.element_count > THRESHOLD_VECTOR_ELEMENTS:
-                use_gpu = True
-                logger.debug(
-                    f"Memory bound size {op_props.element_count} > Threshold. GPU Candidate."
-                )
+            if op_props.element_count >= min_vector:
+                use_accel = True
 
-        if use_gpu:
-            return BackendType.GPU
+        if use_accel:
+            return accel_type
 
-    # 5. Default
+    # 6. Default
     return BackendType.CPU

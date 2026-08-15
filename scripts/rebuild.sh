@@ -19,8 +19,7 @@ command -v uv >/dev/null 2>&1 || { echo "❌ uv required"; exit 1; }
 # Step 1: Clean
 echo "Step 1/3: Cleaning artifacts..."
 rm -rf build
-rm -rf csrc/build  # legacy
-rm -rf rust/core/target
+rm -rf rust/target
 rm -rf corepy.egg-info
 rm -rf dist
 rm -rf .pytest_cache

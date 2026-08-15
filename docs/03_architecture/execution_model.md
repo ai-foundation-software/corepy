@@ -1,6 +1,6 @@
 # Execution Model: Python → Rust → C++
 
-**Version**: 0.2.0  
+**Version**: 0.3.0  
 **Status**: Canonical Architecture Contract  
 **Scope**: CPU (fully defined), GPU (architectural only)  
 **Out of Scope**: Autograd, distributed execution, compiler IR
@@ -9,7 +9,7 @@
 
 ## Overview
 
-This document defines the **strict execution model** for Corepy tensor operations. It is the canonical contract that all implementations must follow.
+This document defines the **strict execution model** for Corepy array operations. It is the canonical contract that all implementations must follow.
 
 ### Core Principle
 
@@ -35,7 +35,7 @@ sequenceDiagram
     participant C as C++ Kernel
     
     Note over P: User: c = a + b
-    P->>P: Tensor(data, dtype, device)
+    P->>P: Array(data, dtype, device)
     P->>R: PyO3 FFI: batch=[a_ptr, b_ptr, op="add"]
     
     Note over R: Validation & Scheduling
@@ -46,14 +46,14 @@ sequenceDiagram
     R->>R: scheduler.dispatch(add_task)
     
     Note over R,C: Rust owns safety, C++ owns speed
-    par Parallel execution for large tensors
+    par Parallel execution for large arrays
         R->>C: raw_ptr(a), raw_ptr(b), raw_ptr(c), count
         C->>C: AVX-512 loop (32 floats/cycle)
         C-->>R: void (complete)
     end
     
     R->>R: mark_buffer_ready(c)
-    R-->>P: Tensor(c_buffer, shape, dtype)
+    R-->>P: Array(c_buffer, shape, dtype)
     
     Note over P: Return to user (~0.2µs overhead)
 ```
@@ -64,17 +64,17 @@ sequenceDiagram
 
 ### 1. Python Layer (Skin/UX)
 
-**Purpose**: User-facing API for expressing tensor operations  
+**Purpose**: User-facing API for expressing array operations  
 **Implementation**: `corepy/` Python package  
 **Dependencies**: NumPy-like interface conventions
 
 #### Allowed Responsibilities
 
-✅ **Tensor creation**
+✅ **Array creation**
 ```python
-# User intent: Create a tensor
+# User intent: Create a array
 import corepy as cp
-a = cp.tensor([1, 2, 3], dtype='f32', device='cpu')
+a = cp.array([1, 2, 3], dtype='f32', device='cpu')
 ```
 
 ✅ **Shape/dtype specification**
@@ -154,10 +154,10 @@ ctypes.CDLL("libcorepy.so").add(...)  # BYPASS DETECTED
 
 #### Allowed Responsibilities
 
-✅ **Tensor validation**
+✅ **Array validation**
 ```rust
-// Ensure tensors are compatible
-fn validate_binary_op(a: &Tensor, b: &Tensor) -> Result<()> {
+// Ensure arrays are compatible
+fn validate_binary_op(a: &Array, b: &Array) -> Result<()> {
     ensure!(a.shape == b.shape, "Shape mismatch");
     ensure!(a.dtype == b.dtype, "Dtype mismatch");
     ensure!(a.device == b.device, "Device mismatch");
@@ -185,7 +185,7 @@ impl Arena {
 ```rust
 // Batch multiple ops into single FFI call
 #[pyfunction]
-pub fn execute_batch(ops: Vec<Operation>) -> PyResult<Vec<Tensor>> {
+pub fn execute_batch(ops: Vec<Operation>) -> PyResult<Vec<Array>> {
     // Single FFI crossing for multiple operations
     ops.into_iter()
         .map(|op| execute_single(op))
@@ -215,7 +215,7 @@ impl TaskScheduler {
 pub fn dispatch_kernel(
     op: Operation,
     device: Device,
-) -> Result<Tensor> {
+) -> Result<Array> {
     match device {
         Device::CPU => cpu_backend::execute(op),
         Device::GPU(id) => gpu_backend::execute(op, id),
@@ -248,7 +248,7 @@ for i in 0..n {
 ❌ **Per-element validation**
 ```rust
 // BAD: Validate once, not per element
-for elem in tensor.iter() {
+for elem in array.iter() {
     ensure!(elem.is_finite(), "Invalid");  // TOO EXPENSIVE
 }
 ```
@@ -401,15 +401,15 @@ if (should_parallelize) {
 ```python
 # PYTHON LAYER: User intent
 import corepy as cp
-a = cp.tensor([1.0, 2.0, 3.0], dtype='f32')
-b = cp.tensor([4.0, 5.0, 6.0], dtype='f32')
+a = cp.array([1.0, 2.0, 3.0], dtype='f32')
+b = cp.array([4.0, 5.0, 6.0], dtype='f32')
 c = a + b  # High-level operation
 ```
 
 ```rust
 // RUST LAYER: Validation & dispatch
 #[pyfunction]
-fn tensor_add(a: &Tensor, b: &Tensor) -> PyResult<Tensor> {
+fn array_add(a: &Array, b: &Array) -> PyResult<Array> {
     // 1. Validate
     ensure!(a.shape == b.shape, "Shape mismatch");
     ensure!(a.dtype == DType::F32, "Expected f32");
@@ -427,8 +427,8 @@ fn tensor_add(a: &Tensor, b: &Tensor) -> PyResult<Tensor> {
         );
     }
     
-    // 4. Return tensor
-    Ok(Tensor::from_raw(c_buffer, a.shape.clone(), DType::F32))
+    // 4. Return array
+    Ok(Array::from_raw(c_buffer, a.shape.clone(), DType::F32))
 }
 ```
 
@@ -464,7 +464,7 @@ C = A @ B  # Matrix multiplication
 ```rust
 // RUST LAYER: Scheduling & tiling
 #[pyfunction]
-fn matmul(a: &Tensor, b: &Tensor) -> PyResult<Tensor> {
+fn matmul(a: &Array, b: &Array) -> PyResult<Array> {
     // 1. Validate shapes
     ensure!(a.shape[1] == b.shape[0], "Invalid shapes for matmul");
     
@@ -488,7 +488,7 @@ fn matmul(a: &Tensor, b: &Tensor) -> PyResult<Tensor> {
         }
     });
     
-    Ok(Tensor::from_raw(c_buffer, vec![m, n], DType::F32))
+    Ok(Array::from_raw(c_buffer, vec![m, n], DType::F32))
 }
 ```
 
@@ -524,18 +524,18 @@ extern "C" void matmul_tile_avx512(
 
 ```python
 # PYTHON LAYER: Specify GPU device
-a = cp.tensor([1, 2, 3], device='cuda:0')
-b = cp.tensor([4, 5, 6], device='cuda:0')
+a = cp.array([1, 2, 3], device='cuda:0')
+b = cp.array([4, 5, 6], device='cuda:0')
 c = a + b  # Executes on GPU
 ```
 
 ```rust
 // RUST LAYER: GPU dispatch
 #[pyfunction]
-fn tensor_add_gpu(a: &Tensor, b: &Tensor) -> PyResult<Tensor> {
+fn array_add_gpu(a: &Array, b: &Array) -> PyResult<Array> {
     // 1. Validate device compatibility
-    ensure!(a.device == b.device, "Tensors on different devices");
-    ensure!(matches!(a.device, Device::GPU(_)), "Expected GPU tensor");
+    ensure!(a.device == b.device, "Arrays on different devices");
+    ensure!(matches!(a.device, Device::GPU(_)), "Expected GPU array");
     
     // 2. Allocate GPU buffer
     let c_buffer = cuda_malloc(a.size_bytes())?;
@@ -554,7 +554,7 @@ fn tensor_add_gpu(a: &Tensor, b: &Tensor) -> PyResult<Tensor> {
         cuda_device_synchronize();
     }
     
-    Ok(Tensor::from_raw_gpu(c_buffer, a.shape.clone(), a.device))
+    Ok(Array::from_raw_gpu(c_buffer, a.shape.clone(), a.device))
 }
 ```
 
@@ -621,7 +621,7 @@ __global__ void add_f32_cuda(
 A: Rust provides memory safety, thread safety, and lifetime management. Bypassing Rust would reintroduce segfaults and data races that NumPy/PyTorch suffer from.
 
 **Q: Isn't Rust overhead too expensive?**  
-A: Rust's zero-cost abstractions compile to native code. The overhead is FFI crossings, which are batched. For large tensors, this is negligible (<1% total time).
+A: Rust's zero-cost abstractions compile to native code. The overhead is FFI crossings, which are batched. For large arrays, this is negligible (<1% total time).
 
 **Q: Can C++ validate inputs for safety?**  
 A: No. C++ is the hot path. Validation must happen in Rust before dispatch. C++ trusts its inputs are valid.

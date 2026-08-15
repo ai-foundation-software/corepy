@@ -43,20 +43,20 @@ def _metal_library_loaded():
     test_data = np.array([1.0, 2.0, 3.0], dtype=np.float32)
     t = array(test_data, device="metal")
     result = t.sum()
-    val = result.to_numpy()[0]
+    val = result.to_list()[0]
 
     # If library not loaded, sum returns 0.0
     # Real sum should be 6.0
     return abs(val - 6.0) < 0.01
 
 
-def test_metal_tensor_creation():
-    """Test creating a tensor on Metal device."""
+def test_metal_array_creation():
+    """Test creating a array on Metal device."""
     if not corepy._corepy_rust.metal_is_available():
         pytest.skip("Metal not available")
 
     t = array([1.0, 2.0, 3.0], device="metal")
-    assert t.backend.name == "GPU"
+    assert t.backend.name == "METAL"
 
     # Check internal buffer view device
     view = t._get_buffer_view()
@@ -80,9 +80,9 @@ def test_metal_sum():
 
     # Verify result (allow small float error)
     expected = np.sum(data)
-    # result is a Tensor wrapping a scalar usually (or list [scalar])
-    # Corepy sum returns Tensor([val])
-    val = result.to_numpy()[0]
+    # result is a ndarray wrapping a scalar usually (or list [scalar])
+    # Corepy sum returns ndarray([val])
+    val = result.to_list()[0]
 
     assert np.allclose(val, expected, rtol=1e-4)
     # Check that it actually ran on Metal?
@@ -102,7 +102,7 @@ def test_metal_mean():
 
     result = t.mean()
     expected = np.mean(data)
-    val = result.to_numpy()[0]
+    val = result.to_list()[0]
 
     assert np.allclose(val, expected, rtol=1e-4)
 
@@ -124,7 +124,7 @@ def test_metal_matmul():
     c = a.matmul(b)
 
     expected = a_data @ b_data
-    assert np.allclose(c.to_numpy(), expected, rtol=1e-4)
+    assert np.allclose(c.to_list(), expected, rtol=1e-4)
 
 
 def test_metal_matmul_mismatch():

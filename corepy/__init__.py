@@ -211,7 +211,7 @@ from . import linalg
 from .dataframe import DataFrame, read_csv
 from .series import Series
 
-__version__ = "0.3.0"
+__version__ = "0.3.1"
 
 # Expose types and backend control
 from .backend import (

@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """
-Test script to validate corepy 0.3.0 released package APIs.
+Test script to validate corepy 0.3.1 released package APIs.
 This will help us determine which examples work for usage.md documentation.
 """
 
 print("=" * 60)
-print("Testing Corepy 0.3.0 Released Package")
+print("Testing Corepy 0.3.1 Released Package")
 print("=" * 60)
 
 # Test 1: Basic imports

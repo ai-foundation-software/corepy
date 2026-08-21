@@ -39,16 +39,20 @@ def flatten(a: Any) -> Any:
     return ravel(a)
 
 
-def squeeze(a: Any) -> Any:
+def squeeze(a: Any, axis: Any = None) -> Any:
     """Remove single-dimensional entries from the shape of an array."""
     from ..array import ndarray
 
     if not isinstance(a, ndarray):
         a = ndarray(a)
-    if hasattr(a, "squeeze"):
-        return a.squeeze()
-
-    new_shape = tuple(s for s in a.shape if s != 1)
-    if not new_shape:
-        new_shape = (1,)
+    if axis is None:
+        new_shape = tuple(s for s in a.shape if s != 1)
+        if not new_shape:
+            new_shape = (1,)
+    elif isinstance(axis, int):
+        axes = (axis % len(a.shape),)
+        new_shape = tuple(s for i, s in enumerate(a.shape) if i not in axes or s != 1)
+    else:
+        axes = tuple(ax % len(a.shape) for ax in axis)
+        new_shape = tuple(s for i, s in enumerate(a.shape) if i not in axes or s != 1)
     return a.reshape(new_shape)

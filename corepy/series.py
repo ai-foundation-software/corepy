@@ -103,6 +103,70 @@ class Series:
     def value_counts(self) -> dict:
         return self._series.value_counts()
 
+    def _scalar(self, val: Any) -> Any:
+        if hasattr(val, "to_list"):
+            l = val.to_list()
+            while isinstance(l, list) and len(l) > 0:
+                l = l[0]
+            return l
+        return val
+
+    def mean(self) -> float:
+        return float(self._scalar(self.values.mean()))
+
+    def std(self, ddof: int = 1) -> float:
+        return float(self._scalar(self.values.std(ddof=ddof)))
+
+    def var(self, ddof: int = 1) -> float:
+        return float(self._scalar(self.values.var(ddof=ddof)))
+
+    def sum(self) -> float:
+        return float(self._scalar(self.values.sum()))
+
+    def min(self) -> Any:
+        return self._scalar(self.values.min())
+
+    def max(self) -> Any:
+        return self._scalar(self.values.max())
+
+    def tolist(self) -> list:
+        return self.values.to_list()
+
+    def apply(self, func: Any) -> "Series":
+        vals = [func(x) for x in self.values.to_list()]
+        return Series(vals, index=self.index, name=self.name)
+
+    def map(self, arg: Any) -> "Series":
+        if isinstance(arg, dict):
+            vals = [arg.get(x, x) for x in self.values.to_list()]
+        elif callable(arg):
+            vals = [arg(x) for x in self.values.to_list()]
+        else:
+            raise TypeError("map argument must be a dict or callable")
+        return Series(vals, index=self.index, name=self.name)
+
+    def filter(
+        self, items=None, like: Optional[str] = None, regex: Optional[str] = None
+    ) -> "Series":
+        indices = self.index
+        vals = self.values.to_list()
+        filtered_indices = []
+        filtered_vals = []
+        import re
+
+        for idx, val in zip(indices, vals):
+            keep = False
+            if items is not None and idx in items:
+                keep = True
+            elif like is not None and like in str(idx):
+                keep = True
+            elif regex is not None and re.search(regex, str(idx)):
+                keep = True
+            if keep:
+                filtered_indices.append(idx)
+                filtered_vals.append(val)
+        return Series(filtered_vals, index=filtered_indices, name=self.name)
+
     def __len__(self) -> int:
         return len(self._series.index)
 

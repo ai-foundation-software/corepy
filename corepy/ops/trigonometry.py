@@ -13,26 +13,33 @@ from typing import Any
 from .ufunc_engine import _ensure_array, ufunc_binary, ufunc_unary
 
 
+from .domain_guards import safe_eval_binary, safe_eval_unary
+
+
 def _unary_trig(op_name: str, core_method: str, py_fn, a: Any) -> Any:
-    """Generic unary trig helper."""
+    """Generic unary trig helper with robust domain error handling."""
     from ..array import ndarray
 
     a = _ensure_array(a)
     if a._core_array is not None:
         fn = getattr(a._core_array, core_method, None)
         if fn is not None:
-            result_ca = fn()
-            result = ndarray(result_ca.to_list(), dtype=a.dtype, backend=a.backend)
-            result._core_array = result_ca
-            return result
+            try:
+                result_ca = fn()
+                result = ndarray(result_ca.to_list(), dtype=a.dtype, backend=a.backend)
+                result._core_array = result_ca
+                return result
+            except Exception:
+                pass
     from .math import _flatten
 
     flat = _flatten(a.to_list() if hasattr(a, "to_list") else a)
-    return ndarray([py_fn(x) for x in flat], dtype=a.dtype, backend=a.backend)
+    res = [safe_eval_unary(op_name, py_fn, float(x)) for x in flat]
+    return ndarray(res, dtype=a.dtype, backend=a.backend)
 
 
 def _binary_trig(core_method: str, py_fn, a: Any, b: Any) -> Any:
-    """Generic binary trig helper."""
+    """Generic binary trig helper with robust domain error handling."""
     from ..array import ndarray
     from .ufunc_engine import _broadcast_pair
 
@@ -40,17 +47,22 @@ def _binary_trig(core_method: str, py_fn, a: Any, b: Any) -> Any:
     if a._core_array is not None and b._core_array is not None:
         fn = getattr(a._core_array, core_method, None)
         if fn is not None:
-            result_ca = fn(b._core_array)
-            result = ndarray(result_ca.to_list(), dtype=a.dtype, backend=a.backend)
-            result._core_array = result_ca
-            return result
+            try:
+                result_ca = fn(b._core_array)
+                result = ndarray(result_ca.to_list(), dtype=a.dtype, backend=a.backend)
+                result._core_array = result_ca
+                return result
+            except Exception:
+                pass
     from .math import _flatten
 
     flat_a = _flatten(a.to_list() if hasattr(a, "to_list") else a)
     flat_b = _flatten(b.to_list() if hasattr(b, "to_list") else b)
-    return ndarray(
-        [py_fn(x, y) for x, y in zip(flat_a, flat_b)], dtype=a.dtype, backend=a.backend
-    )
+    res = [
+        safe_eval_binary(core_method, py_fn, float(x), float(y))
+        for x, y in zip(flat_a, flat_b)
+    ]
+    return ndarray(res, dtype=a.dtype, backend=a.backend)
 
 
 # Trigonometric

@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.2] - 2026-08-21
+
+### Fixed & Remediated
+- **PyO3 Type Unwrapping**: Fixed `cp.stack([a1, a2])` and `_ensure_core_array` extraction.
+- **Series & DataFrame**: Implemented `.mean()`, `.std()`, `.var()`, `.sum()`, `.min()`, `.max()`, `.apply()`, `.map()`, `.filter()`, and `.tolist()` on `Series`. Repaired `df.describe()`.
+- **Negative Slicing**: Fixed `Series.tail(n)` overflow error on negative integer bounds via Rust PyO3 `isize` conversion.
+- **2D Scalar Comparisons & Boolean Indexing**: Added scalar comparison broadcasting in Rust `elementwise_cmp` and implemented boolean matrix mask indexing (`arr2d[arr2d > 2]`).
+- **Math Domain Bounds**: Intercepted math domain errors for inverse trig/hyperbolic/log functions to return `NaN` with `RuntimeWarning`.
+- **Hardware Abstraction**: Added high-level `GPUBuffer` Python class with `__del__` finalizers and CPU memory fallback.
+
 ## [0.3.1] - 2026-08-16
 
 ### Fixed

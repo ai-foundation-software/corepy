@@ -13,7 +13,7 @@ See: docs/03_architecture/PHASE_5_BUFFER_INTERFACE.md
 import logging
 from dataclasses import dataclass
 from enum import Enum
-from typing import TYPE_CHECKING, Any, Optional, Tuple
+from typing import TYPE_CHECKING, Any, Optional, Tuple, Union
 
 from .backend.types import DataType
 
@@ -291,3 +291,52 @@ def from_numpy(
         owner=arr,
         writable=arr.flags.writeable if hasattr(arr, "flags") else True,
     )
+
+
+class GPUBuffer:
+    """
+    High-level abstraction for GPU memory buffers.
+    Wraps raw pointers/addresses with automatic cleanup and CPU fallback.
+    """
+
+    def __init__(
+        self,
+        ptr: int,
+        size_bytes: int,
+        device: Union[Device, str] = "metal",
+        dealloc_fn: Optional[Any] = None,
+    ):
+        self.ptr = ptr
+        self.size_bytes = size_bytes
+        self.device = (
+            Device(DeviceType.METAL)
+            if isinstance(device, str) and "metal" in device
+            else device
+        )
+        self._dealloc_fn = dealloc_fn
+        self._freed = False
+
+    def free(self):
+        """Release GPU memory buffer."""
+        if not self._freed and self.ptr != 0:
+            if self._dealloc_fn is not None:
+                try:
+                    self._dealloc_fn(self.ptr)
+                except Exception as e:
+                    logger.warning(
+                        f"Failed to deallocate GPU buffer at {hex(self.ptr)}: {e}"
+                    )
+            self._freed = True
+            self.ptr = 0
+
+    def __del__(self):
+        self.free()
+
+    def to_cpu(self) -> bytes:
+        """Transfer buffer contents to CPU memory (fallback)."""
+        if self.ptr == 0:
+            return b""
+        import ctypes
+
+        return ctypes.string_at(self.ptr, self.size_bytes)
+

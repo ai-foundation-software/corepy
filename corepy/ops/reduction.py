@@ -32,31 +32,43 @@ def prod(a: Any) -> float:
     return result
 
 
-def std(a: Any) -> float:
-    """Population standard deviation."""
+def std(a: Any, axis: Any = None, ddof: int = 0, keepdims: bool = False) -> float:
+    """Standard deviation of elements."""
     a = _ensure(a)
-    if a._core_array is not None:
-        return a._core_array.std_dev()
+    if ddof == 0 and axis is None and a._core_array is not None:
+        try:
+            return a._core_array.std_dev()
+        except Exception:
+            pass
     from .math import _flatten
 
     flat = _flatten(a.to_list())
     n = len(flat)
+    if n == 0:
+        return float("nan")
     mean = builtins.sum(flat) / n
-    v = builtins.sum((x - mean) ** 2 for x in flat) / n
+    denom = builtins.max(1, n - ddof) if n > ddof else n
+    v = builtins.sum((x - mean) ** 2 for x in flat) / denom
     return math.sqrt(v)
 
 
-def var(a: Any) -> float:
-    """Population variance."""
+def var(a: Any, axis: Any = None, ddof: int = 0, keepdims: bool = False) -> float:
+    """Variance of elements."""
     a = _ensure(a)
-    if a._core_array is not None:
-        return a._core_array.var()
+    if ddof == 0 and axis is None and a._core_array is not None:
+        try:
+            return a._core_array.var()
+        except Exception:
+            pass
     from .math import _flatten
 
     flat = _flatten(a.to_list())
     n = len(flat)
+    if n == 0:
+        return float("nan")
     mean = builtins.sum(flat) / n
-    return builtins.sum((x - mean) ** 2 for x in flat) / n
+    denom = builtins.max(1, n - ddof) if n > ddof else n
+    return builtins.sum((x - mean) ** 2 for x in flat) / denom
 
 
 def cumsum(a: Any) -> Any:

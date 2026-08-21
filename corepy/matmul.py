@@ -147,7 +147,11 @@ def _ensure_float32_c_contiguous(obj: Any) -> tuple[int, tuple[int, ...]]:
         if len(shape) != 2:
             raise ValueError(f"corepy.matmul requires 2-D arrays; got shape {shape}")
         dt = getattr(obj, "dtype", None)
-        if dt is not None and getattr(dt, "name", None) != "float32" and str(dt) != "float32":
+        if (
+            dt is not None
+            and getattr(dt, "name", None) != "float32"
+            and str(dt) != "float32"
+        ):
             raise ValueError(
                 f"corepy.matmul requires float32 arrays; got dtype='{dt}'.\n"
                 f"Convert with: arr = arr.astype('float32')"

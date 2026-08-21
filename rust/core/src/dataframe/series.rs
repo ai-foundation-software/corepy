@@ -65,9 +65,14 @@ impl Series {
         Self::new(name, data_ref.clone(), index)
     }
 
-    pub fn head(&self, n: Option<usize>) -> PyResult<Series> {
+    pub fn head(&self, n: Option<isize>) -> PyResult<Series> {
         let count = self.data.element_count();
-        let n = n.unwrap_or(5).min(count);
+        let n_raw = n.unwrap_or(5);
+        let n = if n_raw < 0 {
+            count.saturating_sub(n_raw.unsigned_abs())
+        } else {
+            (n_raw as usize).min(count)
+        };
         let mut new_index = Vec::with_capacity(n);
         new_index.extend_from_slice(&self.index[..n]);
 
@@ -106,9 +111,14 @@ impl Series {
         })
     }
 
-    pub fn tail(&self, n: Option<usize>) -> PyResult<Series> {
+    pub fn tail(&self, n: Option<isize>) -> PyResult<Series> {
         let count = self.data.element_count();
-        let n = n.unwrap_or(5).min(count);
+        let n_raw = n.unwrap_or(5);
+        let n = if n_raw < 0 {
+            count.saturating_sub(n_raw.unsigned_abs())
+        } else {
+            (n_raw as usize).min(count)
+        };
         let start = count - n;
         let mut new_index = Vec::with_capacity(n);
         new_index.extend_from_slice(&self.index[start..]);

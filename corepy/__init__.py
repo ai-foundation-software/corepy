@@ -98,6 +98,7 @@ from . import (
     buffer_pool,  # Import buffer pool module
     lazy,  # Import lazy evaluation module
 )
+from .buffer import GPUBuffer
 
 # Primary exports
 from .array import _map_to_rust_dtype, ndarray
@@ -211,7 +212,7 @@ from . import linalg
 from .dataframe import DataFrame, read_csv
 from .series import Series
 
-__version__ = "0.3.1"
+__version__ = "0.3.2"
 
 # Expose types and backend control
 from .backend import (
@@ -452,11 +453,21 @@ def stack(
     """Stack arrays along a new axis."""
     if not arrays:
         raise ValueError("Need at least one array to stack")
-    from ._corepy_rust import _RustCoreArray as _CT
+    from .array import ndarray
 
-    core_arrays = [a._core_array for a in arrays]
-    ct = _CT.stack(core_arrays, axis)
-    return ndarray._wrap_core_array(ct, DataType.FLOAT32, device or "cpu")
+    arr_objs = [a if isinstance(a, ndarray) else ndarray(a) for a in arrays]
+    try:
+        from ._corepy_rust import _RustCoreArray as _CT
+
+        core_arrays = [a._ensure_core_array() for a in arr_objs]
+        if all(ca is not None for ca in core_arrays):
+            ct = _CT.stack(core_arrays, axis)
+            return ndarray._wrap_core_array(ct, DataType.FLOAT32, device or "cpu")
+    except Exception:
+        pass
+    from .ops.stacking import stack as _stack
+
+    return _stack(arr_objs, axis=axis)
 
 
 def split(
@@ -533,16 +544,19 @@ def linspace(
 
     Example:
     """
+    if num == 0:
+        return ndarray([], dtype=dtype, device=device)
+    if num == 1:
+        return ndarray([float(start)], dtype=dtype, device=device)
     try:
         from ._corepy_rust import _RustCoreArray as _CT
 
         ct = _CT.linspace(float(start), float(stop), int(num))
         return ndarray._wrap_core_array(ct, dtype, device or "cpu")
     except ImportError:
-        if num == 0:
-            return ndarray([], dtype=dtype, device=device)
-        if num == 1:
-            return ndarray([float(start)], dtype=dtype, device=device)
+        step = (float(stop) - float(start)) / (num - 1)
+        data = [float(start) + step * i for i in range(num)]
+        return ndarray(data, dtype=dtype, device=device)
         step = (float(stop) - float(start)) / (num - 1)
         data = [float(start) + step * i for i in range(num)]
         return ndarray(data, dtype=dtype, device=device)

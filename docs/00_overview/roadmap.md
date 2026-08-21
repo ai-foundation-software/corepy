@@ -2,15 +2,19 @@
 
 This document outlines the development milestones for Corepy.
 
-## 🏆 Current Status: v0.3.0 (Current)
-- **Feature Focus**: Backend Dispatch & Hardware Awareness
+## 🏆 Current Status: v0.3.2 (Current)
+- **Feature Focus**: Backend Dispatch, PyO3 Type Unwrapping & Remediation
 - **Key Deliverables**:
+  - ✅ PyO3 `_RustCoreArray` type unwrapping and stacking
+  - ✅ 2D scalar comparison broadcasting & boolean mask indexing (`arr2d[arr2d > 2]`)
+  - ✅ Full Series & DataFrame statistical methods (`mean`, `std`, `var`, `sum`, `min`, `max`, `apply`, `map`, `filter`, `describe`)
+  - ✅ Math domain error guards returning NaN with RuntimeWarning
+  - ✅ High-level GPUBuffer memory abstraction
   - ✅ Hardware-aware Rust Backend (`optimizer.rs`, `device.rs`)
   - ✅ Intel/AMD specific optimized dispatch logic
   - ✅ Professional workload analysis (`cp.analyse_workload`)
-  - ✅ Hybrid Python/Rust/C++ Architecture
   - ✅ Zero-config Profiling System (`corepy.profiler`)
-  - ✅ Array Operations (add, sub, mul, div, sum, mean, matmul, max, min)
+  - ✅ Array Operations (50+ UFuncs)
   - ✅ Rust FFI Integration with PyO3
 
 

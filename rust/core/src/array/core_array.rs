@@ -2122,24 +2122,39 @@ impl CoreArray {
                 name
             )));
         }
-        if self.shape != other.shape {
-            return Err(pyo3::exceptions::PyValueError::new_err(format!(
-                "Shape mismatch for {}: {:?} vs {:?}",
-                name, self.shape, other.shape
-            )));
-        }
 
         let a = unsafe { self.as_f32_slice() };
         let b = unsafe { other.as_f32_slice() };
-
         use rayon::prelude::*;
-        let result_data: Vec<f32> = a
-            .par_iter()
-            .zip(b.par_iter())
-            .map(|(&x, &y)| if op(x, y) { 1.0 } else { 0.0 })
-            .collect();
 
-        CoreArray::new(result_data, self.shape.clone())
+        if other.element_count() == 1 && !b.is_empty() {
+            let scalar_b = b[0];
+            let result_data: Vec<f32> = a
+                .par_iter()
+                .map(|&x| if op(x, scalar_b) { 1.0 } else { 0.0 })
+                .collect();
+            CoreArray::new(result_data, self.shape.clone())
+        } else if self.element_count() == 1 && !a.is_empty() {
+            let scalar_a = a[0];
+            let result_data: Vec<f32> = b
+                .par_iter()
+                .map(|&y| if op(scalar_a, y) { 1.0 } else { 0.0 })
+                .collect();
+            CoreArray::new(result_data, other.shape.clone())
+        } else {
+            if self.shape != other.shape {
+                return Err(pyo3::exceptions::PyValueError::new_err(format!(
+                    "Shape mismatch for {}: {:?} vs {:?}",
+                    name, self.shape, other.shape
+                )));
+            }
+            let result_data: Vec<f32> = a
+                .par_iter()
+                .zip(b.par_iter())
+                .map(|(&x, &y)| if op(x, y) { 1.0 } else { 0.0 })
+                .collect();
+            CoreArray::new(result_data, self.shape.clone())
+        }
     }
 
     /// Generic element-wise unary operation.

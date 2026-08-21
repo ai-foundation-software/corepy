@@ -142,9 +142,9 @@ print(f"Mean: {matrix.mean()}, Std: {matrix.std()}")
 ---
 
 ## 🤝 Stability & Roadmap
-Corepy is currently **Alpha (v0.3.0)**.
+Corepy is currently **v0.3.2**.
+- **v0.3.2**: PyO3 Type Unwrapping, 2D Scalar Comparison Broadcasting, Boolean Mask Indexing, Series/DataFrame describe fixes, Math Domain Error Guards, and GPUBuffer abstraction.
 - **v0.3.0**: Hardware-aware Backend Dispatch, Rust Optimizer, Performance Profiling.
-- **v0.3.0**: CUDA Support and Tiled Matmul Optimization.
 - **v1.0**: Stable API promise.
 
 See [Roadmap](docs/00_overview/roadmap.md) for details.

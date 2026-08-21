@@ -272,6 +272,67 @@ class ndarray:
         """NumPy-compatible alias for to_list()."""
         return self.to_list()
 
+    def _ensure_core_array(self) -> Any:
+        """Ensure _core_array is initialized."""
+        if self._core_array is None:
+            try:
+                from ._corepy_rust import _RustCoreArray as _CT
+
+                from .ops.math import _flatten
+
+                flat = [float(x) for x in _flatten(self.to_list())]
+                self._core_array = _CT(flat, list(self._shape))
+            except Exception:
+                pass
+        return self._core_array
+
+    def squeeze(self, axis: Optional[int] = None) -> "ndarray":
+        """Remove single-dimensional entries from array shape."""
+        from .ops.shape import squeeze as _squeeze
+
+        return _squeeze(self, axis=axis)
+
+    def flatten(self) -> "ndarray":
+        """Return a 1D copy of the array."""
+        from .ops.math import _flatten
+
+        flat_list = _flatten(self.to_list())
+        return ndarray(
+            flat_list, dtype=self._dtype, device=self._device, backend=self.backend
+        )
+
+    def ravel(self) -> "ndarray":
+        """Return a 1D flattened array."""
+        return self.flatten()
+
+    def var(
+        self, axis: Optional[int] = None, ddof: int = 0, keepdims: bool = False
+    ) -> "ndarray":
+        """Compute variance along specified axis."""
+        from .ops.reduction import var as _var
+
+        return _var(self, axis=axis, ddof=ddof, keepdims=keepdims)
+
+    def dot(self, other: Any) -> "ndarray":
+        """Matrix product of two arrays."""
+        return self.matmul(other)
+
+    def astype(self, dtype: Any) -> "ndarray":
+        """Copy array and cast to specified data type."""
+        from .backend.types import DataType
+
+        if isinstance(dtype, str):
+            from . import _DTYPE_STR_MAP
+
+            new_dt = _DTYPE_STR_MAP.get(dtype.lower(), self._dtype)
+        elif isinstance(dtype, DataType):
+            new_dt = dtype
+        else:
+            new_dt = getattr(dtype, "dtype", self._dtype)
+        return ndarray(
+            self.to_list(), dtype=new_dt, device=self._device, backend=self.backend
+        )
+
     def sin(self) -> "ndarray":
         from .ops.trigonometry import sin
 
@@ -624,6 +685,20 @@ class ndarray:
 
     def __getitem__(self, item) -> Union["ndarray", float, int, bool]:
         """Access element or slice of the array."""
+        if isinstance(item, ndarray):
+            from .ops.indexing import boolean_index, take
+
+            if item.dtype == DataType.BOOL or (
+                hasattr(item, "dtype") and "bool" in str(item.dtype).lower()
+            ):
+                return boolean_index(self, item)
+            flat_item = item.to_list() if hasattr(item, "to_list") else []
+            if flat_item and isinstance(flat_item[0], bool):
+                return boolean_index(self, item)
+            if item.shape == self.shape:
+                return boolean_index(self, item)
+            return take(self, item)
+
         grid = self.to_list()
         try:
             if isinstance(item, tuple):
@@ -780,41 +855,54 @@ class ndarray:
 
         return ndarray(result, dtype=self._dtype, backend=self.backend)
 
+    def _get_scalar_value(self) -> float:
+        """Extract scalar float value from single-element array."""
+        flat = self.to_list()
+        while isinstance(flat, list) and len(flat) > 0:
+            flat = flat[0]
+        return float(flat)
+
+    def item(self) -> Any:
+        """Extract single element as Python scalar."""
+        return self._get_scalar_value()
+
     def __matmul__(self, other: Any) -> "ndarray":
         """Matrix multiplication (@ operator)."""
         return self.matmul(other)
 
-    def _get_scalar_value(self) -> float:
-        """Extract scalar value from single-element array."""
-        if self._element_count != 1:
-            raise ValueError("Cannot compare non-scalar array")
-        if isinstance(self._backing_data, list):
-            return float(self._backing_data[0])
-        return float(self._backing_data)  # type: ignore[arg-type]
+    def __lt__(self, other: Any) -> "ndarray":
+        from .ops.comparison import less
 
-    def __lt__(self, other: Any) -> bool:
-        """Less than comparison (for scalar arrays)."""
-        return self._get_scalar_value() < (
-            other._get_scalar_value() if isinstance(other, ndarray) else float(other)
-        )
+        return less(self, other)
 
-    def __le__(self, other: Any) -> bool:
-        """Less than or equal comparison (for scalar arrays)."""
-        return self._get_scalar_value() <= (
-            other._get_scalar_value() if isinstance(other, ndarray) else float(other)
-        )
+    def __le__(self, other: Any) -> "ndarray":
+        from .ops.comparison import less_equal
 
-    def __gt__(self, other: Any) -> bool:
-        """Greater than comparison (for scalar arrays)."""
-        return self._get_scalar_value() > (
-            other._get_scalar_value() if isinstance(other, ndarray) else float(other)
-        )
+        return less_equal(self, other)
 
-    def __ge__(self, other: Any) -> bool:
-        """Greater than or equal comparison (for scalar arrays)."""
-        return self._get_scalar_value() >= (
-            other._get_scalar_value() if isinstance(other, ndarray) else float(other)
-        )
+    def __gt__(self, other: Any) -> "ndarray":
+        from .ops.comparison import greater
+
+        return greater(self, other)
+
+    def __ge__(self, other: Any) -> "ndarray":
+        from .ops.comparison import greater_equal
+
+        return greater_equal(self, other)
+
+    def __eq__(self, other: Any) -> Any:
+        if isinstance(other, (ndarray, list, tuple, int, float)):
+            from .ops.comparison import equal
+
+            return equal(self, other)
+        return False
+
+    def __ne__(self, other: Any) -> Any:
+        if isinstance(other, (ndarray, list, tuple, int, float)):
+            from .ops.comparison import not_equal
+
+            return not_equal(self, other)
+        return True
 
     def _get_buffer_view(self) -> "BufferView":
         """
@@ -1152,12 +1240,18 @@ class ndarray:
             result = dispatch_kernel("mean", self.backend, self._backing_data)
             return ndarray(result, dtype=DataType.FLOAT32, backend=self.backend)
 
-    def std(self) -> "ndarray":
+    def std(
+        self, axis: Optional[int] = None, ddof: int = 0, keepdims: bool = False
+    ) -> "ndarray":
         """Returns standard deviation of all elements."""
-        from .backend.dispatch import dispatch_kernel
+        from .ops.reduction import std as _std
 
-        result = dispatch_kernel("std", self.backend, self._backing_data)
-        return ndarray(result, dtype=DataType.FLOAT32, backend=self.backend)
+        val = _std(self, axis=axis, ddof=ddof, keepdims=keepdims)
+        return ndarray(
+            [val] if not isinstance(val, list) else val,
+            dtype=DataType.FLOAT32,
+            backend=self.backend,
+        )
 
     def max(self) -> "ndarray":
         """Returns maximum value of all elements."""

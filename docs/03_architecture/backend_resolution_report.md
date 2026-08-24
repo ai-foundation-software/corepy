@@ -42,9 +42,10 @@ Instead of a simpler `static mut` approach, we implemented a **production-grade*
    ```python
    import corepy
    import numpy as np
+
    a = corepy.Array(np.eye(3, dtype=np.float32))
    a.matmul(a)
-   print(corepy.explain_last_dispatch()) # Should show matmul details
+   print(corepy.explain_last_dispatch())  # Should show matmul details
    ```
 
 ---

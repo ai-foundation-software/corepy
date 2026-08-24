@@ -186,9 +186,11 @@ import sys
 
 try:
     from corepy._corepy_rust import cuda_is_available
+
     HAS_CUDA = cuda_is_available()
 except ImportError:
     HAS_CUDA = False
+
 
 @pytest.mark.skipif(not HAS_CUDA, reason="CUDA not available")
 def test_cuda_matmul():

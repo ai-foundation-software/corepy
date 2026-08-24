@@ -45,16 +45,16 @@ fi
 if [ -n "$GPU_FEATURE" ]; then
     echo "Using GPU features: $GPU_FEATURE"
     if [ "$BUILD_CMD" == "build" ]; then
-        uv run maturin build --release --manifest-path rust/core/Cargo.toml $GPU_FEATURE --out dist
+        uv run --no-sync maturin build --release --manifest-path rust/core/Cargo.toml $GPU_FEATURE --out dist
     else
-        uv run maturin develop --release --manifest-path rust/core/Cargo.toml $GPU_FEATURE
+        uv run --no-sync maturin develop --release --manifest-path rust/core/Cargo.toml $GPU_FEATURE
     fi
 else
     echo "Using CPU only"
     if [ "$BUILD_CMD" == "build" ]; then
-        uv run maturin build --release --manifest-path rust/core/Cargo.toml --out dist
+        uv run --no-sync maturin build --release --manifest-path rust/core/Cargo.toml --out dist
     else
-        uv run maturin develop --release --manifest-path rust/core/Cargo.toml
+        uv run --no-sync maturin develop --release --manifest-path rust/core/Cargo.toml
     fi
 fi
 echo "✅ Rust runtime built"
@@ -62,7 +62,7 @@ echo "✅ Rust runtime built"
 # Step 2: Verification
 echo ""
 echo "=== Verification ==="
-uv run python scripts/verify_install.py
+uv run --no-sync python scripts/verify_install.py
 
 echo ""
 echo "=== Build Complete! ==="

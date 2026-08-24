@@ -1,6 +1,6 @@
 # Execution Model: Python → Rust → C++
 
-**Version**: 0.3.0  
+**Version**: 0.3.2  
 **Status**: Canonical Architecture Contract  
 **Scope**: CPU (fully defined), GPU (architectural only)  
 **Out of Scope**: Autograd, distributed execution, compiler IR
@@ -74,13 +74,14 @@ sequenceDiagram
 ```python
 # User intent: Create a array
 import corepy as cp
-a = cp.array([1, 2, 3], dtype='f32', device='cpu')
+
+a = cp.array([1, 2, 3], dtype="f32", device="cpu")
 ```
 
 ✅ **Shape/dtype specification**
 ```python
 # Declare what the user wants
-b = cp.zeros((100, 100), dtype='f64')
+b = cp.zeros((100, 100), dtype="f64")
 ```
 
 ✅ **Operation intent**
@@ -94,6 +95,7 @@ d = a @ b  # Intent: matrix multiplication
 ```python
 # Query available hardware
 from corepy.backend import detect_devices
+
 info = detect_devices()
 print(f"AVX2: {info.has_avx2}, GPUs: {info.gpu_count}")
 ```
@@ -102,6 +104,7 @@ print(f"AVX2: {info.has_avx2}, GPUs: {info.gpu_count}")
 ```python
 # Manual backend control (advanced users)
 from corepy.backend import select_backend
+
 backend = select_backend("cpu_simd")
 ```
 
@@ -401,8 +404,9 @@ if (should_parallelize) {
 ```python
 # PYTHON LAYER: User intent
 import corepy as cp
-a = cp.array([1.0, 2.0, 3.0], dtype='f32')
-b = cp.array([4.0, 5.0, 6.0], dtype='f32')
+
+a = cp.array([1.0, 2.0, 3.0], dtype="f32")
+b = cp.array([4.0, 5.0, 6.0], dtype="f32")
 c = a + b  # High-level operation
 ```
 
@@ -456,8 +460,8 @@ extern "C" void add_f32_avx512(
 
 ```python
 # PYTHON LAYER: User intent
-A = cp.randn((1000, 1000), dtype='f32')
-B = cp.randn((1000, 1000), dtype='f32')
+A = cp.randn((1000, 1000), dtype="f32")
+B = cp.randn((1000, 1000), dtype="f32")
 C = A @ B  # Matrix multiplication
 ```
 
@@ -524,8 +528,8 @@ extern "C" void matmul_tile_avx512(
 
 ```python
 # PYTHON LAYER: Specify GPU device
-a = cp.array([1, 2, 3], device='cuda:0')
-b = cp.array([4, 5, 6], device='cuda:0')
+a = cp.array([1, 2, 3], device="cuda:0")
+b = cp.array([4, 5, 6], device="cuda:0")
 c = a + b  # Executes on GPU
 ```
 

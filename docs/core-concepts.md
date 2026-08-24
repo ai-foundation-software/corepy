@@ -23,7 +23,7 @@ import corepy as cp
 
 # Zero-copy if data is contiguous and typed correctly
 np_array = np.array([1, 2, 3], dtype=np.float32)
-array = cp.Array(np_array) 
+array = cp.Array(np_array)
 ```
 
 ## 2. Backends & Policies
@@ -56,6 +56,7 @@ Corepy includes multi-threaded PRNG implementations such as **PCG64** and **Xosh
 
 ```python
 import corepy as cp
+
 # Generates 10 million random floats instantly across all cores
 uniform_data = cp.rand(10_000_000, algo="xoshiro")
 ```
@@ -65,6 +66,7 @@ Corepy includes a `pandas`-like columnar DataFrame engine optimized for data pro
 
 ```python
 import corepy as cp
+
 df = cp.DataFrame()
 df.add_int_column("id", [1, 2, 3])
 df.add_float_column("score", [99.5, 45.0, 88.0])

@@ -51,3 +51,10 @@ When you call `array.sum()`, the following happens:
 - **Buffer Pool**: An integrated LRU Cache (`corepy.buffer_pool`) allows for recycling tensor allocations across operators, avoiding expensive OS allocations during iterative workloads.
 - **Lifetime**: Tied to the lifetime of the Python `ndarray` object via PyO3 reference counting.
 - **View Semantics**: Creating an array from a list *copies* data. Creating from a NumPy array or Buffer Protocol *views* data (zero-copy) whenever possible.
+
+## v0.3.2 Architecture Highlights
+
+- **PyO3 Type Marshalling**: Automatic `_ensure_core_array()` unwrapping guarantees pure Python sequences and lazy arrays seamlessly pass into Rust FFI kernels.
+- **2D Scalar Broadcasting & Mask Indexing**: Native PyO3 comparison operators broadcast scalar comparisons across 2D/ND matrices and route boolean mask slicing (`arr[arr > 2]`) to Rust `boolean_index`.
+- **Domain Error Handling**: Centralized [`corepy.ops.domain_guards`](file:///home/crazyguy/VSCode/corepy/corepy/ops/domain_guards.py) module intercepts mathematical domain errors, division by zero, and float overflow, returning standard `NaN`/`Inf` floats and issuing NumPy-compliant `RuntimeWarning`s.
+- **GPU Buffer Management**: Managed `GPUBuffer` class encapsulates low-level 64-bit pointers with finalizers and CPU memory fallbacks.

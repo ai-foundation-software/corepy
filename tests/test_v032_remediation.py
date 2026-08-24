@@ -1,6 +1,8 @@
 import math
 import warnings
+
 import pytest
+
 import corepy as cp
 
 
@@ -85,6 +87,14 @@ class TestRemediationPlan:
         indexed = arr2d[mask]
         assert indexed.to_list() == [3.0, 4.0]
 
+    def test_is_even_odd_mask_indexing(self):
+        arr = cp.array([10.0, 15.0, 22.0, 33.0, 40.0, 51.0])
+        even_mask = cp.is_even(arr)
+        odd_mask = cp.is_odd(arr)
+
+        assert arr[even_mask].to_list() == [10.0, 22.0, 40.0]
+        assert arr[odd_mask].to_list() == [15.0, 33.0, 51.0]
+
     # -------------------------------------------------------------------------
     # 5. NumPy-Compatible Math Domain Error Handling
     # -------------------------------------------------------------------------
@@ -105,7 +115,10 @@ class TestRemediationPlan:
     def test_gpu_buffer_abstraction(self):
         freed = []
         gpu_buf = cp.GPUBuffer(
-            ptr=0x12345, size_bytes=64, device="metal", dealloc_fn=lambda p: freed.append(p)
+            ptr=0x12345,
+            size_bytes=64,
+            device="metal",
+            dealloc_fn=lambda p: freed.append(p),
         )
         assert gpu_buf.ptr == 0x12345
         gpu_buf.free()

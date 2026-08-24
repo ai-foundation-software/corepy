@@ -39,12 +39,12 @@ Array
 ### NumPy Array Interface
 ```python
 arr.__array_interface__ = {
-    'data': (ptr, readonly),
-    'strides': (s0, s1, ...),  # bytes per dimension
-    'shape': (n0, n1, ...),
-    'typestr': '<f4',           # little-endian float32
-    'descr': [('', '<f4')],
-    'version': 3
+    "data": (ptr, readonly),
+    "strides": (s0, s1, ...),  # bytes per dimension
+    "shape": (n0, n1, ...),
+    "typestr": "<f4",  # little-endian float32
+    "descr": [("", "<f4")],
+    "version": 3,
 }
 ```
 
@@ -74,58 +74,58 @@ typedef struct {
 class BufferView:
     """
     Unified buffer abstraction for CPU/GPU memory.
-    
+
     Design Principles:
     - Zero-copy when possible
     - Explicit about copies
     - Stride-aware
     - Device-agnostic dispatch
     """
-    
+
     # Memory location
-    data_ptr: int              # Raw pointer (usize in Rust)
-    
+    data_ptr: int  # Raw pointer (usize in Rust)
+
     # Layout
-    shape: Tuple[int, ...]     # Logical dimensions
-    strides: Tuple[int, ...]   # Byte strides (None = C-contiguous)
-    dtype: DataType            # Element type
-    
+    shape: Tuple[int, ...]  # Logical dimensions
+    strides: Tuple[int, ...]  # Byte strides (None = C-contiguous)
+    dtype: DataType  # Element type
+
     # Device & Memory Type
-    device: Device             # CPU | CUDA:0 | CUDA:1 | ...
-    memory_type: MemoryType    # Normal | Pinned | Unified | Device
-    
+    device: Device  # CPU | CUDA:0 | CUDA:1 | ...
+    memory_type: MemoryType  # Normal | Pinned | Unified | Device
+
     # Ownership
-    owner: Any                 # Keep-alive reference
-    writable: bool             # Mutability flag
-    
+    owner: Any  # Keep-alive reference
+    writable: bool  # Mutability flag
+
     def is_contiguous(self) -> bool:
         """Check if C-contiguous (dense row-major)."""
         if self.strides is None:
             return True
-        
+
         expected_stride = self.dtype.itemsize
         for dim in reversed(self.shape):
             if self.strides[-1] != expected_stride:
                 return False
             expected_stride *= dim
         return True
-    
-    def ensure_contiguous(self) -> 'BufferView':
+
+    def ensure_contiguous(self) -> "BufferView":
         """Return contiguous view, copying if needed."""
         if self.is_contiguous():
             return self
-        
+
         # Trigger copy (device-aware)
         if self.device.is_cuda():
             return self._cuda_contiguous_copy()
         else:
             return self._cpu_contiguous_copy()
-    
-    def to_device(self, target: Device) -> 'BufferView':
+
+    def to_device(self, target: Device) -> "BufferView":
         """Move to different device (D2H, H2D, D2D)."""
         if self.device == target:
             return self
-        
+
         # Dispatch to appropriate copy path
         return device_copy(self, target)
 ```
@@ -137,20 +137,21 @@ class MemoryType(Enum):
     """
     CPU Memory Types:
     - NORMAL: Standard pageable memory (malloc)
-    
+
     GPU Memory Types (CUDA):
     - PINNED: Page-locked host memory (cudaHostAlloc)
               → Enables DMA, faster H2D/D2H transfers
               → Limited resource, use sparingly
-    
+
     - UNIFIED: Managed memory (cudaMallocManaged)
                → Automatic migration
                → Convenient but unpredictable latency
-    
+
     - DEVICE: GPU VRAM (cudaMalloc)
               → Fastest access from GPU kernels
               → No CPU access (segfault)
     """
+
     NORMAL = "normal"
     PINNED = "pinned"
     UNIFIED = "unified"
@@ -162,15 +163,15 @@ class MemoryType(Enum):
 ```python
 @dataclass
 class Device:
-    type: DeviceType      # CPU | CUDA | ROCm | Metal
-    index: int = 0        # For multi-GPU: cuda:0, cuda:1
-    
+    type: DeviceType  # CPU | CUDA | ROCm | Metal
+    index: int = 0  # For multi-GPU: cuda:0, cuda:1
+
     def is_cpu(self) -> bool:
         return self.type == DeviceType.CPU
-    
+
     def is_cuda(self) -> bool:
         return self.type == DeviceType.CUDA
-    
+
     def __str__(self) -> str:
         if self.is_cpu():
             return "cpu"
@@ -183,15 +184,15 @@ class Device:
 def from_numpy(arr: np.ndarray, device: Device = CPU) -> BufferView:
     """
     Zero-copy from NumPy array.
-    
+
     Safety:
     - Keeps reference to `arr` in `owner` field
     - Extracts strides (may be non-contiguous)
     - Validates dtype compatibility
     """
-    ptr = arr.__array_interface__['data'][0]
-    strides = arr.strides if not arr.flags['C_CONTIGUOUS'] else None
-    
+    ptr = arr.__array_interface__["data"][0]
+    strides = arr.strides if not arr.flags["C_CONTIGUOUS"] else None
+
     return BufferView(
         data_ptr=ptr,
         shape=arr.shape,
@@ -200,8 +201,9 @@ def from_numpy(arr: np.ndarray, device: Device = CPU) -> BufferView:
         device=device,
         memory_type=MemoryType.NORMAL,
         owner=arr,  # Critical: keep alive
-        writable=arr.flags['WRITEABLE']
+        writable=arr.flags["WRITEABLE"],
     )
+
 
 def from_buffer(obj: Any, dtype: DataType, device: Device = CPU) -> BufferView:
     """

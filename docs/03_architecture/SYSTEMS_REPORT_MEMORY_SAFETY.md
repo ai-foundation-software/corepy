@@ -26,7 +26,7 @@ Identified and resolved a **critical data corruption vulnerability** in the zero
 
 ```python
 # BEFORE (Unsafe):
-ptr = array.__array_interface__['data'][0]
+ptr = array.__array_interface__["data"][0]
 count = array.size
 # Passes to C++ assuming dense memory layout
 ```
@@ -70,11 +70,11 @@ RESULT: 0 + 1 + 2 = 3    ❌ (Incorrect: read wrong memory)
 
 ```python
 # AFTER (Safe):
-if not array.flags['C_CONTIGUOUS']:
+if not array.flags["C_CONTIGUOUS"]:
     logger.debug(f"Copying non-contiguous array (shape={array.shape})")
     array = np.ascontiguousarray(array)  # Safe copy
 
-ptr = array.__array_interface__['data'][0]
+ptr = array.__array_interface__["data"][0]
 count = array.size
 ```
 
@@ -174,7 +174,7 @@ Tests:
    ```python
    # Unified API for CPU/GPU
    array.to("cuda:0")  # Explicit H2D transfer
-   array.sum()         # Dispatches to CUDA kernel
+   array.sum()  # Dispatches to CUDA kernel
    ```
 
 4. **DLPack Interop**:
@@ -244,9 +244,9 @@ data = bytearray([1, 2, 3, 4])
 
 ⚠️ **Non-contiguous slices**:
 ```python
-arr[::2]       # Stride > itemsize
-arr[:, 1]      # Column slice (Fortran order)
-arr.T          # Transposed (non-C-contiguous)
+arr[::2]  # Stride > itemsize
+arr[:, 1]  # Column slice (Fortran order)
+arr.T  # Transposed (non-C-contiguous)
 ```
 
 ⚠️ **Device transfers**:

@@ -14,7 +14,7 @@ import corepy as cp
 x = cp.array([float(i) for i in range(10_000_000)])
 
 # This creates two temporary intermediate arrays!
-eager_result = cp.sin(x) ** 2 + cp.cos(x) ** 2 
+eager_result = cp.sin(x) ** 2 + cp.cos(x) ** 2
 ```
 
 ## 2. Lazy Fusion

@@ -197,7 +197,7 @@ a = cp.Array(np.random.rand(size, size))
 b = cp.Array(np.random.rand(size, size))
 
 # Force GPU backend
-cp.set_backend_policy('gpu')
+cp.set_backend_policy("gpu")
 
 # Benchmark matrix multiplication
 start = time.time()

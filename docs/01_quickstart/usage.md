@@ -3,11 +3,11 @@
 Corepy is designed to be familiar if you have used tools like NumPy or Pandas, but with added safety and speed.
 
 > [!NOTE]
-> **Version 0.3.0 Status**: This guide shows what's currently working (✅) and what's planned for future releases (🔮).
+> **Version 0.3.2 Status**: This guide shows what's currently working (✅) and what's planned for future releases (🔮).
 
 ---
 
-## ✅ Working Features (v0.3.0)
+## ✅ Working Features (v0.3.2)
 
 These examples work in the current released version and have been tested.
 
@@ -56,7 +56,7 @@ Corepy v0.2.2 introduces advanced memory management and parallel execution.
 # Automatic Parallelism
 # Arrays > 1M elements automatically use multi-threaded execution
 large_array = cp.Array([1.0] * 1_000_000)
-result = large_array.sum() # Runs in parallel using Rayon
+result = large_array.sum()  # Runs in parallel using Rayon
 ```
 
 **New Features:**
@@ -210,6 +210,7 @@ The following features are planned but not yet implemented. These examples show 
 ```python
 import corepy as cp
 
+
 def preprocess_images(folder_path):
     """
     AI image preprocessing pipeline.
@@ -217,18 +218,19 @@ def preprocess_images(folder_path):
     """
     # 1. Find all images
     files = cp.io.glob(f"{folder_path}/*.jpg")  # ❌ Not implemented
-    
+
     # 2. Load images in parallel
     images_batch = cp.io.read_images(files)  # ❌ Not implemented
-    
+
     # 3. Normalize pixel values
     normalized = (images_batch - 0.485) / 0.229  # ❌ Operator not implemented
-    
+
     # 4. Resize
     resized = cp.vision.resize(normalized, (224, 224))  # ❌ Module not implemented
-    
+
     # 5. Execute on best hardware
     return resized.compute(device="auto")  # ❌ Lazy execution not implemented
+
 
 # This will work in v2.0+
 # batch = preprocess_images("./my_data")
@@ -247,6 +249,7 @@ def preprocess_images(folder_path):
 import corepy.data as cpd
 import corepy as cp
 
+
 def process_financial_data():
     """
     High-frequency trading data analysis.
@@ -254,7 +257,7 @@ def process_financial_data():
     """
     # Read Arrow IPC format
     df = cpd.read_ipc("trade_data.arrow")  # ❌ Not implemented
-    
+
     # Calculate rolling statistics
     stats = (
         df.select("symbol", "price")
@@ -262,11 +265,12 @@ def process_financial_data():
         .rolling(window="1s")  # ❌ Not implemented
         .agg(
             avg_price=cp.mean("price"),  # ❌ Not implemented
-            volatility=cp.std("price")   # ❌ Not implemented
+            volatility=cp.std("price"),  # ❌ Not implemented
         )
     )
-    
+
     return stats
+
 
 # This will work in v1.5+
 # results = process_financial_data()
@@ -289,10 +293,10 @@ a = cp.Array([1.0, 2.0, 3.0])
 b = cp.Array([4.0, 5.0, 6.0])
 
 # Coming in v0.3 (1-2 months)
-c = a - b          # ❌ Subtraction (Planned native mapping)
-d = a * b          # ❌ Element-wise multiplication (Planned native mapping)
-e = a / b          # ❌ Division (Planned native mapping)
-f = a * 2.0        # ❌ Scalar multiplication (Planned native mapping)
+c = a - b  # ❌ Subtraction (Planned native mapping)
+d = a * b  # ❌ Element-wise multiplication (Planned native mapping)
+e = a / b  # ❌ Division (Planned native mapping)
+f = a * 2.0  # ❌ Scalar multiplication (Planned native mapping)
 ```
 
 **Planned for**: v0.3 (1-2 months)
@@ -415,6 +419,7 @@ if info.has_avx2:
 
 # Use Data.Table for structured data
 from corepy.data import Table
+
 table = Table({"col1": [1, 2], "col2": [3, 4]})
 ```
 
@@ -422,7 +427,7 @@ table = Table({"col1": [1, 2], "col2": [3, 4]})
 
 ```python
 # These don't work in v0.2.2
-result = a @ b         # ❌ Matrix multiplication (operator not hooked up)
+result = a @ b  # ❌ Matrix multiplication (operator not hooked up)
 result = cp.io.read()  # ❌ Module doesn't exist
 ```
 
@@ -432,7 +437,8 @@ result = cp.io.read()  # ❌ Module doesn't exist
 
 | Version | Status | Key Features |
 |:--------|:-------|:-------------|
-| **v0.3.0** | ✅ Current | Hardware-aware BLAS dispatch, Rust SIMD backend, Chrome profiler, DataFrames |
+| **v0.3.2** | ✅ Current | PyO3 Type Unwrapping, 2D Scalar Comparisons, Mask Indexing, Series stats, GPUBuffer |
+| **v0.3.0** | ✅ Previous | Hardware-aware BLAS dispatch, Rust SIMD backend, Chrome profiler, DataFrames |
 | **v1.0** | 🔮 Planned | Full NumPy API parity, stable C-FFI, complete GPU pipelines |
 
 ---
@@ -440,18 +446,18 @@ result = cp.io.read()  # ❌ Module doesn't exist
 ## ❓ FAQ
 
 **Q: Why do only some operations work?**  
-A: Corepy is in alpha (v0.3.0). We're implementing features incrementally, prioritizing correctness over completeness.
+A: Corepy is in active development (v0.3.2). We're implementing features incrementally, prioritizing correctness over completeness.
 
 **Q: When will GPU support be available?**  
-A: Metal & CUDA acceleration are supported in v0.3.0 for macOS and Linux.
+A: Metal & CUDA acceleration are supported in v0.3.2 for macOS and Linux.
 
 **Q: How can I help?**  
 A: See [CONTRIBUTING.md](../07_contributing/CONTRIBUTING.md) for ways to contribute.
 
 **Q: Should I use Corepy in production?**  
-A: v0.3.0 is suitable for performance evaluation and AI foundation development. Wait for v1.0 for production stability.
+A: v0.3.2 is suitable for performance evaluation and AI foundation development. Wait for v1.0 for production stability.
 
 ---
 
-**Last Updated**: 2026-08-15
-**Documentation Version**: Matches released package v0.3.0
+**Last Updated**: 2026-08-21
+**Documentation Version**: Matches released package v0.3.2

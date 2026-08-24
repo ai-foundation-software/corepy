@@ -121,7 +121,7 @@ a = np.random.rand(n, n).astype(np.float32)
 b = np.random.rand(n, n).astype(np.float32)
 
 c_corepy = cm.matmul(a, b)
-c_numpy  = np.matmul(a, b)
+c_numpy = np.matmul(a, b)
 
 assert np.allclose(c_corepy, c_numpy, atol=1e-3), "Mismatch!"
 print("✓ Results match NumPy")

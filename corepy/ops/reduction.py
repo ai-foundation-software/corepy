@@ -15,6 +15,7 @@ def _ensure(a):
 
     if not isinstance(a, ndarray):
         a = ndarray(a if isinstance(a, (list, tuple)) else [a])
+    a._ensure_core_array()
     return a
 
 

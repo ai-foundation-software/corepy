@@ -10,30 +10,32 @@ Provides NumPy-compatible API:
 import math
 from typing import Any
 
-from .ufunc_engine import _ensure_array, ufunc_binary, ufunc_unary
-
-
 from .domain_guards import safe_eval_binary, safe_eval_unary
+from .ufunc_engine import _ensure_array, ufunc_binary, ufunc_unary
 
 
 def _unary_trig(op_name: str, core_method: str, py_fn, a: Any) -> Any:
     """Generic unary trig helper with robust domain error handling."""
     from ..array import ndarray
+    from .domain_guards import safe_eval_unary
+    from .math import _flatten
 
     a = _ensure_array(a)
+    flat = _flatten(a.to_list() if hasattr(a, "to_list") else a)
+    for x in flat:
+        safe_eval_unary(op_name, py_fn, float(x))
+
     if a._core_array is not None:
         fn = getattr(a._core_array, core_method, None)
         if fn is not None:
             try:
                 result_ca = fn()
-                result = ndarray(result_ca.to_list(), dtype=a.dtype, backend=a.backend)
-                result._core_array = result_ca
-                return result
+                return ndarray._from_core_array(
+                    result_ca, dtype=a.dtype, backend=a.backend
+                )
             except Exception:
                 pass
-    from .math import _flatten
 
-    flat = _flatten(a.to_list() if hasattr(a, "to_list") else a)
     res = [safe_eval_unary(op_name, py_fn, float(x)) for x in flat]
     return ndarray(res, dtype=a.dtype, backend=a.backend)
 
@@ -49,9 +51,9 @@ def _binary_trig(core_method: str, py_fn, a: Any, b: Any) -> Any:
         if fn is not None:
             try:
                 result_ca = fn(b._core_array)
-                result = ndarray(result_ca.to_list(), dtype=a.dtype, backend=a.backend)
-                result._core_array = result_ca
-                return result
+                return ndarray._from_core_array(
+                    result_ca, dtype=a.dtype, backend=a.backend
+                )
             except Exception:
                 pass
     from .math import _flatten

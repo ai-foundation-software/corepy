@@ -14,12 +14,13 @@ from ..broadcasting import broadcast_shapes
 
 
 def _ensure_array(x: Any) -> Any:
-    """Convert scalars and lists to ndarray if needed."""
+    """Convert scalars and lists to ndarray if needed and ensure CoreArray is ready."""
     from ..array import ndarray
 
-    if isinstance(x, ndarray):
-        return x
-    return ndarray(x if isinstance(x, (list, tuple)) else [x])
+    if not isinstance(x, ndarray):
+        x = ndarray(x if isinstance(x, (list, tuple)) else [x])
+    x._ensure_core_array()
+    return x
 
 
 def _broadcast_pair(a: Any, b: Any) -> tuple:
@@ -144,6 +145,12 @@ def ufunc_binary(op_name: str, a: Any, b: Any) -> Any:
 
     a, b = _broadcast_pair(a, b)
 
+    import time
+
+    from ..profiler.core import record_op
+
+    start_time = time.perf_counter()
+
     # Try CoreArray fast path
     if a._core_array is not None and b._core_array is not None:
         core_ops = {
@@ -169,8 +176,9 @@ def ufunc_binary(op_name: str, a: Any, b: Any) -> Any:
         core_fn = core_ops.get(op_name)
         if core_fn is not None:
             result_ca = core_fn(b._core_array)
-            result = a._wrap_core_array(result_ca)
-            return result
+            elapsed_ms = (time.perf_counter() - start_time) * 1000
+            record_op(op_name, elapsed_ms, "Rust-CPU")
+            return ndarray._from_core_array(result_ca, dtype=a.dtype, backend=a.backend)
 
     # Python fallback for basic arithmetic
     from .math import _flatten
@@ -194,16 +202,18 @@ def ufunc_binary(op_name: str, a: Any, b: Any) -> Any:
         "le": lambda x, y: 1.0 if x <= y else 0.0,
         "logical_and": lambda x, y: 1.0 if (x != 0 and y != 0) else 0.0,
         "logical_or": lambda x, y: 1.0 if (x != 0 or y != 0) else 0.0,
-        "logical_xor": lambda x, y: 1.0 if ((x != 0) ^ (y != 0)) else 0.0,
+        "logical_xor": lambda x, y: 1.0 if (bool(x) ^ bool(y)) else 0.0,
         "maximum": lambda x, y: max(x, y),
         "minimum": lambda x, y: min(x, y),
     }
 
     fn = py_ops.get(op_name)
     if fn is None:
-        raise ValueError(f"Unknown ufunc: {op_name}")
+        raise ValueError(f"Unknown binary ufunc: {op_name}")
 
     result_data = [fn(x, y) for x, y in zip(flat_a, flat_b)]
+    elapsed_ms = (time.perf_counter() - start_time) * 1000
+    record_op(op_name, elapsed_ms, "Python-Fallback")
     result = ndarray(result_data, dtype=a.dtype, backend=a.backend)
     result._shape = a.shape
     return result
@@ -212,9 +222,12 @@ def ufunc_binary(op_name: str, a: Any, b: Any) -> Any:
 def ufunc_unary(op_name: str, a: Any) -> Any:
     """Execute a unary ufunc."""
     import math
+    import time
 
     from ..array import ndarray
+    from ..profiler.core import record_op
 
+    start_time = time.perf_counter()
     a = _ensure_array(a)
 
     # CoreArray fast path
@@ -229,8 +242,9 @@ def ufunc_unary(op_name: str, a: Any) -> Any:
         core_fn = core_ops.get(op_name)
         if core_fn is not None:
             result_ca = core_fn()
-            result = a._wrap_core_array(result_ca)
-            return result
+            elapsed_ms = (time.perf_counter() - start_time) * 1000
+            record_op(op_name, elapsed_ms, "Rust-CPU")
+            return ndarray._from_core_array(result_ca, dtype=a.dtype, backend=a.backend)
 
     # Python fallback
     from .math import _flatten

@@ -49,14 +49,14 @@ rebuild:
 .PHONY: test
 test:
 	@echo "Running tests..."
-	uv run pytest tests/ --cov=corepy --cov-report=term -v
+	uv run --no-sync pytest tests/ --cov=corepy --cov-report=term -v
 
 .PHONY: check
 check:
 	@echo "Checking Rust compilation..."
 	cargo check --manifest-path rust/core/Cargo.toml
 	@echo "Verifying installation..."
-	uv run python scripts/verify_install.py
+	uv run --no-sync python scripts/verify_install.py
 
 
 check-compatibility:
@@ -73,7 +73,7 @@ check-compatibility:
 # Code Quality
 format:
 	@echo "Formatting code..."
-	uv run ruff format .
+	uv run --no-sync ruff format .
 
 lint:
 	@echo "Linting code..."

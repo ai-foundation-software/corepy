@@ -1,7 +1,7 @@
 # Backend Architecture: Rust Runtime & Device Management
 
-**Version**: 0.3.0+
-**Focus**: CPU/GPU Backend Selection, Rust Runtime Design  
+**Version**: 0.3.2
+**Focus**: CPU/GPU Backend Selection, PyO3 FFI Unwrapping, Domain Error Guards, Rust Runtime Design  
 **Audience**: Contributors, Advanced Users
 
 ---
@@ -212,22 +212,23 @@ pub fn get_capabilities() -> &'static SystemCapabilities;
 ```python
 from typing import Optional, List
 
+
 @dataclass
 class DeviceInfo:
     """System device capabilities detected at runtime."""
-    
+
     # CPU Information
     cpu_cores: int
     memory_limit_bytes: Optional[int]
     has_avx2: bool
     has_avx512: bool
     has_neon: bool
-    
+
     # GPU Information
     gpu_count: int
     gpu_names: List[str]
     gpu_memory_bytes: List[int]
-    
+
     # System
     platform_system: str  # "Linux", "Darwin", "Windows"
     forced_backend: Optional[str]
@@ -264,18 +265,14 @@ op_props = OperationProperties(
     input_size_bytes=1024,
     requires_gpu=False,
     element_count=256,
-    shape=(256,)
+    shape=(256,),
 )
 
 # Get device info
 device_info = detect_devices()
 
 # Select optimal backend
-backend = select_backend(
-    backend_name="cpu",
-    op_props=op_props,
-    device_info=device_info
-)
+backend = select_backend(backend_name="cpu", op_props=op_props, device_info=device_info)
 
 print(f"Selected: {backend}")
 ```
@@ -394,19 +391,20 @@ pub fn execute_kernel(
 from abc import ABC, abstractmethod
 from typing import Any, List
 
+
 class Backend(ABC):
     """Abstract base class for all backends."""
-    
+
     @abstractmethod
     def execute(self, operation: str, inputs: List[Any]) -> Any:
         """Execute an operation on this backend."""
         pass
-    
+
     @abstractmethod
     def is_available(self) -> bool:
         """Check if this backend is available on current system."""
         pass
-    
+
     @abstractmethod
     def get_capabilities(self) -> dict:
         """Return backend capabilities."""
@@ -475,21 +473,22 @@ class CPUBackend(Backend):
 ```python
 # Decision tree for backend selection
 
+
 def choose_backend(data_size_mb: float, operation: str) -> str:
     """Heuristic for backend selection."""
-    
+
     # Small data: CPU overhead is minimal
     if data_size_mb < 1:
         return "cpu"
-    
+
     # GPU transfer overhead vs compute benefit
     if operation in ["matmul", "conv2d"] and data_size_mb > 10:
         return "gpu"  # Worthwhile to transfer for compute-heavy ops
-    
+
     # Element-wise ops: GPU beneficial for large data
     if operation in ["add", "mul", "relu"] and data_size_mb > 100:
         return "gpu"
-    
+
     # Default to CPU
     return "cpu"
 ```
@@ -503,27 +502,27 @@ def choose_backend(data_size_mb: float, operation: str) -> str:
 ```python
 from corepy.backend import Backend
 
+
 class MyCustomBackend(Backend):
     """Example: Remote execution backend."""
-    
+
     def __init__(self, server_url: str):
         self.server_url = server_url
-    
+
     def execute(self, operation: str, inputs: List[Any]) -> Any:
         # Send request to remote server
         response = requests.post(
-            f"{self.server_url}/execute",
-            json={"op": operation, "inputs": inputs}
+            f"{self.server_url}/execute", json={"op": operation, "inputs": inputs}
         )
         return response.json()["result"]
-    
+
     def is_available(self) -> bool:
         try:
             response = requests.get(f"{self.server_url}/health")
             return response.status_code == 200
         except:
             return False
-    
+
     def get_capabilities(self) -> dict:
         response = requests.get(f"{self.server_url}/capabilities")
         return response.json()
@@ -628,6 +627,7 @@ fn safe_process(data: &PyArray1<f32>) -> PyResult<Py<PyArray1<f32>>> {
 ```python
 # ✅ Recommended: Automatic selection
 import corepy as cp
+
 result = cp.Array([1, 2, 3]) + cp.Array([4, 5, 6])
 ```
 
@@ -682,6 +682,25 @@ large_data.to_device("gpu")  # Transfer cost amortized over compute
 
 ---
 
+## 🚀 v0.3.2 Architectural Enhancements
+
+### 1. PyO3 Type Unwrapping & Marshalling (`_ensure_core_array`)
+- **Core Mechanism**: Prevents `TypeError` when Python sequences or pure-Python `ndarray` instances are passed to PyO3 native Rust functions (`cp.stack`, `cp.concatenate`, `cp.dot`).
+- **Implementation**: Automates conversion from Python element buffers into 64-byte aligned `_RustCoreArray` instances dynamically before PyO3 invocation.
+
+### 2. 2D Scalar Comparison Broadcasting & Boolean Mask Indexing
+- **Core Mechanism**: Updates PyO3 comparison functions (`gt`, `lt`, `ge`, `le`, `eq`, `ne`) in `rust/core/src/array/core_array.rs` to support multi-dimensional matrix comparison against scalar values.
+- **Indexing Integration**: `ndarray.__getitem__` automatically routes boolean mask arrays (e.g. `arr[arr > 2]`) to the `boolean_index` native Rust algorithm.
+
+### 3. Centralized Domain Error Guards (`corepy/ops/domain_guards.py`)
+- **Core Mechanism**: Intercepts mathematical domain errors (`ValueError`), division by zero (`ZeroDivisionError`), and float overflow (`OverflowError`) for inverse trig, hyperbolic, logarithmic, and power operations.
+- **NumPy Semantics**: Returns standard IEEE 754 float values (`NaN`, `Inf`, `-Inf`) and raises standard `RuntimeWarning`s (`"invalid value encountered in <op>"`).
+
+### 4. High-Level GPU Buffer Abstraction (`GPUBuffer`)
+- **Core Mechanism**: Wraps raw 64-bit hardware memory pointers in a managed Python class with `__del__` finalizers to prevent GPU memory leaks and provides automatic CPU memory fallback capabilities.
+
+---
+
 ## 📝 Design Decisions
 
 ### Renaming `Array` to `ndarray` (v0.3.0)
@@ -711,6 +730,6 @@ A: Yes, it's pure Python. It exists for correctness validation, not performance.
 
 ---
 
-**Last Updated**: 2026-01-27  
-**Maintainer**: Vipin  
+**Last Updated**: 2026-08-21  
+**Maintainer**: CorePy Team  
 **Status**: Living Document (updates with each release)

@@ -20,8 +20,8 @@ import corepy as cp
 t = cp.array([1.0, 2.0, 3.0, 4.0], device="metal")
 
 # Perform operations (executed largely on GPU)
-result = t.sum() 
-print(result) # 10.0
+result = t.sum()
+print(result)  # 10.0
 ```
 
 ### Automatic Fallback
@@ -29,7 +29,7 @@ If you request `device="metal"` on a non-Mac or an Intel Mac without Metal suppo
 
 ## Supported Operations
 
-As of v0.3.0, the following operations are optimized for Metal:
+As of v0.3.2, the following operations are optimized for Metal and managed via high-level `GPUBuffer` handles:
 
 *   **Reduction**: `sum`, `mean`, `max`, `min`
 *   **Matrix Multiplication**: `matmul` (@) for 2D arrays
@@ -55,5 +55,5 @@ You can verify Metal is active by checking the array's device:
 ```python
 t = cp.array([1.0], device="metal")
 # Internal buffer check (advanced)
-print(t._get_buffer_view().device.is_metal()) # True
+print(t._get_buffer_view().device.is_metal())  # True
 ```

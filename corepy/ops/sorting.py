@@ -25,12 +25,11 @@ def sort(a: Any, descending: bool = False) -> Any:
 
     if not isinstance(a, ndarray):
         a = ndarray(a)
+    a._ensure_core_array()
 
     if a._core_array is not None:
         result_ca = a._core_array.sort(descending)
-        result = ndarray(result_ca.to_list(), dtype=a.dtype, backend=a.backend)
-        result._core_array = result_ca
-        return result
+        return ndarray._from_core_array(result_ca, dtype=a.dtype, backend=a.backend)
 
     # Python fallback
     from .math import _flatten
@@ -55,12 +54,11 @@ def argsort(a: Any, descending: bool = False) -> Any:
 
     if not isinstance(a, ndarray):
         a = ndarray(a)
+    a._ensure_core_array()
 
     if a._core_array is not None:
         result_ca = a._core_array.argsort(descending)
-        result = ndarray(result_ca.to_list(), dtype=a.dtype, backend=a.backend)
-        result._core_array = result_ca
-        return result
+        return ndarray._from_core_array(result_ca, dtype=a.dtype, backend=a.backend)
 
     # Python fallback
     from .math import _flatten

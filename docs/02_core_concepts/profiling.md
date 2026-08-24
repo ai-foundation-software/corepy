@@ -1,8 +1,8 @@
 # Corepy Performance Profiling - Complete Guide
 
-**Version**: 0.3.0  
+**Version**: 0.3.2  
 **Status**: Production Ready  
-**Last Updated**: 2026-08-15
+**Last Updated**: 2026-08-21
 
 ---
 
@@ -58,7 +58,7 @@ Performance profiling is the process of measuring where your code spends its exe
 Profiling is built into corepy. No extra installation needed!
 
 ```bash
-pip install corepy-ai>=0.3.0
+pip install corepy-ai>=0.3.2
 ```
 
 ### 30-Second Example
@@ -106,9 +106,9 @@ That's it! You now know where your code spent its time.
 **How it works**: Tracks ALL operations from enable to disable
 
 ```python
-cp.enable_profiling()    # Start tracking
+cp.enable_profiling()  # Start tracking
 # ... all operations tracked ...
-cp.disable_profiling()   # Stop tracking
+cp.disable_profiling()  # Stop tracking
 ```
 
 **Pros**: Simple, no code changes needed  
@@ -148,6 +148,7 @@ report = cp.profile_report(context="critical_loop")
 
 ```python
 from corepy.profiler import profile_operation
+
 
 @profile_operation
 def my_algorithm(data):
@@ -191,7 +192,7 @@ Disables global profiling.
 ```python
 report = cp.profile_report(
     context="section_name",  # Optional: filter by context
-    format="table"           # Options: 'table', 'json', 'compact'
+    format="table",  # Options: 'table', 'json', 'compact'
 )
 ```
 Generates a performance report.
@@ -208,7 +209,7 @@ Generates a performance report.
 ```python
 cp.export_profile(
     path="/path/to/output.json",
-    format="flamegraph"  # Options: 'json', 'csv', 'flamegraph', 'chrome'
+    format="flamegraph",  # Options: 'json', 'csv', 'flamegraph', 'chrome'
 )
 ```
 Exports profiling data to a file.
@@ -278,6 +279,7 @@ with ProfileContext("section_name"):
 #### `@profile_operation`
 ```python
 from corepy.profiler import profile_operation
+
 
 @profile_operation
 def my_function(data):
@@ -412,10 +414,10 @@ Real-world examples:
    ```python
    # BAD: Ignoring automated advice
    recs = cp.get_recommendations()  # Never looked at
-   
+
    # GOOD: Review and apply high-priority recs
    for rec in recs:
-       if rec['priority'] == 'HIGH':
+       if rec["priority"] == "HIGH":
            apply_recommendation(rec)
    ```
 

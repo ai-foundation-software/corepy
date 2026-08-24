@@ -98,10 +98,10 @@ from . import (
     buffer_pool,  # Import buffer pool module
     lazy,  # Import lazy evaluation module
 )
-from .buffer import GPUBuffer
 
 # Primary exports
 from .array import _map_to_rust_dtype, ndarray
+from .buffer import GPUBuffer
 from .ops import math as _math_ops  # Trigger registration
 
 # UFUNC CORE-12: Import all operation modules

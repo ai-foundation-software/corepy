@@ -1,33 +1,32 @@
 # Implementation Roadmap: Performance & Operations
 
-**Status**: Phase 6 Complete, Phase 7 Planned  
+**Status**: Phase 6 & Phase 7 Complete (v0.3.2)  
 **Priority**: P0 (Critical) → P3 (Nice-to-have)
 
 ---
 
-## ✅ Completed (Phase 1-4.5)
+## ✅ Completed (Phase 1-7)
 
-### Infrastructure
-- [x] Rust-C++ FFI boundary with zero-copy semantics
-- [x] PyO3 Python bindings
-- [x] Thread-local arena allocators (implemented but unused)
-- [x] Rayon work-stealing scheduler (implemented but unused)
+### Infrastructure & FFI
+- [x] Rust FFI boundary with zero-copy semantics (`_RustCoreArray`)
+- [x] PyO3 Python bindings with dynamic type unwrapping (`_ensure_core_array`)
+- [x] Thread-local arena allocators & GPUBuffer memory abstraction
+- [x] Rayon work-stealing parallel scheduler
 - [x] Universal buffer protocol support (NumPy, bytes, memoryview)
-- [x] Memory safety hardening (C_CONTIGUOUS checks)
+- [x] Memory safety hardening (C_CONTIGUOUS & alignment checks)
 
-### Operations
-- [x] Reductions: `all()`, `any()`, `sum()`, `mean()`
-- [x] Element-wise: `add`, `sub`, `mul`, `div` (AVX2 SIMD)
-- [x] Basic matmul: 1D dot product (pure Rust implementation)
+### Operations & Universal Functions
+- [x] 50+ UFuncs (Trigonometry, Hyperbolic, Exponential, Logarithmic, Bitwise, Rounding)
+- [x] NumPy-Compatible Math Domain Error Handling (`domain_guards.py` returning NaN with RuntimeWarning)
+- [x] Reductions: `all()`, `any()`, `sum()`, `mean()`, `std()`, `var()`, `min()`, `max()`, `prod()`
+- [x] Element-wise parallel execution via Rayon
+- [x] 2D & ND Scalar Comparison Broadcasting (`gt`, `lt`, `ge`, `le`, `eq`, `ne`)
+- [x] Boolean Matrix Mask Indexing (`arr2d[arr2d > 2]`)
+- [x] Matmul & Dot Product (`matmul`, `@`, `dot`)
 
-### Testing
-- [x] Comprehensive test suite for all endpoints (`make ci`)
-- [x] Memory safety verification via robust CI
-- [x] SIMD performance native validation
-
-### 🚀 Phase 5 & 6: DataFrames, Lazy Eval & Performance (Completed)
-- [x] DataFrame Engine (CSV, GroupBy, Pivot, Merge)
-- [x] Lazy Evaluation Engine / Operation Fusion
+### DataFrames & Series
+- [x] Full Series Statistical Methods (`mean`, `std`, `var`, `sum`, `min`, `max`, `apply`, `map`, `filter`, `tolist`)
+- [x] DataFrame Engine (`read_csv`, `groupby`, `pivot`, `merge`, `describe`)
 - [x] Rayon Multi-threading actively scheduled
 - [x] Global LRU Buffer Pool (No-OS allocations)
 - [x] Rayon-backed PRNG (Xoshiro/PCG64)
@@ -212,15 +211,16 @@
   import corepy as cp
   import torch
   import pytest
-  
+
+
   @pytest.mark.parametrize("size", [1000, 10_000, 100_000, 1_000_000])
   def bench_sum(benchmark, size):
       data = np.random.rand(size).astype(np.float32)
-      
+
       # Corepy
       cp_array = cp.Array(data)
       result = benchmark(cp_array.sum)
-      
+
       # Compare with NumPy
       np_result = np.sum(data)
       assert abs(result._backing_data[0] - np_result) < 1e-5

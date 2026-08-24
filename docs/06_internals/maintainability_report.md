@@ -1,9 +1,9 @@
-# Corepy Maintainability & Audit Report - v0.3.0
+# Corepy Maintainability & Audit Report - v0.3.2
 
 ## 1. Project Audit Summary
 - **Type**: Hybrid Python/Rust Library
 - **Architecture**: 2-layer execution model (Python UI -> Rust Core Runtime)
-- **Status**: Alpha (v0.3.0)
+- **Status**: Stable Development (v0.3.2)
 - **Health**: 🟢 Good. Structure is modular and separation of concerns is clear.
 
 ## 2. Restructuring Actions Taken

@@ -97,32 +97,34 @@ import numpy as np
 import time
 from _corepy_rust import array_sum_f32
 
+
 def bench_sum_with_arena(size=100_000, iterations=10_000):
     """
     Benchmark sum operation with arena integration.
-    
+
     Expected: <1% overhead from arena.reset() calls
     """
     data = np.random.rand(size).astype(np.float32)
     ptr = data.ctypes.data
-    
+
     # Warmup
     for _ in range(100):
         array_sum_f32(ptr, size)
-    
+
     # Timed run
     start = time.perf_counter()
     for _ in range(iterations):
         result = array_sum_f32(ptr, size)
     elapsed = time.perf_counter() - start
-    
+
     ops_per_sec = iterations / elapsed
     gb_per_sec = (size * 4 * iterations) / (elapsed * 1e9)
-    
+
     print(f"Size: {size:>10,} elements")
     print(f"Ops/sec: {ops_per_sec:>10,.0f}")
     print(f"Bandwidth: {gb_per_sec:>10.2f} GB/s")
-    print(f"Avg latency: {elapsed/iterations*1e6:>10.2f} µs")
+    print(f"Avg latency: {elapsed / iterations * 1e6:>10.2f} µs")
+
 
 if __name__ == "__main__":
     print("=== Arena Integration Benchmark ===\n")

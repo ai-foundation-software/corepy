@@ -265,6 +265,7 @@ After installation, verify your setup:
 
 ```python
 import corepy as cp
+
 print(f"Corepy Version: {cp.__version__}")
 print(f"Platform: {cp.get_platform()}")
 ```
@@ -280,7 +281,7 @@ a = cp.Array(np.random.rand(1024, 1024))
 b = cp.Array(np.random.rand(1024, 1024))
 
 # Force CPU backend
-cp.set_backend_policy('cpu')
+cp.set_backend_policy("cpu")
 
 # Run operation
 c = cp.matmul(a, b)
@@ -301,10 +302,11 @@ print(f"Has GPU: {info.has_gpu}")
 # Test GPU operation
 if info.has_gpu:
     import numpy as np
+
     a = cp.Array(np.random.rand(2048, 2048))
     b = cp.Array(np.random.rand(2048, 2048))
-    
-    cp.set_backend_policy('gpu')
+
+    cp.set_backend_policy("gpu")
     c = cp.matmul(a, b)
     print(cp.explain_last_dispatch())
 ```

@@ -58,8 +58,8 @@ We will implement an **Architecture-Aware Dispatcher** with the following policy
 ```python
 # User-level control
 corepy.set_backend_policy("auto")  # default
-corepy.set_backend_policy("corepy") # Force native AVX2
-corepy.set_backend_policy("blas")   # Force OpenBLAS
+corepy.set_backend_policy("corepy")  # Force native AVX2
+corepy.set_backend_policy("blas")  # Force OpenBLAS
 
 # Introspection
 info = corepy.explain_last_dispatch()

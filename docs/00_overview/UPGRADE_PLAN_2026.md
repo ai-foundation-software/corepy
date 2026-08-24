@@ -1,26 +1,19 @@
 # CorePy 2026 Upgrade Plan: From Parity to Supremacy
 
-**Current Status**: CorePy has achieved **CPU Parity** with NumPy for large matrices and **1.5x Speedup** for mid-sized matrices via optimized OpenBLAS dispatch and Zero-Copy architecture.
+**Current Status**: CorePy v0.3.2 has achieved **CPU Parity** with NumPy for large matrices and **1.5x Speedup** for mid-sized matrices via optimized OpenBLAS dispatch, Rayon parallelism, PyO3 type unwrapping, and zero-copy architecture.
 
-**Vision**: Move beyond simple matrix multiplication into full array capabilities (Broadcasting, Autograd) and Hardware Acceleration (CUDA).
+---
 
-## Phase 1: Completing the Foundation (Q1 2026)
+## Phase 1: Completed Foundation (v0.3.2)
 
-### 1.1 Universal Broadcasting (Critical)
-**Problem**: Currently, shapes must match exactly (e.g., `(10, 10) + (10, 10)` works, but `(10, 10) + (10,)` fails).
-**Goal**: Implement NumPy-style broadcasting rules.
-- **Tasks**:
-    - [ ] Implement `broadcast_to(shape)` in `array.py`.
-    - [ ] Update `elementwise.rs` to handle strides != 1 (virtual expansion).
-    - [ ] Support implicit expansion in binary ops (`add`, `sub`, `mul`).
+### 1.1 Universal Broadcasting & Comparison (Completed)
+- [x] Implicit scalar expansion and 2D matrix broadcasting.
+- [x] Multi-dimensional scalar comparison operators in Rust `elementwise_cmp`.
+- [x] Boolean matrix mask indexing (`arr[arr > 2]`).
 
-### 1.2 Element-wise Parallelism
-**Problem**: `matmul` is parallel (via OpenBLAS), but `add/sub` are sequential AVX2.
-**Goal**: Use Rayon to parallelize element-wise ops for N > 100k.
-- **Tasks**:
-    - [ ] Activate `rayon` thread pool in `elementwise.rs`.
-    - [ ] Implement chunked parallel iterator for `array_add_f32`, etc.
-    - [ ] Benchmark vs NumPy for 10M element arrays (Target: 2-4x speedup).
+### 1.2 Element-wise Parallelism (Completed)
+- [x] Activated `rayon` parallel iterator for elementwise UFunc operations.
+- [x] Multi-threaded Rayon PRNG generators (`rand`, `randn`).
 
 ## Phase 2: Advanced Capabilities (Q2 2026)
 

@@ -39,6 +39,7 @@ Create a file named `hello_corepy.py`:
 ```python
 import corepy as cp
 
+
 def main():
     # 1. Hardware Analysis
     print("Backend Analysis:")
@@ -49,13 +50,14 @@ def main():
     prices = cp.array([10.5, 20.0, 15.5, 30.0])
     total = prices.sum()
     average = prices.mean()
-    
+
     print(f"Prices: {prices}\\nTotal: {total}\\nAverage: {average}\\n")
 
     # 3. High-Performance Random Matrix
     # Fast multi-threaded generation straight from Rust
     rand_matrix = cp.random.randn((1000, 1000), seed=42)
     print(f"Random Matrix Mean: {rand_matrix.mean()}")
+
 
 if __name__ == "__main__":
     main()
@@ -90,8 +92,9 @@ Corepy enforces data types more strictly to prevent silent overflows or precisio
 
 ```python
 import corepy as cp
+
 # Defaults to Float32 for performance, not Float64!
-t = cp.array([1, 2, 3]) 
+t = cp.array([1, 2, 3])
 ```
 
 ### Immutable by Default (mostly)

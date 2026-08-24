@@ -105,10 +105,10 @@ class Series:
 
     def _scalar(self, val: Any) -> Any:
         if hasattr(val, "to_list"):
-            l = val.to_list()
-            while isinstance(l, list) and len(l) > 0:
-                l = l[0]
-            return l
+            lst = val.to_list()
+            while isinstance(lst, list) and len(lst) > 0:
+                lst = lst[0]
+            return lst
         return val
 
     def mean(self) -> float:

@@ -339,4 +339,3 @@ class GPUBuffer:
         import ctypes
 
         return ctypes.string_at(self.ptr, self.size_bytes)
-
